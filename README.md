@@ -31,7 +31,7 @@ No hay que ejecutar `npm install`: la aplicación no tiene dependencias externas
 2. Creá una tarjeta con un alias inventado para la prueba, por ejemplo `Mi tarjeta`, y configurá sus días de cierre y vencimiento.
 3. Volvé a **Inicio** y tocá **Agregar manual** para cargar un gasto en pesos o dólares.
 4. Elegí crédito, seleccioná la tarjeta creada y cargá `12` cuotas. La aplicación distribuirá el importe entre los meses correspondientes.
-5. Tocá el botón amarillo del micrófono y decí, por ejemplo: `Pagué 2500 pesos en efectivo en supermercado y compré 12 dólares con débito`.
+5. Tocá el botón amarillo del micrófono y decí solamente un gasto, por ejemplo: `Pagué 2500 pesos en efectivo en supermercado`. La escucha se corta automáticamente cuando termina la frase.
 6. Confirmá cada tarjeta detectada con la tilde verde. También podés corregirla o deslizarla horizontalmente para descartarla; el aviso inferior permite deshacer.
 7. Entrá en **Informes** para revisar los totales separados en ARS y USD por mes, año o rango personalizado.
 
