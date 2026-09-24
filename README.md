@@ -32,7 +32,7 @@ No hay que ejecutar `npm install`: la aplicación no tiene dependencias externas
 3. Volvé a **Inicio** y tocá **Agregar manual** para cargar un gasto en pesos o dólares.
 4. Elegí crédito, seleccioná la tarjeta creada y cargá `12` cuotas. La aplicación distribuirá el importe entre los meses correspondientes.
 5. Tocá el botón amarillo del micrófono y decí solamente un gasto, por ejemplo: `Pagué 2500 pesos en efectivo en supermercado`. La escucha se corta automáticamente cuando termina la frase.
-6. Confirmá cada tarjeta detectada con la tilde verde. También podés corregirla o deslizarla horizontalmente para descartarla; el aviso inferior permite deshacer.
+6. Confirmá cada tarjeta detectada con la tilde verde. También podés corregirla o deslizarla hacia arriba para descartarla; el aviso inferior permite deshacer.
 7. Entrá en **Informes** para revisar los totales separados en ARS y USD por mes, año o rango personalizado.
 
 Si el navegador no ofrece reconocimiento de voz, la aplicación muestra un campo de texto de respaldo. Escribí allí la misma frase para probar el intérprete sin micrófono.

@@ -1,5 +1,6 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {parseExpense,parseExpenses} from '../parser.js';
-if(!globalThis.crypto)globalThis.crypto={randomUUID:()=>String(Math.random())};
-test('interpreta moneda, medio, tarjeta y cuotas sin inventar bancos',()=>{const e=parseExpense('pagué 120 dólares con crédito Mi Visa en 12 cuotas',[{name:'Mi Visa'}]);assert.equal(e.amount,120);assert.equal(e.currency,'USD');assert.equal(e.method,'Crédito');assert.equal(e.card,'Mi Visa');assert.equal(e.installments,12)});
-test('separa varios gastos',()=>{const items=parseExpenses('pagué 2500 en efectivo supermercado y compré 10 dólares con débito');assert.equal(items.length,2);assert.deepEqual(items.map(x=>x.currency),['ARS','USD'])});
-test('no asigna una tarjeta desconocida',()=>{assert.equal(parseExpense('pagué 200 con débito del Francés',[]).card,'')});
+import test from 'node:test'; import assert from 'node:assert/strict'; import { parseAmount, parseExpense, parseExpenses } from '../parser.js';
+if (!globalThis.crypto) globalThis.crypto = { randomUUID: () => String(Math.random()) };
+test('interpreta moneda, medio, tarjeta y cuotas sin inventar bancos', () => { const e = parseExpense('pagué 120 dólares con crédito Mi Visa en 12 cuotas', [{ name: 'Mi Visa' }]); assert.equal(e.amount, 120); assert.equal(e.currency, 'USD'); assert.equal(e.method, 'Crédito'); assert.equal(e.card, 'Mi Visa'); assert.equal(e.installments, 12); });
+test('separa gastos aun cuando el segundo no repite el verbo', () => { const items = parseExpenses('Gasté 10 mil en kiosco y 20 mil en supermercado'); assert.equal(items.length, 2); assert.deepEqual(items.map((x) => x.amount), [10000, 20000]); });
+test('entiende millones y categorías configuradas', () => { assert.equal(parseAmount('un millón de pesos'), 1000000); const e = parseExpense('gasté 50 dólares en comida', [], ['Comida']); assert.equal(e.category, 'Comida'); assert.equal(e.currency, 'USD'); });
+test('no asigna una tarjeta desconocida', () => assert.equal(parseExpense('pagué 200 con débito del Francés', []).card, ''));
