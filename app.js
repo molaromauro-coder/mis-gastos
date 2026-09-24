@@ -1,382 +1,58 @@
 import { parseExpenses } from './parser.js';
-
 const STORAGE_KEY = 'mis-gastos-v1';
-const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"expenses":[],"cards":[],"categories":[]}');
-let selectedDate = new Date();
-let reportRange = 'month';
-let pending = [];
-let discarded = null;
-let manualStep = 1;
-
-const $ = (selector) => document.querySelector(selector);
-const money = (amount, currency) => new Intl.NumberFormat('es-AR', {
-  style: 'currency', currency, maximumFractionDigits: 2,
-}).format(amount || 0);
+const defaults = { expenses: [], cards: [], categories: [], settings: { reminderDays: [5, 3, 2, 1, 0] }, schemaVersion: 2 };
+function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], settings: { ...defaults.settings, ...(old.settings || {}) }, schemaVersion: 2 }; } catch { return structuredClone(defaults); } }
+const state = loadState();
+let selectedDate = new Date(), reportRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1;
+const $ = (s) => document.querySelector(s);
+const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
-const escape = (value) => String(value).replace(/[&<>"']/g, (character) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[character]));
-
-function dateWithDay(year, month, day) {
-  return new Date(year, month, Math.min(day, new Date(year, month + 1, 0).getDate()), 12);
-}
-
-function firstDueDate(card, purchaseDate = new Date()) {
-  let due = dateWithDay(purchaseDate.getFullYear(), purchaseDate.getMonth(), card.dueDay);
-  if (due < purchaseDate) due = dateWithDay(purchaseDate.getFullYear(), purchaseDate.getMonth() + 1, card.dueDay);
-  return due;
-}
-
-function installmentExpenses(expense) {
-  if (expense.method !== 'Crédito' || expense.installments <= 1) return [expense];
-  const card = state.cards.find((item) => item.name === expense.card);
-  if (!card) return [expense];
-  const firstDue = firstDueDate(card, new Date(expense.purchaseDate || expense.date));
-  return Array.from({ length: expense.installments }, (_, index) => {
-    const dueDate = dateWithDay(firstDue.getFullYear(), firstDue.getMonth() + index, card.dueDay);
-    return {
-      ...expense,
-      id: crypto.randomUUID(),
-      parentId: expense.id,
-      dueDate: dueDate.toISOString(),
-      amount: expense.amount / expense.installments,
-      installment: index + 1,
-    };
-  });
-}
-
-function billingDate(expense) {
-  return new Date(expense.dueDate || expense.date);
-}
-
-function render() {
-  $('#todayLabel').textContent = selectedDate.toLocaleDateString('es-AR', {
-    weekday: 'long', day: 'numeric', month: 'long',
-  });
-  const day = state.expenses.filter((expense) => sameDay(expense.purchaseDate || expense.date, selectedDate));
-  $('#arsTotal').textContent = money(day.filter((expense) => expense.currency === 'ARS').reduce((sum, expense) => sum + expense.amount, 0), 'ARS');
-  $('#usdTotal').textContent = money(day.filter((expense) => expense.currency === 'USD').reduce((sum, expense) => sum + expense.amount, 0), 'USD');
-  const visibleDay = day.filter((expense) => !expense.purchaseDate || !expense.installment || expense.installment === 1);
-  $('#expenseList').innerHTML = visibleDay.length
-    ? visibleDay.sort((a, b) => b.date.localeCompare(a.date)).map(expenseHTML).join('')
-    : '<div class="empty">Todavía no registraste gastos este día.</div>';
-  renderPaymentReminders();
-  renderCards();
-  renderReport();
-  fillCardSelect();
-  detectUnusual(day);
-}
-
-function expenseHTML(expense) {
-  const detail = [
-    expense.method,
-    expense.card,
-    expense.installments > 1 ? `${expense.installment || 1}/${expense.installments} cuotas` : null,
-  ].filter(Boolean).join(' · ');
-  const purchaseAmount = expense.installments > 1 ? expense.amount * expense.installments : expense.amount;
-  return `<article class="expense"><div class="expense-icon">${expense.method === 'Efectivo' ? '◆' : '▰'}</div><div class="expense-info"><strong>${escape(expense.concept || 'Sin detalle')}</strong><span>${detail}</span></div><div class="amount">${money(purchaseAmount, expense.currency)}<small>${expense.currency}</small></div></article>`;
-}
-
-function detectUnusual(day) {
-  const past = state.expenses.filter((expense) => !sameDay(expense.date, new Date()));
-  const average = past.length ? past.reduce((sum, expense) => sum + expense.amount, 0) / past.length : Infinity;
-  $('#unusual').classList.toggle('hidden', !day.some((expense) => expense.amount > average * 2 && past.length >= 5));
-}
-
-function fillCardSelect() {
-  const method = $('#method').value;
-  const cards = state.cards.filter((card) => method === 'Crédito' ? card.type === 'Crédito' : card.type === 'Débito');
-  $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>'
-    + cards.map((card) => `<option value="${escape(card.name)}">${escape(card.name)}</option>`).join('');
-}
-
-function monthlyCardTotal(card, date) {
-  return state.expenses.filter((expense) => expense.card === card.name
-    && billingDate(expense).getFullYear() === date.getFullYear()
-    && billingDate(expense).getMonth() === date.getMonth());
-}
-
-function totalsHTML(expenses) {
-  const ars = expenses.filter((item) => item.currency === 'ARS').reduce((sum, item) => sum + item.amount, 0);
-  const usd = expenses.filter((item) => item.currency === 'USD').reduce((sum, item) => sum + item.amount, 0);
-  return `${money(ars, 'ARS')}${usd ? ` · ${money(usd, 'USD')}` : ''}`;
-}
-
-function renderCards() {
-  const now = new Date();
-  $('#cardList').innerHTML = state.cards.length ? state.cards.map((card) => {
-    const current = monthlyCardTotal(card, now);
-    return `<article class="card-item"><div class="top"><strong>${escape(card.name)}</strong><span>${card.type}</span></div><p>${card.type === 'Crédito' ? `Vence cada mes el ${card.dueDay} · Cierra el ${card.closingDay}` : 'Tarjeta de débito'}</p><div class="card-total"><small>ACUMULADO DEL MES</small><strong>${totalsHTML(current)}</strong></div></article>`;
-  }).join('') : '<div class="empty">No agregaste tarjetas todavía.</div>';
-
-  const creditCards = state.cards.filter((card) => card.type === 'Crédito');
-  $('#cardHistory').innerHTML = creditCards.length ? creditCards.map((card) => {
-    const months = Array.from({ length: 6 }, (_, index) => {
-      const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
-      return `<div class="history-row"><span>${date.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}</span><strong>${totalsHTML(monthlyCardTotal(card, date))}</strong></div>`;
-    }).join('');
-    return `<details class="history-card"><summary>${escape(card.name)}</summary>${months}</details>`;
-  }).join('') : '<div class="empty">El historial aparecerá cuando agregues una tarjeta de crédito.</div>';
-}
-
-function renderPaymentReminders() {
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  const reminders = state.cards.filter((card) => card.type === 'Crédito').flatMap((card) => {
-    let due = dateWithDay(today.getFullYear(), today.getMonth(), card.dueDay);
-    if (due < today) due = dateWithDay(today.getFullYear(), today.getMonth() + 1, card.dueDay);
-    const days = Math.round((due - today) / 86400000);
-    if (![5, 3, 2, 1, 0].includes(days)) return [];
-    const total = monthlyCardTotal(card, due);
-    return [{ card, days, total }];
-  });
-  $('#paymentReminders').innerHTML = reminders.map(({ card, days, total }) => `<article class="payment-alert"><span>▰</span><div><strong>${days === 0 ? 'Vence hoy' : `Vence en ${days} día${days > 1 ? 's' : ''}`} · ${escape(card.name)}</strong><small>Necesitás tener disponible ${totalsHTML(total)}</small></div></article>`).join('');
-}
-
-function renderReport() {
-  let from;
-  let to = new Date();
-  if (reportRange === 'month') {
-    from = new Date(to.getFullYear(), to.getMonth(), 1);
-    $('#reportTitle').textContent = to.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
-  } else if (reportRange === 'year') {
-    from = new Date(to.getFullYear(), 0, 1);
-    $('#reportTitle').textContent = `Año ${to.getFullYear()}`;
-  } else {
-    from = new Date($('#fromDate').value || '2000-01-01');
-    to = new Date($('#toDate').value || '2100-01-01');
-    $('#reportTitle').textContent = 'Rango personalizado';
-  }
-  const items = state.expenses.filter((expense) => new Date(expense.purchaseDate || expense.date) >= from
-    && new Date(expense.purchaseDate || expense.date) <= new Date(to.getTime() + 86400000));
-  $('#reportArs').textContent = money(items.filter((item) => item.currency === 'ARS').reduce((sum, item) => sum + item.amount, 0), 'ARS');
-  $('#reportUsd').textContent = money(items.filter((item) => item.currency === 'USD').reduce((sum, item) => sum + item.amount, 0), 'USD');
-  const months = Array.from({ length: 12 }, (_, index) => items.filter((item) => new Date(item.purchaseDate || item.date).getMonth() === index && item.currency === 'ARS').reduce((sum, item) => sum + item.amount, 0));
-  const max = Math.max(...months, 1);
-  $('#monthlyChart').innerHTML = months.map((value, index) => `<div class="bar" style="height:${value / max * 100}%" title="${money(value, 'ARS')}"><span>${'EFMAMJJASOND'[index]}</span></div>`).join('');
-}
-
-function showToast(message, undo = false) {
-  const toast = $('#toast');
-  toast.textContent = message;
-  toast.classList.add('show');
-  toast.onclick = undo ? () => {
-    if (!discarded) return;
-    pending.splice(discarded.index, 0, discarded.item);
-    discarded = null;
-    showPending();
-    showToast('Gasto recuperado');
-  } : null;
-  setTimeout(() => toast.classList.remove('show'), 2500);
-}
-
-function setManualStep(step) {
-  manualStep = step;
-  document.querySelectorAll('.step').forEach((element) => element.classList.toggle('active', Number(element.dataset.step) === step));
-  const titles = ['¿Cuánto gastaste?', 'Elegí una categoría', '¿Cómo pagaste?'];
-  $('#stepLabel').textContent = `PASO ${step} DE 3`;
-  $('#expenseDialogTitle').textContent = titles[step - 1];
-  $('#prevStep').classList.toggle('hidden', step === 1);
-  $('#nextStep').classList.toggle('hidden', step === 3);
-  $('#saveExpense').classList.toggle('hidden', step !== 3);
-}
-
-function openExpense(data = {}) {
-  $('#expenseForm').reset();
-  $('#amount').value = data.amount || '';
-  $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || '';
-  $('#method').value = data.method === 'Sin definir' ? 'Efectivo' : data.method || 'Efectivo';
-  $('#installments').value = data.installments || 1;
-  document.querySelector(`input[name=currency][value=${data.currency || 'ARS'}]`).checked = true;
-  setManualStep(data.source === 'voice' ? 3 : 1);
-  updatePaymentFields();
-  fillCardSelect();
-  $('#expenseCard').value = data.card || '';
-  updateInstallmentPreview();
-  $('#expenseDialog').showModal();
-}
-
-function updatePaymentFields() {
-  const method = $('#method').value;
-  $('#cardFields').classList.toggle('hidden', method === 'Efectivo');
-  $('#creditFields').classList.toggle('hidden', method !== 'Crédito');
-  fillCardSelect();
-  updateInstallmentPreview();
-}
-
-function updateInstallmentPreview() {
-  const card = state.cards.find((item) => item.name === $('#expenseCard').value);
-  const installments = Number($('#installments').value || 1);
-  const amount = Number($('#amount').value || 0);
-  if ($('#method').value !== 'Crédito' || !card || !amount) {
-    $('#installmentPreview').innerHTML = '';
-    return;
-  }
-  const due = firstDueDate(card);
-  $('#installmentPreview').innerHTML = `<strong>${installments} × ${money(amount / installments, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota: ${due.toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}. Las siguientes vencen el día ${card.dueDay} de cada mes.</span>`;
-}
-
-function showPending() {
-  if (!pending.length) {
-    if ($('#confirmDialog').open) $('#confirmDialog').close();
-    return;
-  }
-  $('#pendingList').innerHTML = pending.map((expense, index) => `<article class="pending" data-index="${index}"><div class="pending-head"><div><strong>${escape(expense.concept)}</strong><p class="muted">${expense.method}${expense.card ? ` · ${escape(expense.card)}` : ''}</p></div><strong>${expense.amount ? money(expense.amount, expense.currency) : 'Sin importe'}</strong></div><div class="actions"><button class="edit">Corregir</button><button class="confirm" ${!expense.amount ? 'disabled' : ''}>✓ Confirmar</button></div></article>`).join('');
-  if (!$('#confirmDialog').open) $('#confirmDialog').showModal();
-  document.querySelectorAll('.pending').forEach((card) => {
-    const index = Number(card.dataset.index);
-    card.querySelector('.confirm').onclick = () => confirmPending(index);
-    card.querySelector('.edit').onclick = () => {
-      const item = pending.splice(index, 1)[0];
-      if ($('#confirmDialog').open) $('#confirmDialog').close();
-      openExpense(item);
-    };
-    let start = 0;
-    card.ontouchstart = (event) => { start = event.touches[0].clientX; };
-    card.ontouchend = (event) => {
-      if (Math.abs(event.changedTouches[0].clientX - start) <= 80) return;
-      discarded = { item: pending.splice(index, 1)[0], index };
-      showPending();
-      showToast('Descartado · Tocá para deshacer', true);
-    };
-  });
-}
-
-function confirmPending(index) {
-  const item = pending.splice(index, 1)[0];
-  item.purchaseDate = item.purchaseDate || item.date;
-  state.expenses.push(...installmentExpenses(item));
-  save();
-  navigator.vibrate?.(80);
-  try {
-    const context = new AudioContext();
-    const oscillator = context.createOscillator();
-    oscillator.frequency.value = 660;
-    oscillator.connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.09);
-  } catch {}
-  showToast('✓ Gasto confirmado');
-  showPending();
-  render();
-}
-
-document.querySelectorAll('nav button').forEach((button) => {
-  button.onclick = () => {
-    document.querySelectorAll('.view, nav button').forEach((element) => element.classList.remove('active'));
-    $(`#${button.dataset.view}`).classList.add('active');
-    button.classList.add('active');
-    render();
-  };
-});
-document.querySelectorAll('dialog .close').forEach((button) => { button.onclick = () => button.closest('dialog').close(); });
-$('#manualBtn').onclick = () => openExpense();
-$('#prevDay').onclick = () => { selectedDate.setDate(selectedDate.getDate() - 1); render(); };
-$('#nextDay').onclick = () => { selectedDate.setDate(selectedDate.getDate() + 1); render(); };
-$('#nextStep').onclick = () => {
-  if (manualStep === 1 && !$('#amount').value) return $('#amount').reportValidity();
-  setManualStep(manualStep + 1);
-};
-$('#prevStep').onclick = () => setManualStep(manualStep - 1);
-$('#method').onchange = updatePaymentFields;
-$('#expenseCard').onchange = updateInstallmentPreview;
-$('#installments').oninput = updateInstallmentPreview;
-$('#amount').oninput = updateInstallmentPreview;
-document.querySelectorAll('[name=currency]').forEach((input) => { input.onchange = updateInstallmentPreview; });
-
-$('#expenseForm').onsubmit = (event) => {
-  event.preventDefault();
-  const method = $('#method').value;
-  if (method !== 'Efectivo' && !$('#expenseCard').value) {
-    showToast('Elegí una tarjeta para continuar');
-    $('#expenseCard').focus();
-    return;
-  }
-  const now = new Date().toISOString();
-  const expense = {
-    id: crypto.randomUUID(),
-    amount: Number($('#amount').value),
-    currency: document.querySelector('[name=currency]:checked').value,
-    concept: $('#concept').value || $('#category').value || 'Sin detalle',
-    category: $('#category').value,
-    method,
-    card: $('#expenseCard').value,
-    installments: method === 'Crédito' ? Number($('#installments').value) : 1,
-    date: now,
-    purchaseDate: now,
-    source: 'manual',
-  };
-  state.expenses.push(...installmentExpenses(expense));
-  save();
-  $('#expenseDialog').close();
-  showToast('Gasto guardado');
-  render();
-};
-
-$('#addCard').onclick = () => $('#cardDialog').showModal();
-$('#cardForm').onsubmit = (event) => {
-  event.preventDefault();
-  state.cards.push({
-    id: crypto.randomUUID(), name: $('#cardName').value, type: $('#cardType').value,
-    closingDay: Number($('#closingDay').value), dueDay: Number($('#dueDay').value),
-  });
-  save();
-  event.target.reset();
-  $('#cardDialog').close();
-  showToast('Tarjeta agregada');
-  render();
-};
-
-document.querySelectorAll('.range-tabs button').forEach((button) => {
-  button.onclick = () => {
-    reportRange = button.dataset.range;
-    document.querySelectorAll('.range-tabs button').forEach((item) => item.classList.remove('selected'));
-    button.classList.add('selected');
-    $('#customRange').classList.toggle('hidden', reportRange !== 'custom');
-    renderReport();
-  };
-});
-$('#fromDate').onchange = renderReport;
-$('#toDate').onchange = renderReport;
-$('#settingsBtn').onclick = () => $('#settingsDialog').showModal();
-$('#biometricBtn').onclick = () => showToast(window.PublicKeyCredential
-  ? 'Base biométrica lista; requiere un servidor seguro para activarse'
-  : 'Biometría no disponible en este dispositivo');
-
+const escape = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const effectiveDate = (e) => new Date(e.dueDate || e.date);
+function dateWithDay(y, m, d) { return new Date(y, m, Math.min(d || 1, new Date(y, m + 1, 0).getDate()), 12); }
+function firstDueDate(card, purchase = new Date()) { let due = dateWithDay(purchase.getFullYear(), purchase.getMonth(), card.dueDay); if (purchase.getDate() > Number(card.closingDay || card.dueDay) || due < purchase) due = dateWithDay(purchase.getFullYear(), purchase.getMonth() + 1, card.dueDay); return due; }
+function installmentExpenses(expense) { if (expense.method !== 'Crédito' || expense.installments <= 1) return [expense]; const card = state.cards.find((c) => c.name === expense.card); if (!card) return [expense]; const first = firstDueDate(card, new Date(expense.purchaseDate || expense.date)); return Array.from({ length: expense.installments }, (_, i) => ({ ...expense, id: crypto.randomUUID(), parentId: expense.id, dueDate: dateWithDay(first.getFullYear(), first.getMonth() + i, card.dueDay).toISOString(), amount: expense.amount / expense.installments, installment: i + 1 })); }
+function totals(items) { return ['ARS', 'USD'].map((currency) => items.filter((e) => e.currency === currency).reduce((sum, e) => sum + Number(e.amount), 0)); }
+function totalsHTML(items) { const [ars, usd] = totals(items); return `${money(ars, 'ARS')}${usd ? ` · ${money(usd, 'USD')}` : ''}`; }
+function purchaseRows(date) { const day = state.expenses.filter((e) => sameDay(e.purchaseDate || e.date, date)); return day.filter((e) => !e.parentId || e.installment === 1); }
+function purchaseAmount(e) { return e.parentId ? e.amount * e.installments : e.amount; }
+function expenseHTML(e, showDate = false) { const detail = [e.category, e.method, e.card, e.installments > 1 ? `${e.installment || 1}/${e.installments}` : null].filter(Boolean).join(' · '); const when = new Date(e.purchaseDate || e.date); return `<article class="expense"><div class="expense-icon">${e.method === 'Efectivo' ? '◆' : '▰'}</div><div class="expense-info"><strong>${escape(e.concept || 'Sin detalle')}</strong><span class="meta">${escape(detail)}${showDate ? ` · ${when.toLocaleDateString('es-AR')} ${when.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}` : ` · ${when.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`}</span></div><div class="amount">${money(showDate ? e.amount : purchaseAmount(e), e.currency)}<small>${e.currency}</small></div></article>`; }
+function render() { $('#todayLabel').textContent = selectedDate.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderPaymentReminders(); renderCards(); renderReport(); renderHistory(); fillCardSelect(); fillCategories(); detectUnusual(rows); }
+function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
+function fillCategories() { $('#category').innerHTML = '<option value="">Sin categoría</option>' + state.categories.map((c) => `<option>${escape(c)}</option>`).join(''); $('#categoryList').innerHTML = state.categories.length ? state.categories.map((c, i) => `<button class="chip" data-category-index="${i}">${escape(c)} <span>×</span></button>`).join('') : '<p class="muted">Creá categorías como quieras; no hay una lista cerrada.</p>'; document.querySelectorAll('[data-category-index]').forEach((b) => { b.onclick = () => { state.categories.splice(Number(b.dataset.categoryIndex), 1); save(); fillCategories(); }; }); }
+function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
+function monthlyCardTotal(card, date) { return state.expenses.filter((e) => e.card === card.name && effectiveDate(e).getFullYear() === date.getFullYear() && effectiveDate(e).getMonth() === date.getMonth()); }
+function nextDue(card, now = new Date()) { let due = dateWithDay(now.getFullYear(), now.getMonth(), card.dueDay); if (due < now) due = dateWithDay(now.getFullYear(), now.getMonth() + 1, card.dueDay); return due; }
+function renderCards() { const now = new Date(); $('#cardList').innerHTML = state.cards.length ? state.cards.map((card, i) => `<article class="card-item"><div class="top"><strong>${escape(card.name)}</strong><span>${card.type}</span></div><p>${card.type === 'Crédito' ? `Cierra el ${card.closingDay} · Vence el ${card.dueDay}` : 'Tarjeta de débito'}</p><div class="card-total"><small>ESTIMADO DEL MES</small><strong>${totalsHTML(monthlyCardTotal(card, now))}</strong></div><div class="card-actions"><button class="delete-card" data-card-index="${i}">Eliminar</button></div></article>`).join('') : '<div class="empty">No agregaste tarjetas todavía.</div>'; document.querySelectorAll('.delete-card').forEach((b) => { b.onclick = () => { if (!confirm('¿Eliminar esta tarjeta? Los gastos guardados no se borrarán.')) return; state.cards.splice(Number(b.dataset.cardIndex), 1); save(); render(); }; }); const credit = state.cards.filter((c) => c.type === 'Crédito'); $('#dueList').innerHTML = credit.length ? credit.map((c) => { const due = nextDue(c); return `<article class="due-item"><div><strong>${escape(c.name)}</strong><p>Vence ${due.toLocaleDateString('es-AR')} · Deberías disponer de</p><strong>${totalsHTML(monthlyCardTotal(c, due))}</strong></div></article>`; }).join('') : '<div class="empty">Agregá una tarjeta de crédito para ver vencimientos.</div>'; $('#cardHistory').innerHTML = credit.map((c) => `<details class="history-card"><summary>${escape(c.name)}</summary>${Array.from({ length: 6 }, (_, i) => { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); return `<div class="history-row"><span>${d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}</span><strong>${totalsHTML(monthlyCardTotal(c, d))}</strong></div>`; }).join('')}</details>`).join(''); }
+function renderPaymentReminders() { const today = new Date(); today.setHours(12, 0, 0, 0); const allowed = state.settings.reminderDays; const reminders = state.cards.filter((c) => c.type === 'Crédito').map((card) => ({ card, due: nextDue(card, today) })).map((x) => ({ ...x, days: Math.round((x.due - today) / 86400000) })).filter((x) => allowed.includes(x.days)); $('#paymentReminders').innerHTML = reminders.map(({ card, due, days }) => `<article class="payment-alert"><span>▰</span><div><strong>${days ? `Vence en ${days} día${days > 1 ? 's' : ''}` : 'Vence hoy'} · ${escape(card.name)}</strong><small>Disponible necesario: ${totalsHTML(monthlyCardTotal(card, due))}</small></div></article>`).join(''); }
+function years() { const now = new Date().getFullYear(); return Array.from(new Set([now, ...state.expenses.map((e) => effectiveDate(e).getFullYear())])).sort((a, b) => b - a); }
+function chartHTML(items, currency) { const months = Array.from({ length: 12 }, (_, m) => items.filter((e) => effectiveDate(e).getMonth() === m && e.currency === currency).reduce((s, e) => s + e.amount, 0)); const max = Math.max(...months, 1); return months.map((v, i) => `<div class="bar ${currency === 'USD' ? 'usd' : ''}" style="height:${v / max * 100}%" title="${money(v, currency)}"><span>${'EFMAMJJASOND'[i]}</span></div>`).join(''); }
+function renderReport() { const year = Number($('#reportYear').value || new Date().getFullYear()); $('#reportYear').innerHTML = years().map((y) => `<option ${y === year ? 'selected' : ''}>${y}</option>`).join(''); let from, to; if (reportRange === 'month') { const now = new Date(); from = new Date(year, now.getMonth(), 1); to = new Date(year, now.getMonth() + 1, 0, 23, 59); $('#reportTitle').textContent = from.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }); } else if (reportRange === 'year') { from = new Date(year, 0, 1); to = new Date(year, 11, 31, 23, 59); $('#reportTitle').textContent = `Año ${year}`; } else { from = new Date($('#fromDate').value || '2000-01-01'); to = new Date($('#toDate').value || '2100-01-01'); to.setHours(23, 59); $('#reportTitle').textContent = 'Rango personalizado'; } const items = state.expenses.filter((e) => effectiveDate(e) >= from && effectiveDate(e) <= to); const [ars, usd] = totals(items); $('#reportArs').textContent = money(ars, 'ARS'); $('#reportUsd').textContent = money(usd, 'USD'); $('#arsChart').innerHTML = chartHTML(items, 'ARS'); $('#usdChart').innerHTML = chartHTML(items, 'USD'); }
+function historyBounds() { const now = new Date(); if (historyRange === 'today') return [new Date(now.getFullYear(), now.getMonth(), now.getDate()), new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59)]; if (historyRange === 'day') { const d = new Date($('#historyDate').value || now); return [new Date(d.getFullYear(), d.getMonth(), d.getDate()), new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59)]; } if (historyRange === 'month') { const [y, m] = ($('#historyMonth').value || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`).split('-').map(Number); return [new Date(y, m - 1, 1), new Date(y, m, 0, 23, 59)]; } if (historyRange === 'year') { const y = Number($('#historyYear').value || now.getFullYear()); return [new Date(y, 0, 1), new Date(y, 11, 31, 23, 59)]; } const from = new Date($('#historyFrom').value || '2000-01-01'), to = new Date($('#historyTo').value || '2100-01-01'); to.setHours(23, 59); return [from, to]; }
+function renderHistory() { $('#historyYear').innerHTML = years().map((y) => `<option>${y}</option>`).join(''); const [from, to] = historyBounds(); const items = state.expenses.filter((e) => effectiveDate(e) >= from && effectiveDate(e) <= to).sort((a, b) => effectiveDate(b) - effectiveDate(a)); const [ars, usd] = totals(items); $('#historyArs').textContent = money(ars, 'ARS'); $('#historyUsd').textContent = money(usd, 'USD'); $('#historyList').innerHTML = items.length ? items.map((e) => expenseHTML(e, true)).join('') : '<div class="empty">No hay movimientos en este período.</div>'; }
+function showToast(message, undo = false) { const toast = $('#toast'); toast.textContent = undo ? `${message} · DESHACER` : message; toast.classList.add('show'); toast.style.pointerEvents = undo ? 'auto' : 'none'; toast.onclick = undo ? () => { if (discarded) pending.splice(discarded.index, 0, discarded.item); discarded = null; showPending(); showToast('Gasto recuperado'); } : null; clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove('show'), 3500); }
+function feedback(ok) { navigator.vibrate?.(ok ? 50 : [120, 50, 120]); try { const ctx = new AudioContext(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.frequency.value = ok ? 720 : 180; gain.gain.value = .035; osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + (ok ? .08 : .16)); } catch {} }
+function setManualStep(step) { manualStep = step; document.querySelectorAll('.step').forEach((e) => e.classList.toggle('active', Number(e.dataset.step) === step)); $('#stepLabel').textContent = `PASO ${step} DE 3`; $('#expenseDialogTitle').textContent = ['¿Cuánto gastaste?', 'Elegí una categoría', '¿Cómo pagaste?'][step - 1]; $('#prevStep').classList.toggle('hidden', step === 1); $('#nextStep').classList.toggle('hidden', step === 3); $('#saveExpense').classList.toggle('hidden', step !== 3); }
+function openExpense(data = {}) { $('#expenseForm').reset(); $('#amount').value = data.amount || ''; $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; $('#method').value = data.method === 'Sin definir' ? 'Efectivo' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; setManualStep(data.source === 'voice' ? 1 : 1); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
+function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
+function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value), count = Number($('#installments').value || 1), amount = Number($('#amount').value || 0); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDate(card); $('#installmentPreview').innerHTML = `<strong>${count} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${card.dueDay} de cada mes.</span>`; }
+function showPending() { if (!pending.length) { if ($('#confirmDialog').open) $('#confirmDialog').close(); return; } $('#pendingList').innerHTML = pending.map((e, i) => `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape([e.category, e.method, e.card, e.installments > 1 ? `${e.installments} cuotas` : ''].filter(Boolean).join(' · '))}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div><div class="actions"><button class="edit">Corregir</button><button class="confirm" ${!e.amount || (e.method === 'Crédito' && !e.card) ? 'disabled' : ''}>✓ Confirmar</button></div>${e.method === 'Crédito' && !e.card ? '<p class="muted">Corregí el gasto y elegí una tarjeta de crédito configurada.</p>' : ''}</article>`).join(''); if (!$('#confirmDialog').open) $('#confirmDialog').showModal(); document.querySelectorAll('.pending').forEach((card) => { const index = Number(card.dataset.index); card.querySelector('.confirm').onclick = () => confirmPending(index, card); card.querySelector('.edit').onclick = () => { const item = pending.splice(index, 1)[0]; $('#confirmDialog').close(); openExpense(item); }; let startY = 0; card.ontouchstart = (ev) => { startY = ev.touches[0].clientY; }; card.ontouchend = (ev) => { if (startY - ev.changedTouches[0].clientY < 65) return; card.classList.add('removing'); setTimeout(() => { discarded = { item: pending.splice(index, 1)[0], index }; feedback(false); showPending(); showToast('Gasto descartado', true); }, 180); }; }); }
+function confirmPending(index, card) { card.classList.add('confirmed'); const item = pending.splice(index, 1)[0]; item.purchaseDate ||= item.date; state.expenses.push(...installmentExpenses(item)); save(); feedback(true); showToast('✓ Gasto confirmado'); setTimeout(() => { showPending(); render(); }, 180); }
+document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => { document.querySelectorAll('.view, nav button').forEach((e) => e.classList.remove('active')); $(`#${button.dataset.view}`).classList.add('active'); button.classList.add('active'); render(); }; });
+document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
+$('#manualBtn').onclick = () => openExpense(); $('#prevDay').onclick = () => { selectedDate.setDate(selectedDate.getDate() - 1); render(); }; $('#nextDay').onclick = () => { selectedDate.setDate(selectedDate.getDate() + 1); render(); };
+$('#nextStep').onclick = () => { if (manualStep === 1 && !$('#amount').value) return $('#amount').reportValidity(); setManualStep(manualStep + 1); }; $('#prevStep').onclick = () => setManualStep(manualStep - 1);
+$('#method').onchange = updatePaymentFields; $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = updateInstallmentPreview; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
+$('#expenseForm').onsubmit = (event) => { event.preventDefault(); const method = $('#method').value; if (method !== 'Efectivo' && !$('#expenseCard').value) return showToast('Elegí una tarjeta configurada'); const now = new Date().toISOString(); const expense = { id: crypto.randomUUID(), amount: Number($('#amount').value), currency: document.querySelector('[name=currency]:checked').value, concept: $('#concept').value || $('#category').value || 'Sin detalle', category: $('#category').value, method, card: $('#expenseCard').value, installments: method === 'Crédito' ? Number($('#installments').value) : 1, date: now, purchaseDate: now, source: 'manual' }; state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render(); };
+$('#addCard').onclick = () => $('#cardDialog').showModal(); $('#cardType').onchange = () => $('#creditCardDates').classList.toggle('hidden', $('#cardType').value !== 'Crédito'); $('#cardForm').onsubmit = (event) => { event.preventDefault(); if (state.cards.some((c) => c.name.toLowerCase() === $('#cardName').value.trim().toLowerCase())) return showToast('Ya existe una tarjeta con ese nombre'); state.cards.push({ id: crypto.randomUUID(), name: $('#cardName').value.trim(), type: $('#cardType').value, closingDay: Number($('#closingDay').value), dueDay: Number($('#dueDay').value) }); save(); event.target.reset(); $('#cardDialog').close(); showToast('Tarjeta agregada'); render(); };
+document.querySelectorAll('[data-range]').forEach((button) => { button.onclick = () => { reportRange = button.dataset.range; document.querySelectorAll('[data-range]').forEach((b) => b.classList.remove('selected')); button.classList.add('selected'); $('#customRange').classList.toggle('hidden', reportRange !== 'custom'); renderReport(); }; }); $('#fromDate').onchange = renderReport; $('#toDate').onchange = renderReport; $('#reportYear').onchange = renderReport;
+document.querySelectorAll('[data-history]').forEach((button) => { button.onclick = () => { historyRange = button.dataset.history; document.querySelectorAll('[data-history]').forEach((b) => b.classList.remove('selected')); button.classList.add('selected'); $('#historyDate').classList.toggle('hidden', historyRange !== 'day'); $('#historyMonth').classList.toggle('hidden', historyRange !== 'month'); $('#historyYear').classList.toggle('hidden', historyRange !== 'year'); $('#historyCustom').classList.toggle('hidden', historyRange !== 'custom'); renderHistory(); }; }); ['historyDate', 'historyMonth', 'historyYear', 'historyFrom', 'historyTo'].forEach((id) => { $(`#${id}`).onchange = renderHistory; });
+function addCategory() { const value = $('#newCategory').value.trim(); if (!value || state.categories.some((c) => c.toLowerCase() === value.toLowerCase())) return; state.categories.push(value); $('#newCategory').value = ''; save(); fillCategories(); }
+$('#categoryForm').onsubmit = (event) => { event.preventDefault(); addCategory(); }; $('#quickCategory').onclick = () => { const value = prompt('Nombre de la nueva categoría:')?.trim(); if (!value) return; $('#newCategory').value = value; addCategory(); $('#category').value = value; };
+function renderReminderSettings() { const labels = { 5: '5 días antes', 3: '3 días antes', 2: '2 días antes', 1: '1 día antes', 0: 'El mismo día' }; $('#reminderSettings').innerHTML = [5, 3, 2, 1, 0].map((d) => `<label><input type="checkbox" value="${d}" ${state.settings.reminderDays.includes(d) ? 'checked' : ''}>${labels[d]}</label>`).join(''); $('#reminderSettings').onchange = () => { state.settings.reminderDays = [...$('#reminderSettings').querySelectorAll(':checked')].map((i) => Number(i.value)); save(); renderPaymentReminders(); }; }
+$('#settingsBtn').onclick = () => { renderReminderSettings(); fillCategories(); $('#settingsDialog').showModal(); }; $('#biometricBtn').onclick = () => showToast(window.PublicKeyCredential && window.isSecureContext ? 'WebAuthn disponible; no bloqueamos tu acceso' : 'Face ID web requiere HTTPS y soporte del dispositivo');
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-$('#micBtn').onclick = () => {
-  if (!SpeechRecognition) {
-    const phrase = prompt('Tu navegador no ofrece dictado. Escribí solamente el gasto:');
-    if (phrase) { pending = parseExpenses(phrase, state.cards); showPending(); }
-    return;
-  }
-  const recognition = new SpeechRecognition();
-  recognition.lang = 'es-AR';
-  recognition.interimResults = false;
-  recognition.continuous = false;
-  recognition.maxAlternatives = 1;
-  let finalPhrase = '';
-  recognition.onstart = () => {
-    $('#micBtn').classList.add('listening');
-    $('#voiceTitle').textContent = 'Escuchando un gasto…';
-    $('#voiceHint').textContent = 'La captura se detiene al terminar la frase';
-  };
-  recognition.onresult = (event) => {
-    const result = event.results[event.resultIndex];
-    if (result.isFinal) finalPhrase = result[0].transcript.trim();
-  };
-  recognition.onend = () => {
-    $('#micBtn').classList.remove('listening');
-    $('#voiceTitle').textContent = 'Tocá para hablar';
-    $('#voiceHint').textContent = 'Decí solamente el gasto que querés cargar';
-    if (finalPhrase) {
-      pending = parseExpenses(finalPhrase, state.cards);
-      showPending();
-    }
-  };
-  recognition.start();
-};
-
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
-render();
+$('#micBtn').onclick = () => { if (!SpeechRecognition) { const phrase = prompt('El navegador no ofrece reconocimiento de voz. Escribí los gastos:'); if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories); showPending(); } return; } const recognition = new SpeechRecognition(); recognition.lang = 'es-AR'; recognition.interimResults = false; recognition.continuous = false; recognition.maxAlternatives = 1; let phrase = ''; recognition.onstart = () => { $('#micBtn').classList.add('listening'); $('#voiceTitle').textContent = 'Escuchando…'; $('#voiceHint').textContent = 'Se detiene al terminar la frase'; }; recognition.onresult = (event) => { phrase = event.results[event.resultIndex][0].transcript.trim(); }; recognition.onerror = () => showToast('No pude escuchar. Revisá el permiso del micrófono'); recognition.onend = () => { $('#micBtn').classList.remove('listening'); $('#voiceTitle').textContent = 'Tocá para hablar'; $('#voiceHint').textContent = 'Podés decir varios gastos en una frase'; if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories); showPending(); } }; recognition.start(); };
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
+const todayISO = new Date().toISOString().slice(0, 10); $('#historyDate').value = todayISO; $('#historyMonth').value = todayISO.slice(0, 7); $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; save(); render();
