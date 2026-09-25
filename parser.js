@@ -1,4 +1,7 @@
-const UNITS = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12 };
+const UNITS = { un:1, uno:1, una:1, dos:2, tres:3, cuatro:4, cinco:5, seis:6, siete:7, ocho:8, nueve:9, diez:10, once:11, doce:12, trece:13, catorce:14, quince:15, dieciseis:16, diecisiete:17, dieciocho:18, diecinueve:19, veinte:20, veintiuno:21, veintidos:22, veintitres:23, veinticuatro:24, veinticinco:25, veintiseis:26, veintisiete:27, veintiocho:28, veintinueve:29 };
+const TENS = { treinta:30, cuarenta:40, cincuenta:50, sesenta:60, setenta:70, ochenta:80, noventa:90 };
+const HUNDREDS = { cien:100, ciento:100, doscientos:200, trescientos:300, cuatrocientos:400, quinientos:500, seiscientos:600, setecientos:700, ochocientos:800, novecientos:900 };
+function wordsValue(text) { const tokens=normalized(text).split(/\s+/); let total=0,current=0,seen=false; for (const t of tokens) { if (UNITS[t]!=null){current+=UNITS[t];seen=true;} else if(TENS[t]!=null){current+=TENS[t];seen=true;} else if(HUNDREDS[t]!=null){current+=HUNDREDS[t];seen=true;} else if(t==='mil'){current=(current||1)*1000;total+=current;current=0;seen=true;} else if(t==='millon'||t==='millones'){current=(current||1)*1000000;total+=current;current=0;seen=true;} } return seen ? total+current : null; }
 
 function normalized(text) {
   return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -24,7 +27,7 @@ export function parseExpense(text, cards = [], categories = []) {
   const lower = normalized(raw);
   const amount = parseAmount(lower);
   const currency = /(?:usd|u\$s|dolar)/.test(lower) ? 'USD' : 'ARS';
-  const installments = Number(lower.match(/(\d+)\s*cuotas?/)?.[1] || 1);
+  const installmentMatch = lower.match(/(\d+)\s*cuotas?/) || lower.match(/\b([a-z]+)\s+cuotas?/); const installments = installmentMatch ? (Number(installmentMatch[1]) || wordsValue(installmentMatch[1]) || 1) : 1;
   const method = /credito|cuotas?/.test(lower) ? 'Crédito' : /debito/.test(lower) ? 'Débito' : /efectivo/.test(lower) ? 'Efectivo' : 'Sin definir';
   const card = cards.find((item) => lower.includes(normalized(item.name)))?.name || '';
   const category = categoryFor(raw, categories);
