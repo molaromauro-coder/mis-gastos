@@ -24,9 +24,11 @@ export function parseExpense(text, cards = [], categories = []) {
   const lower = normalized(raw);
   const amount = parseAmount(lower);
   const currency = /(?:usd|u\$s|dolar)/.test(lower) ? 'USD' : 'ARS';
-  const installments = Number(lower.match(/(\d+)\s*cuotas?/)?.[1] || 1);
+  const installmentToken = lower.match(/(\d+|una?|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\s*cuotas?/)?.[1];
+  const installments = Number(installmentToken) || UNITS[installmentToken] || 1;
   const method = /credito|cuotas?/.test(lower) ? 'Crédito' : /debito/.test(lower) ? 'Débito' : /efectivo/.test(lower) ? 'Efectivo' : 'Sin definir';
-  const card = cards.find((item) => lower.includes(normalized(item.name)))?.name || '';
+  const methodType = method === 'Crédito' ? 'Crédito' : method === 'Débito' ? 'Débito' : null;
+  const card = cards.find((item) => (!methodType || !item.type || item.type === methodType) && lower.includes(normalized(item.name)))?.name || '';
   const category = categoryFor(raw, categories);
   let concept = raw.replace(/\b(pagu[eé]|gast[eé]|compr[eé]|en|con|del?|la|el|efectivo|d[eé]bito|cr[eé]dito|pesos?|d[oó]lares?|usd|u\$s|cuotas?|mil|mill[oó]n(?:es)?)\b/gi, ' ')
     .replace(/[\d$.,]+/g, ' ').replace(/\s+/g, ' ').trim();
