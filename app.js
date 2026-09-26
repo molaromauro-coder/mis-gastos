@@ -1,9 +1,10 @@
 import { parseExpenses } from './parser.js';
 import { normalizeSplit, ticketMetrics, partyMetrics, portfolioMetrics, withPortfolioPercent } from './resale.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses } from './reporting.js';
+import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics } from './finance.js';
 const STORAGE_KEY = 'mis-gastos-v1';
-const defaults = { expenses: [], cards: [], categories: [], settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {} }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 3 };
-function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], settings: { ...defaults.settings, ...(old.settings || {}) }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 3 }; } catch { return structuredClone(defaults); } }
+const defaults = { expenses: [], cards: [], categories: [], stock: [], recoveries: [], budgets: {}, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 4 };
+function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], stock: old.stock || [], recoveries: old.recoveries || [], budgets: old.budgets || {}, settings: { ...defaults.settings, ...(old.settings || {}), usdRateCache: old.settings?.usdRateCache || {} }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 4 }; } catch { return structuredClone(defaults); } }
 const state = loadState();
 let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null;
 const $ = (s) => document.querySelector(s);
@@ -14,13 +15,13 @@ const escape = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;'
 const effectiveDate = (e) => new Date(e.dueDate || e.date);
 function dateWithDay(y, m, d) { return new Date(y, m, Math.min(d || 1, new Date(y, m + 1, 0).getDate()), 12); }
 function firstDueDate(card, purchase = new Date()) { let due = dateWithDay(purchase.getFullYear(), purchase.getMonth(), card.dueDay); if (purchase.getDate() > Number(card.closingDay || card.dueDay) || due < purchase) due = dateWithDay(purchase.getFullYear(), purchase.getMonth() + 1, card.dueDay); return due; }
-function installmentExpenses(expense) { if (expense.method !== 'Crédito' || expense.installments <= 1) return [expense]; const card = state.cards.find((c) => c.name === expense.card); if (!card) return [expense]; const first = firstDueDate(card, new Date(expense.purchaseDate || expense.date)); return Array.from({ length: expense.installments }, (_, i) => ({ ...expense, id: crypto.randomUUID(), parentId: expense.id, dueDate: dateWithDay(first.getFullYear(), first.getMonth() + i, card.dueDay).toISOString(), amount: expense.amount / expense.installments, installment: i + 1 })); }
+function installmentExpenses(expense) { if (expense.method !== 'Crédito') return [expense]; const card = state.cards.find((c) => c.name === expense.card); if (!card) return [expense]; const first = firstDueDate(card, new Date(expense.purchaseDate || expense.date)); const count = Math.max(1, Number(expense.installments || 1)); if (count === 1) return [{ ...expense, dueDate: first.toISOString(), installment: 1, installments: 1 }]; return Array.from({ length: count }, (_, i) => ({ ...expense, id: crypto.randomUUID(), parentId: expense.id, dueDate: dateWithDay(first.getFullYear(), first.getMonth() + i, card.dueDay).toISOString(), amount: expense.amount / count, installment: i + 1, installments: count })); }
 function totals(items) { return ['ARS', 'USD'].map((currency) => items.filter((e) => e.currency === currency).reduce((sum, e) => sum + Number(e.amount), 0)); }
 function totalsHTML(items) { const [ars, usd] = totals(items); return `${money(ars, 'ARS')}${usd ? ` · ${money(usd, 'USD')}` : ''}`; }
 function purchaseRows(date) { const day = state.expenses.filter((e) => sameDay(e.purchaseDate || e.date, date)); return day.filter((e) => !e.parentId || e.installment === 1); }
 function purchaseAmount(e) { return e.parentId ? e.amount * e.installments : e.amount; }
 function expenseHTML(e, showDate = false) { const detail = [e.category, e.method, e.card, e.installments > 1 ? `${e.installment || 1}/${e.installments}` : null].filter(Boolean).join(' · '); const when = new Date(e.purchaseDate || e.date); return `<article class="expense"><div class="expense-icon">${e.method === 'Efectivo' ? '◆' : '▰'}</div><div class="expense-info"><strong>${escape(e.concept || 'Sin detalle')}</strong><span class="meta">${escape(detail)}${showDate ? ` · ${when.toLocaleDateString('es-AR')} ${when.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}` : ` · ${when.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`}</span></div><div class="amount">${money(showDate ? e.amount : purchaseAmount(e), e.currency)}<small>${e.currency}</small></div></article>`; }
-function render() { $('#todayLabel').textContent = selectedDate.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); fillCardSelect(); fillCategories(); detectUnusual(rows); }
+function render() { $('#todayLabel').textContent = selectedDate.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderConsultationFilters(); renderBudgetHomeAlert(); fillCardSelect(); fillCategories(); detectUnusual(rows); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function fillCategories() { $('#category').innerHTML = '<option value="">Sin categoría</option>' + state.categories.map((c) => `<option>${escape(c)}</option>`).join(''); $('#categoryList').innerHTML = state.categories.length ? state.categories.map((c, i) => `<button class="chip" data-category-index="${i}">${escape(c)} <span>×</span></button>`).join('') : '<p class="muted">Creá categorías como quieras; no hay una lista cerrada.</p>'; document.querySelectorAll('[data-category-index]').forEach((b) => { b.onclick = () => { state.categories.splice(Number(b.dataset.categoryIndex), 1); save(); fillCategories(); }; }); }
 function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
@@ -260,6 +261,144 @@ function exportResaleCsv() {
   const url = URL.createObjectURL(blob), a = document.createElement('a');
   a.href = url; a.download = 'reventa-entradas.csv'; a.click(); URL.revokeObjectURL(url);
 }
+
+function currentMonthKey() { return monthKey(new Date()); }
+function budgetFor(key) { return state.budgets[key] || { amount: 0, reason: '', history: [] }; }
+function budgetMetrics(key) { return budgetOutcome(budgetFor(key).amount, state.expenses, state.stock, key); }
+
+function renderBudgetHomeAlert() {
+  if (!$('#budgetAlert')) return;
+  const key=currentMonthKey(), m=budgetMetrics(key);
+  const alert=$('#budgetAlert');
+  if (!m.budget) { alert.classList.add('hidden'); return; }
+  const thresholds=(state.settings.budgetAlerts || [80,90,100]).slice().sort((a,b)=>a-b);
+  const hit=thresholds.filter((t)=>m.percent>=t).pop();
+  if (!hit) { alert.classList.add('hidden'); return; }
+  alert.classList.remove('hidden');
+  alert.textContent=m.excess>0
+    ? `⚠ Presupuesto superado: ${money(m.excess,'ARS')} por encima del límite.`
+    : `⚠ Usaste ${m.percent.toLocaleString('es-AR',{maximumFractionDigits:0})}% del presupuesto mensual.`;
+}
+
+function renderStock() {
+  if (!$('#stockList')) return;
+  const rows=state.stock.map((p)=>({p,m:stockMetrics(p)}));
+  const totalRemaining=rows.reduce((s,x)=>s+x.m.remaining,0);
+  const totalValue=rows.reduce((s,x)=>s+x.m.remainingValue,0);
+  $('#stockSummary').textContent=`${totalRemaining} unidades disponibles · ${money(totalValue,'ARS')} aprox.`;
+  $('#stockList').innerHTML=rows.length ? rows.map(({p,m})=>`<article class="stock-card" data-stock-id="${escape(p.id)}">
+    <div class="stock-head"><div><strong>${escape(p.product)}</strong><small>${escape(p.category || 'Sin categoría')} · pagado ${new Date(p.paidDate+'T12:00:00').toLocaleDateString('es-AR')}</small></div><span class="stock-money">${p.currency==='USD' ? money(p.totalAmount,'USD') : money(p.totalAmount,'ARS')}</span></div>
+    <div class="stock-stats"><div><span>Comprado</span><strong>${m.qty}</strong></div><div><span>Consumido</span><strong>${m.consumed}</strong></div><div><span>Disponible</span><strong>${m.remaining}</strong></div></div>
+    <div class="stock-actions"><button class="consume">Consumir</button><button class="adjust">Ajustar</button></div></article>`).join('') : '<div class="empty">Todavía no cargaste compras de stock.</div>';
+  document.querySelectorAll('.stock-card').forEach((card)=>{
+    const p=state.stock.find((x)=>x.id===card.dataset.stockId);
+    if(!p) return;
+    card.querySelector('.consume').onclick=()=>{ const n=Number(prompt(`¿Cuántas unidades de ${p.product} consumiste?`,'1')); if(!n||n<0)return; const m=stockMetrics(p); if(n>m.remaining)return showToast('No hay suficiente stock disponible'); p.consumptions ||= []; p.consumptions.push({id:uid(),quantity:n,date:new Date().toISOString()}); save(); renderStock(); renderBudget(); showToast('Consumo registrado'); };
+    card.querySelector('.adjust').onclick=()=>{ const n=Number(prompt('Cantidad total real en stock:',String(stockMetrics(p).remaining))); if(!Number.isFinite(n)||n<0)return; const m=stockMetrics(p); const delta=n-m.remaining; p.quantity=Math.max(0,Number(p.quantity||0)+delta); save(); renderStock(); showToast('Stock ajustado'); };
+  });
+}
+
+async function addStockPurchase(data) {
+  let item={id:uid(),product:data.product,category:data.category,quantity:data.quantity,months:data.months,totalAmount:data.totalAmount,currency:data.currency,paidDate:data.paidDate,consumptions:[]};
+  if(item.currency==='USD'){
+    const rate=await ensureUsdRate(false);
+    if(rate) Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateSource:rate.source,fxRateUpdatedAt:rate.updatedAt});
+  }
+  state.stock.push(item); save();
+}
+
+function renderRecoveries() {
+  if (!$('#recoveryList')) return;
+  const key=$('#recoveryMonth').value || currentMonthKey();
+  const m=recoveryMonthMetrics(state.recoveries,state.expenses,key);
+  $('#recoveryGross').textContent=money(m.gross,'ARS');
+  $('#recoveryTotal').textContent=money(m.recovered,'ARS');
+  $('#recoveryNet').textContent=money(m.net,'ARS');
+  const rows=state.recoveries.filter((r)=>monthKey(new Date(r.date+'T12:00:00'))===key).sort((a,b)=>b.date.localeCompare(a.date));
+  $('#recoveryList').innerHTML=rows.length ? rows.map((r)=>`<article class="recovery-card"><div><strong>${escape(r.concept || 'Recupero')}</strong><span>${new Date(r.date+'T12:00:00').toLocaleDateString('es-AR')}</span><small>${r.currency==='USD' && r.fxRate ? `Cotización ${money(r.fxRate,'ARS')}` : ''}</small></div><strong>${money(r.amount,r.currency)}</strong></article>`).join('') : '<div class="empty">No hay recuperos en este mes.</div>';
+}
+
+function renderBudget() {
+  if (!$('#budgetMonth')) return;
+  const key=$('#budgetMonth').value || currentMonthKey();
+  const entry=budgetFor(key), m=budgetMetrics(key);
+  if(document.activeElement !== $('#budgetAmount')) $('#budgetAmount').value=entry.amount || '';
+  if(document.activeElement !== $('#budgetReason')) $('#budgetReason').value=entry.reason || '';
+  $('#budgetCurrent').textContent=money(m.budget,'ARS');
+  $('#budgetSpent').textContent=money(m.spent,'ARS');
+  $('#budgetAvailable').textContent=money(m.available,'ARS');
+  $('#budgetPercent').textContent=`${m.percent.toLocaleString('es-AR',{maximumFractionDigits:1})}%`;
+  $('#budgetProgressBar').style.width=`${Math.min(m.percent,100)}%`;
+  $('#budgetExcess').classList.toggle('hidden',m.excess<=0);
+  $('#budgetExcess').textContent=m.excess>0 ? `⚠ Superaste el presupuesto en ${money(m.excess,'ARS')}.` : '';
+  const labels={80:'80%',90:'90%',100:'100%'};
+  $('#budgetAlertSettings').innerHTML=[80,90,100].map((v)=>`<label><input type="checkbox" value="${v}" ${(state.settings.budgetAlerts||[]).includes(v)?'checked':''}>Avisar al ${labels[v]}</label>`).join('');
+  $('#budgetAlertSettings').onchange=()=>{ state.settings.budgetAlerts=[...$('#budgetAlertSettings').querySelectorAll(':checked')].map((i)=>Number(i.value)); save(); renderBudgetHomeAlert(); };
+  const history=(entry.history||[]).slice().reverse();
+  $('#budgetHistory').innerHTML=history.length ? history.map((h)=>`<article class="budget-history-row"><div><span>${new Date(h.date).toLocaleString('es-AR')}</span><small>${escape(h.reason || 'Cambio de presupuesto')}</small></div><strong>${money(h.amount,'ARS')}</strong></article>`).join('') : '<div class="empty">Sin cambios registrados.</div>';
+}
+
+function renderSavings() {
+  if (!$('#savingsList')) return;
+  const now=new Date(), selected=Number($('#savingsYear').value || now.getFullYear());
+  const years=new Set([now.getFullYear(),...Object.keys(state.budgets).map((k)=>Number(k.slice(0,4)))]);
+  $('#savingsYear').innerHTML=[...years].sort((a,b)=>b-a).map((y)=>`<option ${y===selected?'selected':''}>${y}</option>`).join('');
+  const rows=Array.from({length:12},(_,m)=>{ const key=`${selected}-${String(m+1).padStart(2,'0')}`; return {key,date:new Date(selected,m,1),...budgetMetrics(key)}; });
+  const annual=rows.reduce((s,r)=>s+r.saving,0);
+  $('#annualSavings').textContent=money(annual,'ARS');
+  $('#savingsList').innerHTML=rows.map((r)=>`<article class="saving-row"><div><span>${r.date.toLocaleDateString('es-AR',{month:'long'})}</span><small>Presupuesto ${money(r.budget,'ARS')} · Gastado ${money(r.spent,'ARS')}</small></div><strong class="${r.excess>0?'excess':''}">${r.excess>0 ? '-'+money(r.excess,'ARS') : money(r.saving,'ARS')}</strong></article>`).join('');
+}
+
+function renderConsultationFilters() {
+  if (!$('#consultCategory')) return;
+  const category=$('#consultCategory').value, card=$('#consultCard').value;
+  $('#consultCategory').innerHTML='<option value="">Todas</option>'+state.categories.map((c)=>`<option ${c===category?'selected':''}>${escape(c)}</option>`).join('');
+  $('#consultCard').innerHTML='<option value="">Todas</option>'+state.cards.map((c)=>`<option ${c.name===card?'selected':''}>${escape(c.name)}</option>`).join('');
+}
+
+function consultationItems() {
+  let from=$('#consultFrom').value ? new Date($('#consultFrom').value+'T00:00:00') : new Date('2000-01-01T00:00:00');
+  let to=$('#consultTo').value ? new Date($('#consultTo').value+'T23:59:59') : new Date('2100-01-01T23:59:59');
+  const cat=$('#consultCategory').value, method=$('#consultMethod').value, currency=$('#consultCurrency').value, card=$('#consultCard').value, min=Number($('#consultMin').value||0);
+  return state.expenses.filter((e)=>{ const d=effectiveDate(e); const value=Number(e.amount||0); return d>=from&&d<=to&&(!cat||e.category===cat)&&(!method||e.method===method)&&(!currency||e.currency===currency)&&(!card||e.card===card)&&value>=min; });
+}
+
+function applyNaturalConsultation(text) {
+  const q=text.toLowerCase(), now=new Date(), today=now.toISOString().slice(0,10);
+  if(q.includes('este mes')){ $('#consultFrom').value=`${today.slice(0,8)}01`; $('#consultTo').value=today; }
+  if(q.includes('hoy')){ $('#consultFrom').value=today; $('#consultTo').value=today; }
+  if(q.includes('dólar')||q.includes('dolar')) $('#consultCurrency').value='USD';
+  if(q.includes('efectivo')) $('#consultMethod').value='Efectivo';
+  if(q.includes('débito')||q.includes('debito')) $('#consultMethod').value='Débito';
+  if(q.includes('crédito')||q.includes('credito')) $('#consultMethod').value='Crédito';
+  const category=state.categories.find((c)=>q.includes(c.toLowerCase())); if(category) $('#consultCategory').value=category;
+  const card=state.cards.find((c)=>q.includes(c.name.toLowerCase())); if(card) $('#consultCard').value=card.name;
+}
+
+function runConsultation() {
+  applyNaturalConsultation($('#consultQuery').value);
+  const items=consultationItems(), [ars,usd]=totals(items), eq=items.reduce((s,e)=>s+expenseArsEquivalent(e),0);
+  $('#consultArs').textContent=money(ars,'ARS'); $('#consultUsd').textContent=money(usd,'USD'); $('#consultEquivalent').textContent=money(eq,'ARS');
+  const answer=`Encontré ${items.length} movimiento${items.length===1?'':'s'}. Total: ${money(ars,'ARS')}${usd ? ' y '+money(usd,'USD') : ''}.`;
+  $('#consultAnswer').textContent=answer;
+  $('#consultResults').innerHTML=items.length ? items.sort((a,b)=>effectiveDate(b)-effectiveDate(a)).map((e)=>expenseHTML(e,true)).join('') : '<div class="empty">No encontré movimientos con esos filtros.</div>';
+  if($('#consultSpeak').checked && 'speechSynthesis' in window){ speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(answer)); }
+}
+
+function compareMonths() {
+  const a=$('#compareMonthA').value,b=$('#compareMonthB').value;if(!a||!b)return;
+  const sum=(key)=>state.expenses.filter((e)=>monthKey(effectiveDate(e))===key).reduce((s,e)=>s+expenseArsEquivalent(e),0);
+  const av=sum(a),bv=sum(b),max=Math.max(av,bv,1),diff=bv-av,pctDiff=av ? diff/av*100 : null;
+  $('#compareResult').className='compare-result';
+  $('#compareResult').innerHTML=`<strong>${b}: ${money(bv,'ARS')}</strong><p class="muted">${pctDiff==null?'Sin base para comparar':(pctDiff>=0?'+':'')+pctDiff.toLocaleString('es-AR',{maximumFractionDigits:1})+'% frente a '+a}</p><div class="compare-bars"><div class="compare-bar"><span>${a}</span><i style="width:${av/max*100}%"></i><strong>${money(av,'ARS')}</strong></div><div class="compare-bar"><span>${b}</span><i style="width:${bv/max*100}%"></i><strong>${money(bv,'ARS')}</strong></div></div>`;
+}
+
+function startStockVoice() {
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const process=(phrase)=>{ const q=phrase.toLowerCase(); const product=state.stock.find((p)=>q.includes(p.product.toLowerCase())); const n=Number((q.match(/\d+(?:[.,]\d+)?/)||[])[0]?.replace(',','.')||1); if(!product)return showToast('No reconocí el producto del stock'); const m=stockMetrics(product); if(n>m.remaining)return showToast('No hay suficiente stock'); product.consumptions ||= []; product.consumptions.push({id:uid(),quantity:n,date:new Date().toISOString(),source:'voice'}); save(); renderStock(); showToast(`Consumo: ${n} de ${product.product}`); };
+  if(!SR){ const p=prompt('Decí/escribí, por ejemplo: consumí 2 cafés'); if(p)process(p); return; }
+  const rec=new SR();rec.lang='es-AR';rec.interimResults=false;rec.continuous=false;let phrase='';rec.onresult=(e)=>phrase=e.results[e.resultIndex][0].transcript.trim();rec.onend=()=>{if(phrase)process(phrase)};rec.onerror=()=>showToast('No pude escuchar el consumo');rec.start();
+}
 function goView(view) {
   document.querySelectorAll('.view, nav button').forEach((e) => e.classList.remove('active'));
   const target = document.getElementById(view);
@@ -316,6 +455,27 @@ $('#settingsBtn').onclick = () => { renderReminderSettings(); fillCategories(); 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 $('#micBtn').onclick = () => { if (!SpeechRecognition) { const phrase = prompt('El navegador no ofrece reconocimiento de voz. Escribí los gastos:'); if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories); showPending(); } return; } const recognition = new SpeechRecognition(); recognition.lang = 'es-AR'; recognition.interimResults = false; recognition.continuous = false; recognition.maxAlternatives = 1; let phrase = ''; recognition.onstart = () => { $('#micBtn').classList.add('listening'); $('#voiceTitle').textContent = 'Escuchando…'; $('#voiceHint').textContent = 'Se detiene al terminar la frase'; }; recognition.onresult = (event) => { phrase = event.results[event.resultIndex][0].transcript.trim(); }; recognition.onerror = () => showToast('No pude escuchar. Revisá el permiso del micrófono'); recognition.onend = () => { $('#micBtn').classList.remove('listening'); $('#voiceTitle').textContent = 'Tocá para hablar'; $('#voiceHint').textContent = 'Podés decir varios gastos en una frase'; if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories); showPending(); } }; recognition.start(); };
 
+
+$('#privacyBtn').onclick=()=>{ state.settings.hideAmounts=!state.settings.hideAmounts; document.body.classList.toggle('hide-amounts',state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); };
+
+$('#addStock').onclick=()=>{ $('#stockForm').reset(); $('#stockQty').value=1; $('#stockMonths').value=1; $('#stockPaidDate').value=new Date().toISOString().slice(0,10); $('#stockDialog').showModal(); };
+$('#stockForm').onsubmit=async(e)=>{e.preventDefault();await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),quantity:Number($('#stockQty').value),months:Number($('#stockMonths').value),totalAmount:Number($('#stockAmount').value),currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});$('#stockDialog').close();renderStock();renderBudget();renderSavings();showToast('Compra de stock guardada');};
+$('#stockVoiceBtn').onclick=startStockVoice;
+
+$('#addRecovery').onclick=()=>{ $('#recoveryForm').reset(); $('#recoveryDate').value=new Date().toISOString().slice(0,10); $('#recoveryDialog').showModal(); };
+$('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:Number($('#recoveryAmount').value),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value};if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();renderRecoveries();showToast('Recupero guardado');};
+$('#recoveryMonth').onchange=renderRecoveries;
+
+$('#budgetMonth').onchange=renderBudget;
+$('#saveBudget').onclick=()=>{ const key=$('#budgetMonth').value||currentMonthKey(), amount=Number($('#budgetAmount').value||0), reason=$('#budgetReason').value.trim(); const current=budgetFor(key); const history=[...(current.history||[]),{date:new Date().toISOString(),amount,reason}]; state.budgets[key]={amount,reason,history}; save(); renderBudget(); renderSavings(); renderBudgetHomeAlert(); showToast('Presupuesto guardado'); };
+$('#savingsYear').onchange=renderSavings;
+
+$('#runConsult').onclick=runConsultation;
+['consultFrom','consultTo','consultCategory','consultMethod','consultCurrency','consultCard','consultMin'].forEach((id)=>$('#'+id).onchange=runConsultation);
+$('#consultSpeak').onchange=()=>{state.settings.consultSpeak=$('#consultSpeak').checked;save();};
+$('#compareMonths').onclick=compareMonths;
+$('#consultMic').onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const process=(p)=>{$('#consultQuery').value=p;runConsultation();};if(!SR){const p=prompt('Escribí tu consulta:');if(p)process(p);return;}const rec=new SR();rec.lang='es-AR';rec.interimResults=false;rec.continuous=false;let p='';rec.onresult=(e)=>p=e.results[e.resultIndex][0].transcript.trim();rec.onend=()=>{if(p)process(p)};rec.onerror=()=>showToast('No pude escuchar la consulta');rec.start();};
+
 $('#menuBtn').onclick = () => $('#menuDialog').showModal();
 document.querySelectorAll('[data-menu-view]').forEach((button) => { button.onclick = () => { $('#menuDialog').close(); goView(button.dataset.menuView); }; });
 document.querySelectorAll('[data-menu-coming]').forEach((button) => { button.onclick = () => showToast(`${button.dataset.menuComing}: lo terminamos en la siguiente revisión`); });
@@ -346,4 +506,4 @@ const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
-const todayISO = new Date().toISOString().slice(0, 10); $('#historyDate').value = todayISO; $('#historyMonth').value = todayISO.slice(0, 7); $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; save(); render(); ensureUsdRate(false).then(()=>renderUsd());
+const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#consultFrom').value=todayISO.slice(0,8)+'01'; $('#consultTo').value=todayISO; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); ensureUsdRate(false).then(()=>renderUsd());
