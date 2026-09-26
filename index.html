@@ -68,9 +68,15 @@
 <section class="settings-section"><h3>Avisos de vencimiento</h3><p class="muted">Elegí cuándo querés ver avisos dentro de la app.</p><div id="reminderSettings" class="check-grid"></div></section>
 <section class="settings-section"><div class="settings-title-row"><div><h3>Gastos recurrentes</h3><p class="muted">Se preparan cada mes y siempre te piden confirmación antes de registrarse.</p></div><button id="addRecurring" type="button">＋ Agregar</button></div><div id="recurringList" class="settings-list"></div></section>
 <section class="settings-section"><div class="settings-title-row"><div><h3>Papelera</h3><p class="muted">Los gastos eliminados permanecen 30 días y después se borran definitivamente.</p></div></div><div id="trashList" class="settings-list"></div></section>
-<div class="setting"><div><strong>Protección biométrica</strong><small>Face ID / biometría cuando el dispositivo y HTTPS lo permitan.</small></div><button id="biometricBtn">Configurar</button></div>
+<div class="setting"><div><strong>Protección de acceso</strong><small id="securityStatus">Face ID + PIN de 4 dígitos</small></div><div class="security-actions"><button id="biometricBtn">Configurar</button><button id="disableSecurityBtn" class="hidden">Desactivar</button></div></div>
 <p class="privacy">La app funciona sin Internet y conserva los datos locales. La sincronización entre dispositivos se configura aparte.</p></dialog>
 
+<dialog id="securitySetupDialog"><form id="securitySetupForm"><div class="dialog-head"><div><small>SEGURIDAD</small><h2>Face ID + PIN</h2></div><button type="button" class="close">×</button></div>
+<p class="muted">El PIN queda solo en este dispositivo y sirve como respaldo si Face ID no está disponible.</p>
+<label>PIN de 4 dígitos<input id="securityPin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" required placeholder="••••"></label>
+<label>Repetir PIN<input id="securityPin2" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" required placeholder="••••"></label>
+<button class="primary">Guardar y activar</button></form></dialog>
+<dialog id="lockDialog" class="lock-dialog"><div class="lock-panel"><div class="lock-mark">◉</div><h2>Mis Gastos</h2><p>Desbloqueá con Face ID o tu PIN.</p><button id="unlockBiometric" class="primary" type="button">Usar Face ID</button><div class="pin-unlock"><input id="unlockPin" type="password" inputmode="numeric" maxlength="4" placeholder="PIN"><button id="unlockPinBtn" type="button">Entrar</button></div><small id="lockMessage"></small></div></dialog>
 <dialog id="menuDialog" class="menu-dialog"><div class="menu-grabber"></div><div class="dialog-head"><div><h2>Menú principal</h2><small>Todas las funciones de Mis Gastos</small></div><button class="close">×</button></div><div class="menu-list">
 <button class="owner-only" data-menu-view="resale"><span class="menu-icon">🎟️</span><span class="menu-copy"><strong>Reventa de entradas</strong><small>Tu negocio de entradas</small></span><b>›</b></button>
 <button data-menu-view="usd"><span class="menu-icon">💵</span><span class="menu-copy"><strong>Gastos en dólares</strong><small>Detalle, cotización y equivalencia</small></span><b>›</b></button>
