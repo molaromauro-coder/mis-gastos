@@ -1,7 +1,8 @@
 import { parseExpenses } from './parser.js';
+import { normalizeSplit, ticketMetrics, partyMetrics, portfolioMetrics, withPortfolioPercent } from './resale.js';
 const STORAGE_KEY = 'mis-gastos-v1';
-const defaults = { expenses: [], cards: [], categories: [], settings: { reminderDays: [5, 3, 2, 1, 0] }, schemaVersion: 2 };
-function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], settings: { ...defaults.settings, ...(old.settings || {}) }, schemaVersion: 2 }; } catch { return structuredClone(defaults); } }
+const defaults = { expenses: [], cards: [], categories: [], settings: { reminderDays: [5, 3, 2, 1, 0] }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 3 };
+function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], settings: { ...defaults.settings, ...(old.settings || {}) }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 3 }; } catch { return structuredClone(defaults); } }
 const state = loadState();
 let selectedDate = new Date(), reportRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1;
 const $ = (s) => document.querySelector(s);
@@ -18,7 +19,7 @@ function totalsHTML(items) { const [ars, usd] = totals(items); return `${money(a
 function purchaseRows(date) { const day = state.expenses.filter((e) => sameDay(e.purchaseDate || e.date, date)); return day.filter((e) => !e.parentId || e.installment === 1); }
 function purchaseAmount(e) { return e.parentId ? e.amount * e.installments : e.amount; }
 function expenseHTML(e, showDate = false) { const detail = [e.category, e.method, e.card, e.installments > 1 ? `${e.installment || 1}/${e.installments}` : null].filter(Boolean).join(' · '); const when = new Date(e.purchaseDate || e.date); return `<article class="expense"><div class="expense-icon">${e.method === 'Efectivo' ? '◆' : '▰'}</div><div class="expense-info"><strong>${escape(e.concept || 'Sin detalle')}</strong><span class="meta">${escape(detail)}${showDate ? ` · ${when.toLocaleDateString('es-AR')} ${when.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}` : ` · ${when.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`}</span></div><div class="amount">${money(showDate ? e.amount : purchaseAmount(e), e.currency)}<small>${e.currency}</small></div></article>`; }
-function render() { $('#todayLabel').textContent = selectedDate.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderPaymentReminders(); renderCards(); renderReport(); renderHistory(); fillCardSelect(); fillCategories(); detectUnusual(rows); }
+function render() { $('#todayLabel').textContent = selectedDate.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderPaymentReminders(); renderCards(); renderReport(); renderHistory(); renderResale(); fillCardSelect(); fillCategories(); detectUnusual(rows); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function fillCategories() { $('#category').innerHTML = '<option value="">Sin categoría</option>' + state.categories.map((c) => `<option>${escape(c)}</option>`).join(''); $('#categoryList').innerHTML = state.categories.length ? state.categories.map((c, i) => `<button class="chip" data-category-index="${i}">${escape(c)} <span>×</span></button>`).join('') : '<p class="muted">Creá categorías como quieras; no hay una lista cerrada.</p>'; document.querySelectorAll('[data-category-index]').forEach((b) => { b.onclick = () => { state.categories.splice(Number(b.dataset.categoryIndex), 1); save(); fillCategories(); }; }); }
 function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
@@ -38,8 +39,91 @@ function openExpense(data = {}) { $('#expenseForm').reset(); $('#amount').value 
 function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
 function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value), count = Number($('#installments').value || 1), amount = Number($('#amount').value || 0); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDate(card); $('#installmentPreview').innerHTML = `<strong>${count} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${card.dueDay} de cada mes.</span>`; }
 function showPending() { if (!pending.length) { if ($('#confirmDialog').open) $('#confirmDialog').close(); return; } $('#pendingList').innerHTML = pending.map((e, i) => `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape([e.category, e.method, e.card, e.installments > 1 ? `${e.installments} cuotas` : ''].filter(Boolean).join(' · '))}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div><div class="actions"><button class="edit">Corregir</button><button class="confirm" ${!e.amount || (e.method === 'Crédito' && !e.card) ? 'disabled' : ''}>✓ Confirmar</button></div>${e.method === 'Crédito' && !e.card ? '<p class="muted">Corregí el gasto y elegí una tarjeta de crédito configurada.</p>' : ''}</article>`).join(''); if (!$('#confirmDialog').open) $('#confirmDialog').showModal(); document.querySelectorAll('.pending').forEach((card) => { const index = Number(card.dataset.index); card.querySelector('.confirm').onclick = () => confirmPending(index, card); card.querySelector('.edit').onclick = () => { const item = pending.splice(index, 1)[0]; $('#confirmDialog').close(); openExpense(item); }; let startY = 0; card.ontouchstart = (ev) => { startY = ev.touches[0].clientY; }; card.ontouchend = (ev) => { if (startY - ev.changedTouches[0].clientY < 65) return; card.classList.add('removing'); setTimeout(() => { discarded = { item: pending.splice(index, 1)[0], index }; feedback(false); showPending(); showToast('Gasto descartado', true); }, 180); }; }); }
+
+const uid = () => crypto.randomUUID?.() || ('id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+const pct = (n) => `${Number(n || 0).toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`;
+function resaleSplit() { return normalizeSplit(state.resale.ownerPercent, state.resale.sellerPercent); }
+function renderResale() {
+  if (!$('#resaleList')) return;
+  const split = resaleSplit();
+  state.resale.ownerPercent = split.ownerPercent;
+  state.resale.sellerPercent = split.sellerPercent;
+  const total = withPortfolioPercent(portfolioMetrics(state.resale.parties, split));
+  $('#resaleInvestment').textContent = money(total.investment, 'ARS');
+  $('#resaleSales').textContent = money(total.sales, 'ARS');
+  $('#resaleNet').textContent = money(total.netGain, 'ARS');
+  $('#resaleOwner').textContent = money(total.totalForOwner, 'ARS');
+  $('#resaleSplitLabel').textContent = `${split.ownerPercent}% Mauro · ${split.sellerPercent}% vendedor`;
+  $('#resaleStock').textContent = `${total.available} disponibles · ${total.sold} vendidas · ${total.personal} uso personal`;
+  if (!state.resale.parties.length) {
+    $('#resaleList').innerHTML = '<div class="empty">Todavía no cargaste ninguna fiesta. Tocá “＋ Compra” para empezar.</div>';
+    return;
+  }
+  $('#resaleList').innerHTML = state.resale.parties.map((party) => {
+    const m = partyMetrics(party, split);
+    const tickets = party.tickets.map((ticket) => {
+      const tm = ticketMetrics(ticket, split);
+      const sold = ticket.status === 'Vendida';
+      return `<div class="resale-ticket" data-ticket-id="${escape(ticket.id)}" data-party-id="${escape(party.id)}">
+        <div class="resale-ticket-head"><div><strong>${escape(ticket.type)} · #${ticket.number}</strong><small>Costo ${money(ticket.cost, 'ARS')}</small></div><select class="resale-status">
+          ${['Disponible','Vendida','Uso personal'].map((s) => `<option ${ticket.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+        </select></div>
+        <div class="resale-ticket-sale"><label>Precio de venta<input class="resale-price" type="number" min="0" step="0.01" value="${Number(ticket.salePrice || 0)}"></label>
+        <div class="resale-ticket-result"><span>Recuperado <strong>${money(tm.recovered, 'ARS')}</strong></span><span>Ganancia <strong>${money(tm.netGain, 'ARS')}</strong></span><span>% <strong>${sold ? pct(tm.gainPercent) : '—'}</strong></span><span>Mauro <strong>${money(tm.ownerGain, 'ARS')}</strong></span><span>Vendedor <strong>${money(tm.sellerGain, 'ARS')}</strong></span></div></div>
+      </div>`;
+    }).join('');
+    return `<details class="resale-party" data-party-id="${escape(party.id)}" open><summary><div><strong>${escape(party.name)}</strong><small>${party.date ? new Date(party.date + 'T12:00:00').toLocaleDateString('es-AR') : ''} · ${m.totalTickets} entradas</small></div><span>${money(m.netGain, 'ARS')}</span></summary>
+      <div class="resale-metrics"><div><small>Inversión</small><strong>${money(m.investment,'ARS')}</strong></div><div><small>Ventas</small><strong>${money(m.sales,'ARS')}</strong></div><div><small>Recuperado</small><strong>${money(m.recovered,'ARS')}</strong></div><div><small>Ganancia neta</small><strong>${money(m.netGain,'ARS')}</strong></div><div><small>% general</small><strong>${pct(m.gainPercent)}</strong></div><div><small>Total Mauro</small><strong>${money(m.totalForOwner,'ARS')}</strong></div></div>
+      <div class="resale-tickets">${tickets}</div><button class="delete-party" type="button">Eliminar fiesta</button></details>`;
+  }).join('');
+  document.querySelectorAll('.resale-ticket').forEach((row) => {
+    const party = state.resale.parties.find((p) => p.id === row.dataset.partyId);
+    const ticket = party?.tickets.find((t) => t.id === row.dataset.ticketId);
+    if (!ticket) return;
+    row.querySelector('.resale-status').onchange = (e) => { ticket.status = e.target.value; save(); renderResale(); };
+    row.querySelector('.resale-price').onchange = (e) => { ticket.salePrice = Number(e.target.value || 0); save(); renderResale(); };
+  });
+  document.querySelectorAll('.resale-party').forEach((card) => {
+    card.querySelector('.delete-party').onclick = () => {
+      const party = state.resale.parties.find((p) => p.id === card.dataset.partyId);
+      if (!party || !confirm(`¿Eliminar ${party.name} y todas sus entradas?`)) return;
+      state.resale.parties = state.resale.parties.filter((p) => p.id !== party.id);
+      save(); renderResale();
+    };
+  });
+}
+function addResaleBatch({ name, date, type, qty, cost }) {
+  let party = state.resale.parties.find((p) => p.name.toLowerCase() === name.toLowerCase());
+  if (!party) {
+    party = { id: uid(), name, date, tickets: [] };
+    state.resale.parties.push(party);
+  } else if (date) party.date = date;
+  const sameType = party.tickets.filter((t) => t.type.toLowerCase() === type.toLowerCase()).length;
+  for (let i = 1; i <= qty; i++) party.tickets.push({ id: uid(), type, number: sameType + i, cost, salePrice: 0, status: 'Disponible' });
+}
+function exportResaleCsv() {
+  const split = resaleSplit();
+  const rows = [['Fiesta','Fecha','Tipo','N°','Costo compra','Precio venta','Estado','Costo recuperado','Ganancia neta','% ganancia','Ganancia Mauro','Ganancia vendedor']];
+  state.resale.parties.forEach((party) => party.tickets.forEach((ticket) => {
+    const m = ticketMetrics(ticket, split);
+    rows.push([party.name,party.date || '',ticket.type,ticket.number,ticket.cost,ticket.salePrice || 0,ticket.status,m.recovered,m.netGain,m.gainPercent,m.ownerGain,m.sellerGain]);
+  }));
+  const csv = rows.map((r) => r.map((v) => `"${String(v ?? '').replaceAll('"','""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = 'reventa-entradas.csv'; a.click(); URL.revokeObjectURL(url);
+}
+function goView(view) {
+  document.querySelectorAll('.view, nav button').forEach((e) => e.classList.remove('active'));
+  const target = document.getElementById(view);
+  if (target) target.classList.add('active');
+  const nav = document.querySelector(`nav button[data-view="${view}"]`);
+  nav?.classList.add('active');
+  render();
+}
+
 function confirmPending(index, card) { card.classList.add('confirmed'); const item = pending.splice(index, 1)[0]; item.purchaseDate ||= item.date; state.expenses.push(...installmentExpenses(item)); save(); feedback(true); showToast('✓ Gasto confirmado'); setTimeout(() => { showPending(); render(); }, 180); }
-document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => { document.querySelectorAll('.view, nav button').forEach((e) => e.classList.remove('active')); $(`#${button.dataset.view}`).classList.add('active'); button.classList.add('active'); render(); }; });
+document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
 $('#manualBtn').onclick = () => openExpense(); $('#prevDay').onclick = () => { selectedDate.setDate(selectedDate.getDate() - 1); render(); }; $('#nextDay').onclick = () => { selectedDate.setDate(selectedDate.getDate() + 1); render(); };
 $('#nextStep').onclick = () => { if (manualStep === 1 && !$('#amount').value) return $('#amount').reportValidity(); setManualStep(manualStep + 1); }; $('#prevStep').onclick = () => setManualStep(manualStep - 1);
@@ -54,5 +138,35 @@ function renderReminderSettings() { const labels = { 5: '5 días antes', 3: '3 d
 $('#settingsBtn').onclick = () => { renderReminderSettings(); fillCategories(); $('#settingsDialog').showModal(); }; $('#biometricBtn').onclick = () => showToast(window.PublicKeyCredential && window.isSecureContext ? 'WebAuthn disponible; no bloqueamos tu acceso' : 'Face ID web requiere HTTPS y soporte del dispositivo');
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 $('#micBtn').onclick = () => { if (!SpeechRecognition) { const phrase = prompt('El navegador no ofrece reconocimiento de voz. Escribí los gastos:'); if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories); showPending(); } return; } const recognition = new SpeechRecognition(); recognition.lang = 'es-AR'; recognition.interimResults = false; recognition.continuous = false; recognition.maxAlternatives = 1; let phrase = ''; recognition.onstart = () => { $('#micBtn').classList.add('listening'); $('#voiceTitle').textContent = 'Escuchando…'; $('#voiceHint').textContent = 'Se detiene al terminar la frase'; }; recognition.onresult = (event) => { phrase = event.results[event.resultIndex][0].transcript.trim(); }; recognition.onerror = () => showToast('No pude escuchar. Revisá el permiso del micrófono'); recognition.onend = () => { $('#micBtn').classList.remove('listening'); $('#voiceTitle').textContent = 'Tocá para hablar'; $('#voiceHint').textContent = 'Podés decir varios gastos en una frase'; if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories); showPending(); } }; recognition.start(); };
+
+$('#menuBtn').onclick = () => $('#menuDialog').showModal();
+document.querySelectorAll('[data-menu-view]').forEach((button) => { button.onclick = () => { $('#menuDialog').close(); goView(button.dataset.menuView); }; });
+document.querySelectorAll('[data-menu-coming]').forEach((button) => { button.onclick = () => showToast(`${button.dataset.menuComing}: lo terminamos en la siguiente revisión`); });
+$('#addResaleParty').onclick = () => $('#resalePartyDialog').showModal();
+$('#resalePartyForm').onsubmit = (event) => {
+  event.preventDefault();
+  addResaleBatch({
+    name: $('#resalePartyName').value.trim(),
+    date: $('#resalePartyDate').value,
+    type: $('#resaleTicketType').value.trim(),
+    qty: Number($('#resaleQty').value || 1),
+    cost: Number($('#resaleCost').value || 0)
+  });
+  save(); event.target.reset(); $('#resaleQty').value = 1; $('#resalePartyDialog').close(); renderResale(); showToast('Compra agregada');
+};
+$('#editResaleSplit').onclick = () => {
+  const split = resaleSplit(); $('#ownerPercent').value = split.ownerPercent; $('#sellerPercent').value = split.sellerPercent; $('#resaleSplitDialog').showModal();
+};
+$('#ownerPercent').oninput = () => { const v = Math.max(0, Math.min(100, Number($('#ownerPercent').value || 0))); $('#sellerPercent').value = 100 - v; };
+$('#sellerPercent').oninput = () => { const v = Math.max(0, Math.min(100, Number($('#sellerPercent').value || 0))); $('#ownerPercent').value = 100 - v; };
+$('#resaleSplitForm').onsubmit = (event) => {
+  event.preventDefault(); const split = normalizeSplit($('#ownerPercent').value, $('#sellerPercent').value);
+  state.resale.ownerPercent = split.ownerPercent; state.resale.sellerPercent = split.sellerPercent;
+  save(); $('#resaleSplitDialog').close(); renderResale(); showToast('Reparto actualizado en toda Reventa');
+};
+$('#exportResale').onclick = exportResaleCsv;
+const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
+if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
+
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
 const todayISO = new Date().toISOString().slice(0, 10); $('#historyDate').value = todayISO; $('#historyMonth').value = todayISO.slice(0, 7); $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; save(); render();
