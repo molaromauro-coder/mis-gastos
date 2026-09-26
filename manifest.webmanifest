@@ -1,5 +1,17 @@
 {
-  "name": "Mis Gastos", "short_name": "Mis Gastos", "start_url": "./", "display": "standalone",
-  "background_color": "#f5f3ee", "theme_color": "#163f37", "lang": "es-AR",
-  "icons": [{"src":"icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+  "name": "Mis Gastos",
+  "short_name": "Mis Gastos",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#eef7ff",
+  "theme_color": "#eaf4ff",
+  "lang": "es-AR",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }
