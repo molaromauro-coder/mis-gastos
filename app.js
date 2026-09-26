@@ -1,10 +1,11 @@
 import { parseExpenses } from './parser.js';
 import { normalizeSplit, ticketMetrics, partyMetrics, portfolioMetrics, withPortfolioPercent } from './resale.js';
+import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses } from './reporting.js';
 const STORAGE_KEY = 'mis-gastos-v1';
-const defaults = { expenses: [], cards: [], categories: [], settings: { reminderDays: [3, 2, 1] }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 3 };
+const defaults = { expenses: [], cards: [], categories: [], settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {} }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 3 };
 function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], settings: { ...defaults.settings, ...(old.settings || {}) }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 3 }; } catch { return structuredClone(defaults); } }
 const state = loadState();
-let selectedDate = new Date(), reportRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null;
+let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null;
 const $ = (s) => document.querySelector(s);
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -19,7 +20,7 @@ function totalsHTML(items) { const [ars, usd] = totals(items); return `${money(a
 function purchaseRows(date) { const day = state.expenses.filter((e) => sameDay(e.purchaseDate || e.date, date)); return day.filter((e) => !e.parentId || e.installment === 1); }
 function purchaseAmount(e) { return e.parentId ? e.amount * e.installments : e.amount; }
 function expenseHTML(e, showDate = false) { const detail = [e.category, e.method, e.card, e.installments > 1 ? `${e.installment || 1}/${e.installments}` : null].filter(Boolean).join(' · '); const when = new Date(e.purchaseDate || e.date); return `<article class="expense"><div class="expense-icon">${e.method === 'Efectivo' ? '◆' : '▰'}</div><div class="expense-info"><strong>${escape(e.concept || 'Sin detalle')}</strong><span class="meta">${escape(detail)}${showDate ? ` · ${when.toLocaleDateString('es-AR')} ${when.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}` : ` · ${when.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`}</span></div><div class="amount">${money(showDate ? e.amount : purchaseAmount(e), e.currency)}<small>${e.currency}</small></div></article>`; }
-function render() { $('#todayLabel').textContent = selectedDate.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderPaymentReminders(); renderCards(); renderReport(); renderHistory(); renderResale(); fillCardSelect(); fillCategories(); detectUnusual(rows); }
+function render() { $('#todayLabel').textContent = selectedDate.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); fillCardSelect(); fillCategories(); detectUnusual(rows); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function fillCategories() { $('#category').innerHTML = '<option value="">Sin categoría</option>' + state.categories.map((c) => `<option>${escape(c)}</option>`).join(''); $('#categoryList').innerHTML = state.categories.length ? state.categories.map((c, i) => `<button class="chip" data-category-index="${i}">${escape(c)} <span>×</span></button>`).join('') : '<p class="muted">Creá categorías como quieras; no hay una lista cerrada.</p>'; document.querySelectorAll('[data-category-index]').forEach((b) => { b.onclick = () => { state.categories.splice(Number(b.dataset.categoryIndex), 1); save(); fillCategories(); }; }); }
 function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
@@ -81,7 +82,101 @@ function renderCards() {
 function renderPaymentReminders() { const today = new Date(); today.setHours(12, 0, 0, 0); const allowed = state.settings.reminderDays; const reminders = state.cards.filter((c) => c.type === 'Crédito').map((card) => ({ card, due: nextDue(card, today) })).map((x) => ({ ...x, days: Math.round((x.due - today) / 86400000) })).filter((x) => allowed.includes(x.days)); $('#paymentReminders').innerHTML = reminders.map(({ card, due, days }) => `<article class="payment-alert"><span>▰</span><div><strong>${days ? `Vence en ${days} día${days > 1 ? 's' : ''}` : 'Vence hoy'} · ${escape(card.name)}</strong><small>Disponible necesario: ${totalsHTML(monthlyCardTotal(card, due))}</small></div></article>`).join(''); }
 function years() { const now = new Date().getFullYear(); return Array.from(new Set([now, ...state.expenses.map((e) => effectiveDate(e).getFullYear())])).sort((a, b) => b - a); }
 function chartHTML(items, currency) { const months = Array.from({ length: 12 }, (_, m) => items.filter((e) => effectiveDate(e).getMonth() === m && e.currency === currency).reduce((s, e) => s + e.amount, 0)); const max = Math.max(...months, 1); return months.map((v, i) => `<div class="bar ${currency === 'USD' ? 'usd' : ''}" style="height:${v / max * 100}%" title="${money(v, currency)}"><span>${'EFMAMJJASOND'[i]}</span></div>`).join(''); }
-function renderReport() { const year = Number($('#reportYear').value || new Date().getFullYear()); $('#reportYear').innerHTML = years().map((y) => `<option ${y === year ? 'selected' : ''}>${y}</option>`).join(''); let from, to; if (reportRange === 'month') { const now = new Date(); from = new Date(year, now.getMonth(), 1); to = new Date(year, now.getMonth() + 1, 0, 23, 59); $('#reportTitle').textContent = from.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }); } else if (reportRange === 'year') { from = new Date(year, 0, 1); to = new Date(year, 11, 31, 23, 59); $('#reportTitle').textContent = `Año ${year}`; } else { from = new Date($('#fromDate').value || '2000-01-01'); to = new Date($('#toDate').value || '2100-01-01'); to.setHours(23, 59); $('#reportTitle').textContent = 'Rango personalizado'; } const items = state.expenses.filter((e) => effectiveDate(e) >= from && effectiveDate(e) <= to); const [ars, usd] = totals(items); $('#reportArs').textContent = money(ars, 'ARS'); $('#reportUsd').textContent = money(usd, 'USD'); $('#arsChart').innerHTML = chartHTML(items, 'ARS'); $('#usdChart').innerHTML = chartHTML(items, 'USD'); }
+
+function reportLabel(range, from, to) {
+  if (range === 'today') return from.toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'long' });
+  if (range === 'week') return `${from.toLocaleDateString('es-AR')} al ${to.toLocaleDateString('es-AR')}`;
+  if (range === 'month') return from.toLocaleDateString('es-AR', { month:'long', year:'numeric' });
+  return `${from.toLocaleDateString('es-AR')} al ${to.toLocaleDateString('es-AR')}`;
+}
+function renderReportRows(target, rows, kind) {
+  target.innerHTML = rows.length ? rows.map((r) => `<button class="report-row" data-report-kind="${kind}" data-report-key="${escape(r.key)}"><span><strong>${escape(r.key)}</strong><small>${r.count} movimiento${r.count === 1 ? '' : 's'}${r.usd ? ` · ${money(r.usd,'USD')}` : ''}</small></span><strong>${money(r.arsEquivalent,'ARS')}</strong></button>`).join('') : '<div class="empty">Sin movimientos.</div>';
+}
+function renderReport() {
+  if (!$('#reportCategories')) return;
+  const [from,to] = boundsForRange(reportRange,new Date(),$('#fromDate').value,$('#toDate').value);
+  const [prevFrom,prevTo] = previousBounds(from,to);
+  const items = state.expenses.filter((e) => effectiveDate(e) >= from && effectiveDate(e) <= to);
+  const prevItems = state.expenses.filter((e) => effectiveDate(e) >= prevFrom && effectiveDate(e) <= prevTo);
+  const [ars,usd] = totals(items);
+  const combined = items.reduce((s,e) => s + expenseArsEquivalent(e),0);
+  const prevCombined = prevItems.reduce((s,e) => s + expenseArsEquivalent(e),0);
+  $('#reportTitle').textContent = reportLabel(reportRange,from,to);
+  $('#reportArs').textContent = money(ars,'ARS');
+  $('#reportUsd').textContent = money(usd,'USD');
+  $('#reportCombinedArs').textContent = money(combined,'ARS');
+  const diff = prevCombined ? ((combined-prevCombined)/prevCombined)*100 : null;
+  $('#reportComparison').textContent = diff == null ? 'Sin período previo' : `${diff >= 0 ? '+' : ''}${diff.toLocaleString('es-AR',{maximumFractionDigits:1})}%`;
+  renderReportRows($('#reportCategories'),groupExpenses(items,e=>e.category || 'Sin categoría'),'category');
+  renderReportRows($('#reportMethods'),groupExpenses(items,e=>e.method || 'Sin definir'),'method');
+  const top = items.slice().sort((a,b)=>expenseArsEquivalent(b)-expenseArsEquivalent(a)).slice(0,8);
+  $('#reportTop').innerHTML = top.length ? top.map((e) => `<button class="report-row report-expense"><span><strong>${escape(e.concept || 'Sin detalle')}</strong><small>${new Date(e.purchaseDate || e.date).toLocaleDateString('es-AR')} · ${escape(e.category || 'Sin categoría')} · ${escape(e.method || '')}</small></span><strong>${money(e.amount,e.currency)}</strong></button>`).join('') : '<div class="empty">Sin movimientos.</div>';
+  $('#reportDrilldown').classList.add('hidden');
+  document.querySelectorAll('[data-report-kind]').forEach((b) => b.onclick = () => {
+    const kind=b.dataset.reportKind, key=b.dataset.reportKey;
+    const filtered=items.filter((e)=> (kind==='category' ? (e.category || 'Sin categoría') : (e.method || 'Sin definir')) === key);
+    $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">Cerrar</button></div>${filtered.map((e)=>expenseHTML(e,true)).join('')}`;
+    $('#reportDrilldown').classList.remove('hidden');
+    $('#closeReportDetail').onclick=()=>$('#reportDrilldown').classList.add('hidden');
+  });
+}
+
+const USD_RATE_ENDPOINTS = {
+  oficial: 'https://dolarapi.com/v1/dolares/oficial',
+  tarjeta: 'https://dolarapi.com/v1/dolares/tarjeta',
+  bolsa: 'https://dolarapi.com/v1/dolares/bolsa',
+  blue: 'https://dolarapi.com/v1/dolares/blue'
+};
+async function ensureUsdRate(force=false) {
+  const type=state.settings.usdRateType || 'oficial';
+  const cached=state.settings.usdRateCache?.[type];
+  const fresh=cached && (Date.now()-new Date(cached.fetchedAt).getTime() < 30*60*1000);
+  if (!force && fresh) return cached;
+  try {
+    const response=await fetch(USD_RATE_ENDPOINTS[type],{cache:'no-store'});
+    if (!response.ok) throw new Error('rate');
+    const data=await response.json();
+    const rate=Number(data.venta || data.compra || 0);
+    if (!rate) throw new Error('rate');
+    const item={rate,name:data.nombre || type,source:'DolarApi',updatedAt:data.fechaActualizacion || new Date().toISOString(),fetchedAt:new Date().toISOString(),type};
+    state.settings.usdRateCache ||= {};
+    state.settings.usdRateCache[type]=item; save();
+    return item;
+  } catch {
+    return cached || null;
+  }
+}
+async function stampUsdExpense(expense) {
+  if (expense.currency !== 'USD') return expense;
+  const rate=await ensureUsdRate(false);
+  if (!rate) return expense;
+  return {...expense,fxRate:rate.rate,fxRateName:rate.name,fxRateSource:rate.source,fxRateUpdatedAt:rate.updatedAt,fxCapturedAt:new Date().toISOString(),fxType:rate.type};
+}
+function usdBounds() {
+  return boundsForRange(usdRange,new Date(),$('#usdFromDate')?.value,$('#usdToDate')?.value);
+}
+function renderUsd() {
+  if (!$('#usdExpenseList')) return;
+  const type=state.settings.usdRateType || 'oficial';
+  $('#usdRateType').value=type;
+  const rate=state.settings.usdRateCache?.[type];
+  $('#usdRateValue').textContent=rate ? money(rate.rate,'ARS') + ' / USD' : '—';
+  $('#usdRateMeta').textContent=rate ? `${rate.name} · ${rate.source} · ${new Date(rate.updatedAt).toLocaleString('es-AR')}` : 'Todavía no se obtuvo la cotización';
+  const [from,to]=usdBounds();
+  const items=state.expenses.filter((e)=>e.currency==='USD' && effectiveDate(e)>=from && effectiveDate(e)<=to).sort((a,b)=>effectiveDate(b)-effectiveDate(a));
+  const totalUsd=items.reduce((s,e)=>s+Number(e.amount||0),0);
+  const totalArs=items.reduce((s,e)=>s+expenseArsEquivalent(e),0);
+  const missing=items.filter((e)=>!Number(e.fxRate)).length;
+  $('#usdSectionTotal').textContent=money(totalUsd,'USD');
+  $('#usdSectionArs').textContent=money(totalArs,'ARS');
+  $('#usdMissingRates').classList.toggle('hidden',missing===0);
+  $('#usdMissingRates').textContent=missing ? `${missing} gasto${missing===1?'':'s'} anterior${missing===1?'':'es'} no tiene${missing===1?'':'n'} cotización histórica guardada y no se recalcula${missing===1?'':'n'} con una cotización nueva.` : '';
+  $('#usdExpenseList').innerHTML=items.length ? items.map((e)=>{
+    const when=new Date(e.purchaseDate || e.date);
+    const eq=expenseArsEquivalent(e);
+    return `<article class="usd-expense"><div><strong>${escape(e.concept || 'Sin detalle')}</strong><span>${when.toLocaleDateString('es-AR')} · ${escape(e.category || 'Sin categoría')}</span><small>${e.fxRate ? `Cotización ${money(e.fxRate,'ARS')} · ${escape(e.fxRateName || e.fxType || '')} · ${e.fxRateUpdatedAt ? new Date(e.fxRateUpdatedAt).toLocaleString('es-AR') : ''}` : 'Sin cotización histórica'}</small></div><div><strong>${money(e.amount,'USD')}</strong><span>${e.fxRate ? money(eq,'ARS') : '—'}</span></div></article>`;
+  }).join('') : '<div class="empty">No hay gastos en dólares en este período.</div>';
+}
 function historyBounds() { const now = new Date(); if (historyRange === 'today') return [new Date(now.getFullYear(), now.getMonth(), now.getDate()), new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59)]; if (historyRange === 'day') { const d = new Date($('#historyDate').value || now); return [new Date(d.getFullYear(), d.getMonth(), d.getDate()), new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59)]; } if (historyRange === 'month') { const [y, m] = ($('#historyMonth').value || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`).split('-').map(Number); return [new Date(y, m - 1, 1), new Date(y, m, 0, 23, 59)]; } if (historyRange === 'year') { const y = Number($('#historyYear').value || now.getFullYear()); return [new Date(y, 0, 1), new Date(y, 11, 31, 23, 59)]; } const from = new Date($('#historyFrom').value || '2000-01-01'), to = new Date($('#historyTo').value || '2100-01-01'); to.setHours(23, 59); return [from, to]; }
 function renderHistory() { $('#historyYear').innerHTML = years().map((y) => `<option>${y}</option>`).join(''); const [from, to] = historyBounds(); const items = state.expenses.filter((e) => effectiveDate(e) >= from && effectiveDate(e) <= to).sort((a, b) => effectiveDate(b) - effectiveDate(a)); const [ars, usd] = totals(items); $('#historyArs').textContent = money(ars, 'ARS'); $('#historyUsd').textContent = money(usd, 'USD'); $('#historyList').innerHTML = items.length ? items.map((e) => expenseHTML(e, true)).join('') : '<div class="empty">No hay movimientos en este período.</div>'; }
 function showToast(message, undo = false) { const toast = $('#toast'); toast.textContent = undo ? `${message} · DESHACER` : message; toast.classList.add('show'); toast.style.pointerEvents = undo ? 'auto' : 'none'; toast.onclick = undo ? () => { if (discarded) pending.splice(discarded.index, 0, discarded.item); discarded = null; showPending(); showToast('Gasto recuperado'); } : null; clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove('show'), 3500); }
@@ -172,15 +267,24 @@ function goView(view) {
   const nav = document.querySelector(`nav button[data-view="${view}"]`);
   nav?.classList.add('active');
   render();
+  if (view === 'usd') ensureUsdRate(false).then(() => renderUsd());
 }
 
-function confirmPending(index, card) { card.classList.add('confirmed'); const item = pending.splice(index, 1)[0]; item.purchaseDate ||= item.date; state.expenses.push(...installmentExpenses(item)); save(); feedback(true); showToast('✓ Gasto confirmado'); setTimeout(() => { showPending(); render(); }, 180); }
+async function confirmPending(index, card) { card.classList.add('confirmed'); let item = pending.splice(index, 1)[0]; item.purchaseDate ||= item.date; item = await stampUsdExpense(item); state.expenses.push(...installmentExpenses(item)); save(); feedback(true); showToast('✓ Gasto confirmado'); setTimeout(() => { showPending(); render(); }, 180); }
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
 $('#manualBtn').onclick = () => openExpense(); $('#prevDay').onclick = () => { selectedDate.setDate(selectedDate.getDate() - 1); render(); }; $('#nextDay').onclick = () => { selectedDate.setDate(selectedDate.getDate() + 1); render(); };
 $('#nextStep').onclick = () => { if (manualStep === 1 && !$('#amount').value) return $('#amount').reportValidity(); setManualStep(manualStep + 1); }; $('#prevStep').onclick = () => setManualStep(manualStep - 1);
 $('#method').onchange = updatePaymentFields; $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = updateInstallmentPreview; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
-$('#expenseForm').onsubmit = (event) => { event.preventDefault(); const method = $('#method').value; if (method !== 'Efectivo' && !$('#expenseCard').value) return showToast('Elegí una tarjeta configurada'); const now = new Date().toISOString(); const expense = { id: crypto.randomUUID(), amount: Number($('#amount').value), currency: document.querySelector('[name=currency]:checked').value, concept: $('#concept').value || $('#category').value || 'Sin detalle', category: $('#category').value, method, card: $('#expenseCard').value, installments: method === 'Crédito' ? Number($('#installments').value) : 1, date: now, purchaseDate: now, source: 'manual' }; state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render(); };
+$('#expenseForm').onsubmit = async (event) => {
+  event.preventDefault();
+  const method=$('#method').value;
+  if (method !== 'Efectivo' && !$('#expenseCard').value) return showToast('Elegí una tarjeta configurada');
+  const now=new Date().toISOString();
+  let expense={ id:crypto.randomUUID(), amount:Number($('#amount').value), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#category').value || 'Sin detalle', category:$('#category').value, method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
+  expense=await stampUsdExpense(expense);
+  state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render();
+};
 $('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textContent = 'Nueva tarjeta'; $('#cardForm').reset(); $('#creditCardDates').classList.remove('hidden'); $('#cardDialog').showModal(); }; $('#cardType').onchange = () => $('#creditCardDates').classList.toggle('hidden', $('#cardType').value !== 'Crédito'); $('#cardForm').onsubmit = (event) => {
   event.preventDefault();
   const name = $('#cardName').value.trim();
@@ -198,7 +302,12 @@ $('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textCo
   editingCardId = null;
   save(); event.target.reset(); $('#cardDialog').close(); showToast('Tarjeta guardada'); render();
 };
-document.querySelectorAll('[data-range]').forEach((button) => { button.onclick = () => { reportRange = button.dataset.range; document.querySelectorAll('[data-range]').forEach((b) => b.classList.remove('selected')); button.classList.add('selected'); $('#customRange').classList.toggle('hidden', reportRange !== 'custom'); renderReport(); }; }); $('#fromDate').onchange = renderReport; $('#toDate').onchange = renderReport; $('#reportYear').onchange = renderReport;
+document.querySelectorAll('[data-range]').forEach((button) => { button.onclick=()=>{ reportRange=button.dataset.range; document.querySelectorAll('[data-range]').forEach((b)=>b.classList.remove('selected')); button.classList.add('selected'); $('#customRange').classList.toggle('hidden',reportRange!=='custom'); renderReport(); }; });
+$('#fromDate').onchange=renderReport; $('#toDate').onchange=renderReport;
+document.querySelectorAll('[data-usd-range]').forEach((button)=>{ button.onclick=()=>{ usdRange=button.dataset.usdRange; document.querySelectorAll('[data-usd-range]').forEach((b)=>b.classList.remove('selected')); button.classList.add('selected'); $('#usdCustomRange').classList.toggle('hidden',usdRange!=='custom'); renderUsd(); }; });
+$('#usdFromDate').onchange=renderUsd; $('#usdToDate').onchange=renderUsd;
+$('#usdRateType').onchange=async()=>{ state.settings.usdRateType=$('#usdRateType').value; save(); renderUsd(); await ensureUsdRate(true); renderUsd(); };
+$('#refreshUsdRate').onclick=async()=>{ $('#usdRateMeta').textContent='Actualizando…'; await ensureUsdRate(true); renderUsd(); };
 document.querySelectorAll('[data-history]').forEach((button) => { button.onclick = () => { historyRange = button.dataset.history; document.querySelectorAll('[data-history]').forEach((b) => b.classList.remove('selected')); button.classList.add('selected'); $('#historyDate').classList.toggle('hidden', historyRange !== 'day'); $('#historyMonth').classList.toggle('hidden', historyRange !== 'month'); $('#historyYear').classList.toggle('hidden', historyRange !== 'year'); $('#historyCustom').classList.toggle('hidden', historyRange !== 'custom'); renderHistory(); }; }); ['historyDate', 'historyMonth', 'historyYear', 'historyFrom', 'historyTo'].forEach((id) => { $(`#${id}`).onchange = renderHistory; });
 function addCategory() { const value = $('#newCategory').value.trim(); if (!value || state.categories.some((c) => c.toLowerCase() === value.toLowerCase())) return; state.categories.push(value); $('#newCategory').value = ''; save(); fillCategories(); }
 $('#categoryForm').onsubmit = (event) => { event.preventDefault(); addCategory(); }; $('#quickCategory').onclick = () => { const value = prompt('Nombre de la nueva categoría:')?.trim(); if (!value) return; $('#newCategory').value = value; addCategory(); $('#category').value = value; };
@@ -237,4 +346,4 @@ const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
-const todayISO = new Date().toISOString().slice(0, 10); $('#historyDate').value = todayISO; $('#historyMonth').value = todayISO.slice(0, 7); $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; save(); render();
+const todayISO = new Date().toISOString().slice(0, 10); $('#historyDate').value = todayISO; $('#historyMonth').value = todayISO.slice(0, 7); $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; save(); render(); ensureUsdRate(false).then(()=>renderUsd());
