@@ -351,7 +351,7 @@ async function unlockWithPin(){
   if(!/^\d{4}$/.test(pin)){ $('#lockMessage').textContent='Ingresá los 4 dígitos.'; return false; }
   const hash=await hashPin(pin,state.security.pinSalt);
   if(hash!==state.security.pinHash){ $('#lockMessage').textContent='PIN incorrecto.'; $('#unlockPin').value=''; return false; }
-  $('#lockDialog').close(); $('#unlockPin').value=''; $('#lockMessage').textContent=''; return true;
+  $('#lockDialog').close(); $('#unlockPin').value=''; $('#lockMessage').textContent=''; setTimeout(prepareRecurringDue,100); return true;
 }
 async function showAppLock(){
   if(!state.security.enabled||!$('#lockDialog'))return;
@@ -360,7 +360,7 @@ async function showAppLock(){
   if(state.security.credentialId){
     $('#lockMessage').textContent='Verificando Face ID…';
     const ok=await authenticateBiometric();
-    if(ok){$('#lockDialog').close();$('#lockMessage').textContent='';return;}
+    if(ok){$('#lockDialog').close();$('#lockMessage').textContent='';setTimeout(prepareRecurringDue,100);return;}
     $('#lockMessage').textContent='Usá tu PIN de 4 dígitos.';
   }
 }
@@ -596,7 +596,7 @@ $('#securitySetupForm').onsubmit=async(e)=>{
   showToast(face?'Face ID y PIN activados':'PIN activado; Face ID no disponible en este dispositivo');
 };
 $('#disableSecurityBtn').onclick=()=>{if(!confirm('¿Desactivar la protección de acceso?'))return;state.security={...defaults.security};save();renderSecurityStatus();showToast('Protección desactivada');};
-$('#unlockBiometric').onclick=async()=>{ $('#lockMessage').textContent='Verificando…'; const ok=await authenticateBiometric(); if(ok){$('#lockDialog').close();$('#lockMessage').textContent='';}else $('#lockMessage').textContent='No se pudo validar. Usá tu PIN.'; };
+$('#unlockBiometric').onclick=async()=>{ $('#lockMessage').textContent='Verificando…'; const ok=await authenticateBiometric(); if(ok){$('#lockDialog').close();$('#lockMessage').textContent='';setTimeout(prepareRecurringDue,100);}else $('#lockMessage').textContent='No se pudo validar. Usá tu PIN.'; };
 $('#unlockPinBtn').onclick=unlockWithPin;
 $('#unlockPin').onkeydown=(e)=>{if(e.key==='Enter'){e.preventDefault();unlockWithPin();}};
 $('#lockDialog').addEventListener('cancel',(e)=>e.preventDefault());
@@ -656,4 +656,4 @@ const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
-const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#consultFrom').value=todayISO.slice(0,8)+'01'; $('#consultTo').value=todayISO; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{showAppLock();prepareRecurringDue();},250);
+const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#consultFrom').value=todayISO.slice(0,8)+'01'; $('#consultTo').value=todayISO; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
