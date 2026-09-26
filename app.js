@@ -270,7 +270,7 @@ function goView(view) {
   if (view === 'usd') ensureUsdRate(false).then(() => renderUsd());
 }
 
-async async function confirmPending(index, card) { card.classList.add('confirmed'); let item = pending.splice(index, 1)[0]; item.purchaseDate ||= item.date; item = await stampUsdExpense(item); state.expenses.push(...installmentExpenses(item)); save(); feedback(true); showToast('✓ Gasto confirmado'); setTimeout(() => { showPending(); render(); }, 180); }
+async function confirmPending(index, card) { card.classList.add('confirmed'); let item = pending.splice(index, 1)[0]; item.purchaseDate ||= item.date; item = await stampUsdExpense(item); state.expenses.push(...installmentExpenses(item)); save(); feedback(true); showToast('✓ Gasto confirmado'); setTimeout(() => { showPending(); render(); }, 180); }
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
 $('#manualBtn').onclick = () => openExpense(); $('#prevDay').onclick = () => { selectedDate.setDate(selectedDate.getDate() - 1); render(); }; $('#nextDay').onclick = () => { selectedDate.setDate(selectedDate.getDate() + 1); render(); };
