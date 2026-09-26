@@ -1,6 +1,6 @@
 <!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#163f37"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Mis Gastos"><title>Mis Gastos</title><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/icon.svg"><link rel="icon" href="icons/icon.svg"><link rel="stylesheet" href="styles.css"></head>
-<body><div class="app"><header><div><small>TU BOLSILLO, AL DÍA</small><h1>Mis Gastos</h1></div><div class="header-actions"><button class="icon-btn" id="menuBtn" aria-label="Menú">☰</button><button class="icon-btn" id="settingsBtn" aria-label="Configuración">⚙</button></div></header><main>
-<section id="home" class="view active"><div class="period"><button id="prevDay" aria-label="Día anterior">‹</button><div><span>Resumen del día</span><strong id="todayLabel"></strong></div><button id="nextDay" aria-label="Día siguiente">›</button></div><div class="balances"><article><span>Pesos argentinos</span><strong id="arsTotal">$ 0</strong><small>ARS</small></article><article><span>Dólares</span><strong id="usdTotal">US$ 0</strong><small>USD</small></article></div><div id="paymentReminders" class="payment-reminders"></div><div id="unusual" class="notice hidden">⚠ Este importe parece inusual según tu historial local. Revisalo antes de seguir.</div><div class="section-title"><h2>Movimientos</h2><button id="manualBtn">＋ Agregar manual</button></div><div id="expenseList" class="expense-list"></div><div class="voice-zone"><button id="micBtn" class="mic" aria-label="Registrar gasto por voz"><span></span></button><strong id="voiceTitle">Tocá para hablar</strong><small id="voiceHint">Podés decir varios gastos en una frase</small></div></section>
+<body><div class="app"><header><div><small>TU BOLSILLO, AL DÍA</small><h1>Mis Gastos</h1></div><div class="header-actions"><button class="icon-btn" id="privacyBtn" aria-label="Ocultar importes">👁</button><button class="icon-btn" id="menuBtn" aria-label="Menú">☰</button><button class="icon-btn" id="settingsBtn" aria-label="Configuración">⚙</button></div></header><main>
+<section id="home" class="view active"><div class="period"><button id="prevDay" aria-label="Día anterior">‹</button><div><span>Resumen del día</span><strong id="todayLabel"></strong></div><button id="nextDay" aria-label="Día siguiente">›</button></div><div class="balances"><article><span>Pesos argentinos</span><strong id="arsTotal">$ 0</strong><small>ARS</small></article><article><span>Dólares</span><strong id="usdTotal">US$ 0</strong><small>USD</small></article></div><div id="paymentReminders" class="payment-reminders"></div><div id="budgetAlert" class="notice hidden"></div><div id="unusual" class="notice hidden">⚠ Este importe parece inusual según tu historial local. Revisalo antes de seguir.</div><div class="section-title"><h2>Movimientos</h2><button id="manualBtn">＋ Agregar manual</button></div><div id="expenseList" class="expense-list"></div><div class="voice-zone"><button id="micBtn" class="mic" aria-label="Registrar gasto por voz"><span></span></button><strong id="voiceTitle">Tocá para hablar</strong><small id="voiceHint">Podés decir varios gastos en una frase</small></div></section>
 <section id="history" class="view"><h2>Historial</h2><div class="range-tabs history-tabs"><button data-history="today" class="selected">Hoy</button><button data-history="day">Día</button><button data-history="month">Mes</button><button data-history="year">Año</button><button data-history="custom">Rango</button></div><div id="historyFilters" class="filter-grid"><input type="date" id="historyDate"><input type="month" id="historyMonth" class="hidden"><select id="historyYear" class="hidden"></select><div id="historyCustom" class="hidden form-row"><input type="date" id="historyFrom"><input type="date" id="historyTo"></div></div><div class="balances compact"><article><span>ARS</span><strong id="historyArs">$ 0</strong></article><article><span>USD</span><strong id="historyUsd">US$ 0</strong></article></div><div id="historyList" class="expense-list history-list"></div></section>
 <section id="reports" class="view"><div class="section-title"><div><small>ANÁLISIS DE GASTOS</small><h2>Informes</h2></div></div>
 <div class="range-tabs report-tabs"><button data-range="today">Hoy</button><button data-range="week">Semana</button><button data-range="month" class="selected">Mes</button><button data-range="custom">Rango</button></div>
@@ -19,6 +19,30 @@
 <p id="usdMissingRates" class="muted hidden"></p><div id="usdExpenseList" class="usd-list"></div></section>
 <section id="cards" class="view"><div class="section-title"><div><small>TUS MEDIOS DE PAGO</small><h2>Tarjetas</h2></div><button id="addCard">＋ Agregar</button></div><p class="muted">Solo aparecen las tarjetas que vos configurás.</p><div id="cardList"></div><h2 class="card-history-title">Próximos vencimientos</h2><div id="dueList"></div><h2 class="card-history-title">Historial mensual</h2><div id="cardHistory"></div></section>
 
+<section id="stock" class="view"><div class="section-title"><div><small>CONTROL DE STOCK</small><h2>Stock</h2></div><button id="addStock">＋ Compra</button></div>
+<div class="module-actions"><button id="stockVoiceBtn">🎙 Registrar consumo</button><span id="stockSummary"></span></div><div id="stockList"></div></section>
+
+<section id="recoveries" class="view"><div class="section-title"><div><small>CONTROL DE RECUPEROS</small><h2>Gastos recuperados</h2></div><button id="addRecovery">＋ Recupero</button></div>
+<label class="compact-label">Mes<input type="month" id="recoveryMonth"></label>
+<div class="report-summary-grid"><article><span>Gasto bruto</span><strong id="recoveryGross">$ 0</strong></article><article><span>Recuperado</span><strong id="recoveryTotal">$ 0</strong></article><article><span>Gasto neto</span><strong id="recoveryNet">$ 0</strong></article></div>
+<p class="muted">Los recuperos se registran aparte. No borran el gasto original ni modifican el presupuesto.</p><div id="recoveryList" class="module-list"></div></section>
+
+<section id="savings" class="view"><div class="section-title"><div><small>HISTÓRICO MENSUAL</small><h2>Ahorro</h2></div><select id="savingsYear"></select></div>
+<div class="saving-hero"><span>Ahorro acumulado del año</span><strong id="annualSavings">$ 0</strong><small>Presupuesto menos gastos efectivamente pagados</small></div><div id="savingsList" class="module-list"></div></section>
+
+<section id="budget" class="view"><div class="section-title"><div><small>CONTROL MENSUAL</small><h2>Presupuesto</h2></div></div>
+<div class="budget-form"><label>Mes<input type="month" id="budgetMonth"></label><label>Presupuesto mensual<input type="number" id="budgetAmount" min="0" step="0.01" placeholder="0"></label><label>Motivo / observación<input id="budgetReason" placeholder="Opcional"></label><button id="saveBudget" class="primary" type="button">Guardar presupuesto</button></div>
+<div class="report-summary-grid"><article><span>Presupuesto</span><strong id="budgetCurrent">$ 0</strong></article><article><span>Gastado</span><strong id="budgetSpent">$ 0</strong></article><article><span>Disponible</span><strong id="budgetAvailable">$ 0</strong></article><article><span>Consumo</span><strong id="budgetPercent">0%</strong></article></div>
+<div class="budget-progress"><i id="budgetProgressBar"></i></div><div id="budgetExcess" class="notice hidden"></div>
+<h3 class="report-section-title">Alertas</h3><div id="budgetAlertSettings" class="check-grid"></div>
+<h3 class="report-section-title">Historial de cambios</h3><div id="budgetHistory" class="module-list"></div></section>
+
+<section id="consultations" class="view"><div class="section-title"><div><small>BUSCÁ Y FILTRÁ</small><h2>Consultas</h2></div><button id="consultMic">🎙</button></div>
+<div class="consult-box"><div class="inline-form"><input id="consultQuery" placeholder="Ej. ¿Cuánto gasté en supermercado este mes?"><button id="runConsult" class="primary" type="button">Consultar</button></div>
+<div class="consult-filters"><label>Desde<input type="date" id="consultFrom"></label><label>Hasta<input type="date" id="consultTo"></label><label>Categoría<select id="consultCategory"><option value="">Todas</option></select></label><label>Medio<select id="consultMethod"><option value="">Todos</option><option>Efectivo</option><option>Débito</option><option>Crédito</option></select></label><label>Moneda<select id="consultCurrency"><option value="">Todas</option><option>ARS</option><option>USD</option></select></label><label>Tarjeta<select id="consultCard"><option value="">Todas</option></select></label><label>Mínimo<input type="number" id="consultMin" min="0" step="0.01" placeholder="0"></label></div>
+<label class="voice-switch"><input type="checkbox" id="consultSpeak" checked> Leer respuesta en voz</label></div>
+<div class="report-summary-grid"><article><span>Total ARS</span><strong id="consultArs">$ 0</strong></article><article><span>Total USD</span><strong id="consultUsd">US$ 0</strong></article><article><span>Equivalente ARS</span><strong id="consultEquivalent">$ 0</strong></article></div><div id="consultAnswer" class="consult-answer"></div><div id="consultResults" class="expense-list"></div>
+<h3 class="report-section-title">Comparar meses</h3><div class="compare-box"><input type="month" id="compareMonthA"><input type="month" id="compareMonthB"><button id="compareMonths" type="button">Comparar</button></div><div id="compareResult"></div></section>
 <section id="resale" class="view owner-only"><div class="section-title"><div><small>NEGOCIO PRIVADO</small><h2>Reventa de entradas</h2></div><button id="addResaleParty">＋ Compra</button></div>
 <div class="resale-summary"><article><span>Inversión</span><strong id="resaleInvestment">$ 0</strong></article><article><span>Ventas cobradas</span><strong id="resaleSales">$ 0</strong></article><article><span>Ganancia neta</span><strong id="resaleNet">$ 0</strong></article><article><span>Para Mauro</span><strong id="resaleOwner">$ 0</strong></article></div>
 <div class="resale-split-card"><div><small>REPARTO DE GANANCIA</small><strong id="resaleSplitLabel">70% Mauro · 30% vendedor</strong></div><button id="editResaleSplit">Editar</button></div>
@@ -35,11 +59,11 @@
 <button data-menu-view="usd"><span>💵</span>Gastos en dólares</button>
 <button data-menu-view="cards"><span>💳</span>Tarjetas</button>
 <button data-menu-view="reports"><span>📊</span>Informes</button>
-<button data-menu-coming="Stock"><span>📦</span>Stock</button>
-<button data-menu-coming="Gastos recuperados"><span>↩️</span>Gastos recuperados</button>
-<button data-menu-coming="Ahorro"><span>🐷</span>Ahorro</button>
-<button data-menu-coming="Presupuesto"><span>🧾</span>Presupuesto</button>
-<button data-menu-view="history"><span>🔎</span>Consultas</button>
+<button data-menu-view="stock"><span>📦</span>Stock</button>
+<button data-menu-view="recoveries"><span>↩️</span>Gastos recuperados</button>
+<button data-menu-view="savings"><span>🐷</span>Ahorro</button>
+<button data-menu-view="budget"><span>🧾</span>Presupuesto</button>
+<button data-menu-view="consultations"><span>🔎</span>Consultas</button>
 </div></dialog>
 <dialog id="resalePartyDialog"><form id="resalePartyForm"><div class="dialog-head"><div><small>NUEVA COMPRA</small><h2>Agregar entradas</h2></div><button type="button" class="close">×</button></div>
 <label>Fiesta<input id="resalePartyName" required placeholder="Ej. MAX STYLER"></label>
@@ -51,4 +75,12 @@
 <p class="muted">Al cambiar estos porcentajes se recalculan automáticamente todas las ventas, fiestas y el balance general.</p>
 <div class="form-row"><label>% Mauro<input id="ownerPercent" type="number" min="0" max="100" step="1" required></label><label>% Vendedor<input id="sellerPercent" type="number" min="0" max="100" step="1" required></label></div>
 <button class="primary">Guardar reparto</button></form></dialog>
+<dialog id="stockDialog"><form id="stockForm"><div class="dialog-head"><div><small>NUEVA COMPRA</small><h2>Agregar stock</h2></div><button type="button" class="close">×</button></div>
+<label>Producto<input id="stockProduct" required placeholder="Ej. Café"></label><label>Categoría<input id="stockCategory" placeholder="Ej. Almacén"></label>
+<div class="form-row"><label>Cantidad<input id="stockQty" type="number" min="1" step="1" required></label><label>Meses estimados<input id="stockMonths" type="number" min="1" max="60" value="1" required></label></div>
+<div class="form-row"><label>Importe total<input id="stockAmount" type="number" min="0" step="0.01" required></label><label>Moneda<select id="stockCurrency"><option>ARS</option><option>USD</option></select></label></div>
+<label>Fecha de pago<input id="stockPaidDate" type="date" required></label><button class="primary">Guardar compra</button></form></dialog>
+<dialog id="recoveryDialog"><form id="recoveryForm"><div class="dialog-head"><div><small>NUEVO RECUPERO</small><h2>Registrar dinero recuperado</h2></div><button type="button" class="close">×</button></div>
+<div class="form-row"><label>Importe<input id="recoveryAmount" type="number" min="0.01" step="0.01" required></label><label>Moneda<select id="recoveryCurrency"><option>ARS</option><option>USD</option></select></label></div>
+<label>Concepto / nota<input id="recoveryConcept" placeholder="Ej. Comida con Juan"></label><label>Fecha<input id="recoveryDate" type="date" required></label><button class="primary">Guardar recupero</button></form></dialog>
 <div id="toast" class="toast" role="status"></div><script type="module" src="app.js"></script></body></html>
