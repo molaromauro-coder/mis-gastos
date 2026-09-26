@@ -3,8 +3,8 @@ import { normalizeSplit, ticketMetrics, partyMetrics, portfolioMetrics, withPort
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics } from './finance.js';
 const STORAGE_KEY = 'mis-gastos-v1';
-const defaults = { expenses: [], cards: [], categories: [], stock: [], recoveries: [], budgets: {}, recurring: [], trash: [], settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 4 };
-function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], stock: old.stock || [], recoveries: old.recoveries || [], budgets: old.budgets || {}, recurring: old.recurring || [], trash: old.trash || [], settings: { ...defaults.settings, ...(old.settings || {}), usdRateCache: old.settings?.usdRateCache || {} }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 4 }; } catch { return structuredClone(defaults); } }
+const defaults = { expenses: [], cards: [], categories: [], stock: [], recoveries: [], budgets: {}, recurring: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 4 };
+function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], stock: old.stock || [], recoveries: old.recoveries || [], budgets: old.budgets || {}, recurring: old.recurring || [], trash: old.trash || [], security: { ...defaults.security, ...(old.security || {}) }, settings: { ...defaults.settings, ...(old.settings || {}), usdRateCache: old.settings?.usdRateCache || {} }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 4 }; } catch { return structuredClone(defaults); } }
 const state = loadState();
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
 let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null;
@@ -300,6 +300,70 @@ function prepareRecurringDue(){const now=new Date(),key=monthKey(now),due=[];for
 function exportRowsForConsultation(){return consultationItems().map((e)=>({Fecha:new Date(e.purchaseDate||e.date).toLocaleString('es-AR'),Concepto:e.concept||'',Categoría:e.category||'',Medio:e.method||'',Tarjeta:e.card||'',Moneda:e.currency,Importe:Number(e.amount||0),Cotización:e.fxRate||'',EquivalenteARS:expenseArsEquivalent(e)}));}
 function exportConsultExcel(){const rows=exportRowsForConsultation(),headers=Object.keys(rows[0]||{Fecha:'',Concepto:'',Categoría:'',Medio:'',Tarjeta:'',Moneda:'',Importe:'',Cotización:'',EquivalenteARS:''});const esc=(v)=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const table=`<table><tr>${headers.map((h)=>`<th>${esc(h)}</th>`).join('')}</tr>${rows.map((r)=>`<tr>${headers.map((h)=>`<td>${esc(r[h])}</td>`).join('')}</tr>`).join('')}</table>`;const blob=new Blob(['\ufeff<html><meta charset="utf-8">'+table+'</html>'],{type:'application/vnd.ms-excel;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='mis-gastos.xls';a.click();URL.revokeObjectURL(url);}
 function exportConsultPdf(){const rows=exportRowsForConsultation(),w=window.open('','_blank');if(!w)return showToast('El navegador bloqueó la ventana de exportación');const body=rows.map((r)=>`<tr><td>${escape(r.Fecha)}</td><td>${escape(r.Concepto)}</td><td>${escape(r.Categoría)}</td><td>${escape(r.Medio)}</td><td>${escape(r.Moneda)}</td><td>${escape(r.Importe)}</td><td>${escape(r.EquivalenteARS)}</td></tr>`).join('');w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Mis Gastos</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #ccc;padding:6px;text-align:left}h1{font-size:20px}</style></head><body><h1>Mis Gastos</h1><p>Exportación filtrada</p><table><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Medio</th><th>Moneda</th><th>Importe</th><th>Equiv. ARS</th></tr>${body}</table><script>window.onload=()=>window.print()<\/script></body></html>`);w.document.close();}
+
+function bytesToBase64(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes)));}
+function base64ToBytes(text){return Uint8Array.from(atob(text),c=>c.charCodeAt(0));}
+function randomBytes(n=32){const a=new Uint8Array(n);crypto.getRandomValues(a);return a;}
+async function hashPin(pin,salt){
+  const data=new TextEncoder().encode(String(pin)+String(salt));
+  const digest=await crypto.subtle.digest('SHA-256',data);
+  return bytesToBase64(digest);
+}
+function biometricAvailable(){return !!(window.PublicKeyCredential&&navigator.credentials&&window.isSecureContext);}
+async function registerBiometric(){
+  if(!biometricAvailable()) return false;
+  const userId=randomBytes(16);
+  const credential=await navigator.credentials.create({publicKey:{
+    challenge:randomBytes(32),
+    rp:{name:'Mis Gastos'},
+    user:{id:userId,name:'mis-gastos-local',displayName:'Mis Gastos'},
+    pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+    authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'preferred'},
+    timeout:60000,attestation:'none'
+  }});
+  if(!credential) return false;
+  state.security.credentialId=bytesToBase64(credential.rawId);
+  return true;
+}
+async function authenticateBiometric(){
+  if(!biometricAvailable()||!state.security.credentialId) return false;
+  try{
+    const credential=await navigator.credentials.get({publicKey:{
+      challenge:randomBytes(32),
+      allowCredentials:[{type:'public-key',id:base64ToBytes(state.security.credentialId)}],
+      userVerification:'required',timeout:60000
+    }});
+    return !!credential;
+  }catch{return false;}
+}
+function renderSecurityStatus(){
+  if(!$('#securityStatus'))return;
+  const enabled=!!state.security.enabled;
+  $('#securityStatus').textContent=enabled?(state.security.credentialId?'Face ID activo · PIN de respaldo':'PIN activo · Face ID no configurado'):'Sin protección configurada';
+  $('#disableSecurityBtn').classList.toggle('hidden',!enabled);
+}
+function openSecuritySetup(){
+  $('#securitySetupForm').reset();
+  $('#securitySetupDialog').showModal();
+}
+async function unlockWithPin(){
+  const pin=$('#unlockPin').value.trim();
+  if(!/^\d{4}$/.test(pin)){ $('#lockMessage').textContent='Ingresá los 4 dígitos.'; return false; }
+  const hash=await hashPin(pin,state.security.pinSalt);
+  if(hash!==state.security.pinHash){ $('#lockMessage').textContent='PIN incorrecto.'; $('#unlockPin').value=''; return false; }
+  $('#lockDialog').close(); $('#unlockPin').value=''; $('#lockMessage').textContent=''; setTimeout(prepareRecurringDue,100); return true;
+}
+async function showAppLock(){
+  if(!state.security.enabled||!$('#lockDialog'))return;
+  if(!$('#lockDialog').open) $('#lockDialog').showModal();
+  $('#lockMessage').textContent='';
+  if(state.security.credentialId){
+    $('#lockMessage').textContent='Verificando Face ID…';
+    const ok=await authenticateBiometric();
+    if(ok){$('#lockDialog').close();$('#lockMessage').textContent='';setTimeout(prepareRecurringDue,100);return;}
+    $('#lockMessage').textContent='Usá tu PIN de 4 dígitos.';
+  }
+}
 function currentMonthKey() { return monthKey(new Date()); }
 function budgetFor(key) { return state.budgets[key] || { amount: 0, reason: '', history: [] }; }
 function budgetMetrics(key) { return budgetOutcome(budgetFor(key).amount, state.expenses, state.stock, key); }
@@ -489,7 +553,7 @@ document.querySelectorAll('[data-history]').forEach((button) => { button.onclick
 function addCategory() { const value = $('#newCategory').value.trim(); if (!value || state.categories.some((c) => c.toLowerCase() === value.toLowerCase())) return; state.categories.push(value); $('#newCategory').value = ''; save(); fillCategories(); }
 $('#categoryForm').onsubmit = (event) => { event.preventDefault(); addCategory(); }; $('#quickCategory').onclick = () => { const value = prompt('Nombre de la nueva categoría:')?.trim(); if (!value) return; $('#newCategory').value = value; addCategory(); $('#category').value = value; };
 function renderReminderSettings() { const labels = { 3: '3 días antes', 2: '2 días antes', 1: '1 día antes' }; $('#reminderSettings').innerHTML = [3, 2, 1].map((d) => `<label><input type="checkbox" value="${d}" ${state.settings.reminderDays.includes(d) ? 'checked' : ''}>${labels[d]}</label>`).join(''); $('#reminderSettings').onchange = () => { state.settings.reminderDays = [...$('#reminderSettings').querySelectorAll(':checked')].map((i) => Number(i.value)); save(); renderPaymentReminders(); }; }
-$('#settingsBtn').onclick = () => { renderReminderSettings(); fillCategories(); renderRecurringSettings(); renderTrash(); $('#settingsDialog').showModal(); }; $('#biometricBtn').onclick = () => showToast(window.PublicKeyCredential && window.isSecureContext ? 'WebAuthn disponible; no bloqueamos tu acceso' : 'Face ID web requiere HTTPS y soporte del dispositivo');
+$('#settingsBtn').onclick = () => { renderReminderSettings(); fillCategories(); renderRecurringSettings(); renderTrash(); renderSecurityStatus(); $('#settingsDialog').showModal(); }; $('#biometricBtn').onclick = openSecuritySetup;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let activeRecognition = null;
 function startExpenseVoice() {
@@ -515,6 +579,27 @@ $('#micBtn').onpointercancel=stopExpenseVoice;
 $('#micBtn').oncontextmenu=(e)=>e.preventDefault();
 
 
+
+
+$('#securitySetupForm').onsubmit=async(e)=>{
+  e.preventDefault();
+  const p1=$('#securityPin').value.trim(),p2=$('#securityPin2').value.trim();
+  if(!/^\d{4}$/.test(p1))return showToast('El PIN debe tener 4 dígitos');
+  if(p1!==p2)return showToast('Los PIN no coinciden');
+  const salt=bytesToBase64(randomBytes(16));
+  state.security.pinSalt=salt;
+  state.security.pinHash=await hashPin(p1,salt);
+  state.security.enabled=true;
+  let face=false;
+  try{face=await registerBiometric();}catch{}
+  save();renderSecurityStatus();$('#securitySetupDialog').close();
+  showToast(face?'Face ID y PIN activados':'PIN activado; Face ID no disponible en este dispositivo');
+};
+$('#disableSecurityBtn').onclick=()=>{if(!confirm('¿Desactivar la protección de acceso?'))return;state.security={...defaults.security};save();renderSecurityStatus();showToast('Protección desactivada');};
+$('#unlockBiometric').onclick=async()=>{ $('#lockMessage').textContent='Verificando…'; const ok=await authenticateBiometric(); if(ok){$('#lockDialog').close();$('#lockMessage').textContent='';setTimeout(prepareRecurringDue,100);}else $('#lockMessage').textContent='No se pudo validar. Usá tu PIN.'; };
+$('#unlockPinBtn').onclick=unlockWithPin;
+$('#unlockPin').onkeydown=(e)=>{if(e.key==='Enter'){e.preventDefault();unlockWithPin();}};
+$('#lockDialog').addEventListener('cancel',(e)=>e.preventDefault());
 
 $('#privacyBtn').onclick=()=>{state.settings.hideAmounts=!state.settings.hideAmounts;document.body.classList.toggle('hide-amounts',state.settings.hideAmounts);$('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁';save();};
 $('#addRecurring').onclick=()=>openRecurringDialog();
@@ -571,4 +656,4 @@ const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
-const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#consultFrom').value=todayISO.slice(0,8)+'01'; $('#consultTo').value=todayISO; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(prepareRecurringDue,250);
+const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#consultFrom').value=todayISO.slice(0,8)+'01'; $('#consultTo').value=todayISO; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
