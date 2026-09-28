@@ -1,4 +1,4 @@
-const CACHE = 'mis-gastos-v10';
+const CACHE = 'mis-gastos-v11';
 const FILES = ['./', './index.html', './styles.css', './app.js', './parser.js', './resale.js', './reporting.js', './finance.js', './manifest.webmanifest', './icons/icon.svg'];
 self.addEventListener('install', (event) => { self.skipWaiting(); event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES))); });
 self.addEventListener('activate', (event) => { event.waitUntil(Promise.all([self.clients.claim(), caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))])); });
