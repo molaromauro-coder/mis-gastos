@@ -213,6 +213,17 @@ function renderResale() {
   $('#resaleOwner').textContent = money(total.totalForOwner, 'ARS');
   $('#resaleSplitLabel').textContent = `${split.ownerPercent}% Mauro · ${split.sellerPercent}% vendedor`;
   $('#resaleStock').textContent = `${total.available} disponibles · ${total.sold} vendidas · ${total.personal} uso personal`;
+  if ($('#resaleOwnerHead')) $('#resaleOwnerHead').textContent = `Mauro (${split.ownerPercent}%)`;
+  if ($('#resaleSellerHead')) $('#resaleSellerHead').textContent = `Vendedor (${split.sellerPercent}%)`;
+  if ($('#resaleBalanceBody')) {
+    $('#resaleBalanceBody').innerHTML = state.resale.parties.map((party) => {
+      const m = partyMetrics(party, split);
+      return `<tr><td><strong>${escape(party.name)}</strong></td><td>${money(m.investment,'ARS')}</td><td>${money(m.sales,'ARS')}</td><td>${money(m.recovered,'ARS')}</td><td>${money(m.totalForOwner,'ARS')}</td><td>${money(m.netGain,'ARS')}</td><td>${pct(m.gainPercent)}</td><td>${money(m.ownerGain,'ARS')}</td><td>${money(m.sellerGain,'ARS')}</td></tr>`;
+    }).join('');
+  }
+  if ($('#resaleBalanceTotal')) {
+    $('#resaleBalanceTotal').innerHTML = `<tr><th>TOTAL GENERAL</th><th>${money(total.investment,'ARS')}</th><th>${money(total.sales,'ARS')}</th><th>${money(total.recovered,'ARS')}</th><th>${money(total.totalForOwner,'ARS')}</th><th>${money(total.netGain,'ARS')}</th><th>${pct(total.gainPercent)}</th><th>${money(total.ownerGain,'ARS')}</th><th>${money(total.sellerGain,'ARS')}</th></tr>`;
+  }
   if (!state.resale.parties.length) {
     $('#resaleList').innerHTML = '<div class="empty">Todavía no cargaste ninguna fiesta. Tocá “＋ Compra” para empezar.</div>';
     return;
