@@ -567,28 +567,78 @@ function renderReminderSettings() { const labels = { 3: '3 días antes', 2: '2 d
 $('#settingsBtn').onclick = () => { renderReminderSettings(); fillCategories(); renderRecurringSettings(); renderTrash(); renderSecurityStatus(); $('#settingsDialog').showModal(); }; $('#biometricBtn').onclick = openSecuritySetup;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let activeRecognition = null;
+let voiceTranscript = '';
+let voiceError = '';
+function resetExpenseVoiceUI() {
+  $('#micBtn').classList.remove('listening');
+  $('#voiceTitle').textContent='Mantener presionado';
+  $('#voiceHint').textContent='para hablar';
+}
+function finishExpenseVoice() {
+  const phrase=voiceTranscript.trim();
+  const err=voiceError;
+  voiceTranscript=''; voiceError='';
+  resetExpenseVoiceUI();
+  if (phrase) {
+    pending=parseExpenses(phrase,state.cards,state.categories);
+    if (pending.length) showPending();
+    else showToast('Escuché el audio, pero no pude interpretar el gasto');
+  } else if (!err) {
+    showToast('No llegué a reconocer lo que dijiste. Probá de nuevo');
+  }
+}
 function startExpenseVoice() {
   if (activeRecognition) return;
+  window.getSelection?.()?.removeAllRanges?.();
   if (!SpeechRecognition) {
     const phrase = prompt('El navegador no ofrece reconocimiento de voz. Escribí los gastos:');
     if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories); showPending(); }
     return;
   }
-  const recognition = new SpeechRecognition(); activeRecognition = recognition;
-  recognition.lang='es-AR'; recognition.interimResults=false; recognition.continuous=false; recognition.maxAlternatives=1;
-  let phrase='';
-  recognition.onstart=()=>{ $('#micBtn').classList.add('listening'); $('#voiceTitle').textContent='Escuchando…'; $('#voiceHint').textContent='Soltá cuando termines'; };
-  recognition.onresult=(event)=>{ phrase=event.results[event.resultIndex][0].transcript.trim(); };
-  recognition.onerror=()=>showToast('No pude escuchar. Revisá el permiso del micrófono');
-  recognition.onend=()=>{ activeRecognition=null; $('#micBtn').classList.remove('listening'); $('#voiceTitle').textContent='Mantener presionado'; $('#voiceHint').textContent='para hablar'; if(phrase){ pending=parseExpenses(phrase,state.cards,state.categories); showPending(); } };
-  recognition.start();
+  voiceTranscript=''; voiceError='';
+  const recognition = new SpeechRecognition();
+  activeRecognition = recognition;
+  recognition.lang='es-AR';
+  recognition.interimResults=true;
+  recognition.continuous=true;
+  recognition.maxAlternatives=1;
+  recognition.onstart=()=>{
+    $('#micBtn').classList.add('listening');
+    $('#voiceTitle').textContent='Escuchando…';
+    $('#voiceHint').textContent='Soltá cuando termines';
+  };
+  recognition.onresult=(event)=>{
+    let text='';
+    for(let i=0;i<event.results.length;i++) text += ' ' + (event.results[i][0]?.transcript || '');
+    voiceTranscript=text.trim();
+  };
+  recognition.onerror=(event)=>{
+    voiceError=event.error || 'error';
+    if (!['aborted','no-speech'].includes(voiceError)) showToast('No pude escuchar. Revisá el permiso del micrófono');
+  };
+  recognition.onend=()=>{
+    activeRecognition=null;
+    finishExpenseVoice();
+  };
+  try { recognition.start(); }
+  catch { activeRecognition=null; resetExpenseVoiceUI(); showToast('No pude iniciar el micrófono'); }
 }
-function stopExpenseVoice(){ try{ activeRecognition?.stop(); }catch{} }
-$('#micBtn').onpointerdown=(e)=>{ e.preventDefault(); startExpenseVoice(); };
-$('#micBtn').onpointerup=(e)=>{ e.preventDefault(); stopExpenseVoice(); };
-$('#micBtn').onpointercancel=stopExpenseVoice;
-$('#micBtn').oncontextmenu=(e)=>e.preventDefault();
-
+function stopExpenseVoice() {
+  if (!activeRecognition) return;
+  try { activeRecognition.stop(); } catch {}
+}
+const micBtn=$('#micBtn');
+if ('ontouchstart' in window) {
+  micBtn.addEventListener('touchstart',(e)=>{e.preventDefault();startExpenseVoice();},{passive:false});
+  micBtn.addEventListener('touchend',(e)=>{e.preventDefault();stopExpenseVoice();},{passive:false});
+  micBtn.addEventListener('touchcancel',(e)=>{e.preventDefault();stopExpenseVoice();},{passive:false});
+} else {
+  micBtn.onpointerdown=(e)=>{e.preventDefault();startExpenseVoice();};
+  micBtn.onpointerup=(e)=>{e.preventDefault();stopExpenseVoice();};
+  micBtn.onpointercancel=stopExpenseVoice;
+}
+micBtn.oncontextmenu=(e)=>e.preventDefault();
+micBtn.onselectstart=(e)=>e.preventDefault();
 
 
 
