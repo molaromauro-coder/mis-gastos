@@ -1,3 +1,95 @@
+const RESALE_STORAGE_KEY = 'mis-gastos-v1';
+const RESALE_WORKBOOK_VERSION = 1;
+
+function seedTicketBatch(partyId, type, cost, count, sales = [], status = 'Disponible') {
+  const slug = String(type).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return Array.from({ length: count }, (_, i) => ({
+    id: `${partyId}-${slug}-${i + 1}`,
+    type,
+    number: i + 1,
+    cost,
+    salePrice: Number(sales[i] || 0),
+    status: sales[i] ? 'Vendida' : status
+  }));
+}
+
+export const INITIAL_RESALE_PARTIES = [
+  {
+    id: 'seed-max-styler', name: 'MAX STYLER', date: '2026-09-11',
+    tickets: seedTicketBatch('seed-max-styler', 'GRAL 3', 26450, 4, [70000, 70000, 55000, 55000])
+  },
+  {
+    id: 'seed-hot-since-82', name: 'HOT SINCE 82', date: '2026-09-18',
+    tickets: seedTicketBatch('seed-hot-since-82', 'VIP', 80500, 1, [], 'Uso personal')
+  },
+  {
+    id: 'seed-nacho-scoppa', name: 'NACHO SCOPPA', date: '2026-09-26',
+    tickets: [
+      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 1', 26450, 4, [40000, 45000, 45000, 45000]),
+      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 2', 28750, 4, [42500, 42500, 45000, 45000])
+    ]
+  },
+  {
+    id: 'seed-camelphat', name: 'CAMELPHAT', date: '2026-10-09',
+    tickets: [
+      ...seedTicketBatch('seed-camelphat', 'EARLY', 43700, 4),
+      ...seedTicketBatch('seed-camelphat', 'VIP', 51750, 2)
+    ]
+  },
+  {
+    id: 'seed-massano', name: 'MASSANO', date: '2026-11-27',
+    tickets: [
+      ...seedTicketBatch('seed-massano', 'EARLY', 46000, 8),
+      ...seedTicketBatch('seed-massano', 'VIP', 69000, 1)
+    ]
+  },
+  {
+    id: 'seed-mathame', name: 'MATHAME', date: '2026-11-06',
+    tickets: [
+      ...seedTicketBatch('seed-mathame', 'EARLY', 36800, 10),
+      ...seedTicketBatch('seed-mathame', 'GRAL 1', 46000, 8),
+      ...seedTicketBatch('seed-mathame', 'VIP', 57500, 2)
+    ]
+  },
+  {
+    id: 'seed-kevin-di-serna', name: 'KEVIN DI SERNA', date: '2026-10-24',
+    tickets: seedTicketBatch('seed-kevin-di-serna', 'GRAL 1', 20700, 12)
+  },
+  {
+    id: 'seed-discip', name: 'DISCIP', date: '2026-10-30',
+    tickets: [
+      ...seedTicketBatch('seed-discip', 'GRAL 1', 20700, 6),
+      ...seedTicketBatch('seed-discip', 'GRAL 2', 23000, 2)
+    ]
+  }
+];
+
+function seedInitialResaleData() {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const state = JSON.parse(localStorage.getItem(RESALE_STORAGE_KEY) || '{}');
+    const resale = state.resale || {};
+    if (Number(resale.initialWorkbookVersion || 0) >= RESALE_WORKBOOK_VERSION) return;
+
+    const existing = Array.isArray(resale.parties) ? resale.parties : [];
+    const existingNames = new Set(existing.map((p) => String(p?.name || '').trim().toLowerCase()).filter(Boolean));
+    const missing = INITIAL_RESALE_PARTIES.filter((p) => !existingNames.has(p.name.toLowerCase()));
+
+    state.resale = {
+      ownerPercent: Number.isFinite(Number(resale.ownerPercent)) ? Number(resale.ownerPercent) : 70,
+      sellerPercent: Number.isFinite(Number(resale.sellerPercent)) ? Number(resale.sellerPercent) : 30,
+      ...resale,
+      parties: [...existing, ...missing],
+      initialWorkbookVersion: RESALE_WORKBOOK_VERSION
+    };
+    localStorage.setItem(RESALE_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // La app seguirá funcionando aunque Safari bloquee temporalmente el almacenamiento.
+  }
+}
+
+seedInitialResaleData();
+
 export function normalizeSplit(ownerPercent = 70, sellerPercent = 30) {
   let owner = Number(ownerPercent);
   let seller = Number(sellerPercent);
@@ -36,8 +128,7 @@ export function partyMetrics(party, split) {
   const available = tickets.filter((t) => (t.status || 'Disponible') === 'Disponible').length;
   const sold = tickets.filter((t) => t.status === 'Vendida').length;
   const personal = tickets.filter((t) => t.status === 'Uso personal').length;
-  // Balance general: rendimiento del total invertido contra ventas cobradas.
-  const gainPercent = investment ? ((sales - investment) / investment) * 100 : 0;
+  const gainPercent = sales > 0 && investment ? ((sales - investment) / investment) * 100 : 0;
   return {
     investment, sales, recovered, netGain, ownerGain, sellerGain,
     totalForOwner: recovered + ownerGain,
