@@ -9,7 +9,7 @@ const partyMetrics = resaleApi?.partyMetrics;
 const portfolioMetrics = resaleApi?.portfolioMetrics;
 const withPortfolioPercent = resaleApi?.withPortfolioPercent;
 if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
-const STORAGE_KEY = 'mis-gastos-v1';
+const STORAGE_KEY = sharedMode ? 'mis-gastos-shared-v1' : 'mis-gastos-v1';
 const defaults = { expenses: [], cards: [], categories: [], stock: [], recoveries: [], budgets: {}, recurring: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 4 };
 function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], stock: old.stock || [], recoveries: old.recoveries || [], budgets: old.budgets || {}, recurring: old.recurring || [], trash: old.trash || [], security: { ...defaults.security, ...(old.security || {}) }, settings: { ...defaults.settings, ...(old.settings || {}), usdRateCache: old.settings?.usdRateCache || {} }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 4 }; } catch { return structuredClone(defaults); } }
 const state = loadState();
@@ -41,7 +41,7 @@ function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay
 function fillCategories() { $('#category').innerHTML = '<option value="">Sin categoría</option>' + state.categories.map((c) => `<option>${escape(c)}</option>`).join(''); $('#categoryList').innerHTML = state.categories.length ? state.categories.map((c, i) => `<button class="chip" data-category-index="${i}">${escape(c)} <span>×</span></button>`).join('') : '<p class="muted">Creá categorías como quieras; no hay una lista cerrada.</p>'; document.querySelectorAll('[data-category-index]').forEach((b) => { b.onclick = () => { state.categories.splice(Number(b.dataset.categoryIndex), 1); save(); fillCategories(); }; }); }
 function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
 function monthlyCardTotal(card, date) { return state.expenses.filter((e) => e.card === card.name && effectiveDate(e).getFullYear() === date.getFullYear() && effectiveDate(e).getMonth() === date.getMonth()); }
-function nextDue(card, now = new Date()) { let due = dateWithCardDay(now.getFullYear(), now.getMonth(), card.dueDay); if (due < now) due = dateWithCardDay(now.getFullYear(), now.getMonth() + 1, card.dueDay); return due; }
+function nextDue(card, now = new Date()) { const base=dateWithCardDay(now.getFullYear(),now.getMonth(),now.getDate()); let due = dateWithCardDay(base.getFullYear(), base.getMonth(), card.dueDay); if (due < base) due = dateWithCardDay(base.getFullYear(), base.getMonth() + 1, card.dueDay); return due; }
 function renderCards() {
   const now = new Date();
   $('#cardList').innerHTML = state.cards.length ? state.cards.map((card, i) => {
