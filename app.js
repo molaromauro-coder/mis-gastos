@@ -95,7 +95,7 @@ function renderHomeRecent(){
   }
   $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>(window.innerHeight<760?3:4));
 }
-function render() { renderHomeClock(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); }
+function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function subcategoriesFor(category){
   const values=state.subcategories?.[category];
@@ -114,19 +114,20 @@ function fillStockCategoryOptions(selected=''){
   if(current&&state.categories.includes(current))select.value=current;
 }
 function reclassifyUncategorizedExpenses(){
-  const pairs=[];
+  const pairs=[]; let changed=false;
   Object.entries(state.subcategories||{}).forEach(([category,subs])=>(subs||[]).forEach((sub)=>pairs.push({category,sub})));
   for(const e of state.expenses){
     if(e.category)continue;
     const text=String(e.concept||'').toLowerCase();
     const pair=pairs.find(({sub})=>text.includes(String(sub).toLowerCase()));
-    if(pair){e.category=pair.category;e.subcategory=pair.sub;continue;}
+    if(pair){e.category=pair.category;e.subcategory=pair.sub;changed=true;continue;}
     const category=state.categories.find((c)=>text.includes(String(c).toLowerCase()));
-    if(category)e.category=category;
+    if(category){e.category=category;changed=true;}
   }
+  return changed;
 }
 function syncCategoryConsumers(){
-  reclassifyUncategorizedExpenses();
+  if(reclassifyUncategorizedExpenses())save();
   fillSubcategories();
   fillRecurringCategoryOptions();
   fillStockCategoryOptions();
