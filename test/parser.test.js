@@ -217,15 +217,31 @@ test('barre 100 importes de 8 cifras con puntos de miles',()=>{
 });
 
 
-test('infere el tipo por una tarjeta configurada univoca y limpia el concepto',()=>{
-  const cards=[{name:'Mercado Pago',type:'Débito'},{name:'Banco Macro',type:'Crédito'}];
+test('Banco Macro sin decir credito se interpreta como debito y usa Cuenta Banco Macro',()=>{
+  const cards=[
+    {name:'Cuenta Banco Macro',type:'Débito'},
+    {name:'Banco Macro',type:'Crédito'}
+  ];
   const e=parseExpense('Gasté 10 lucas de vianda, pagué con Banco Macro',cards);
+  assert.equal(e.amount,10000);
+  assert.equal(e.method,'Débito');
+  assert.equal(e.card,'Cuenta Banco Macro');
+  assert.equal(e.installments,1);
+  assert.equal(e.installmentsSpecified,false);
+  assert.match(e.concept,/vianda/i);
+  assert.doesNotMatch(e.concept,/macro/i);
+});
+
+test('Banco Macro solo se interpreta como credito cuando se dice credito',()=>{
+  const cards=[
+    {name:'Cuenta Banco Macro',type:'Débito'},
+    {name:'Banco Macro',type:'Crédito'}
+  ];
+  const e=parseExpense('Gasté 10 lucas de vianda, pagué con crédito Banco Macro',cards);
   assert.equal(e.amount,10000);
   assert.equal(e.method,'Crédito');
   assert.equal(e.card,'Banco Macro');
   assert.equal(e.installmentsSpecified,false);
-  assert.match(e.concept,/vianda/i);
-  assert.doesNotMatch(e.concept,/macro/i);
 });
 
 test('la ultima correccion verbal reemplaza importe y medio de pago',()=>{
