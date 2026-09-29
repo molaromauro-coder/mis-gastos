@@ -160,3 +160,28 @@ test('parseTemporal admite la hora en palabras',()=>{
   assert.equal(when.getHours(),14);
   assert.equal(temporal.timeSpecified,true);
 });
+
+
+test('luca y lucas equivalen a miles de pesos',()=>{
+  assert.equal(parseAmount('10 lucas'),10000);
+  assert.equal(parseAmount('17,5 lucas'),17500);
+  assert.equal(parseAmount('50 lucas'),50000);
+  assert.equal(parseAmount('diez lucas'),10000);
+  assert.equal(parseAmount('diez mil lucas'),10000000);
+});
+
+test('Mercado Pago sin aclarar medio se toma como debito sin preguntar',()=>{
+  const cards=[{name:'Mercado Pago',type:'Débito'}];
+  const e=parseExpense('Gasté 50.000 pesos en supermercado, pagué con Mercado Pago',cards);
+  assert.equal(e.method,'Débito');
+  assert.equal(e.card,'Mercado Pago');
+  assert.equal(e.amount,50000);
+});
+
+test('Mercado Pago con credito explicito conserva credito y exige cuotas si no se dijeron',()=>{
+  const cards=[{name:'Mercado Pago',type:'Débito'},{name:'Mercado Pago',type:'Crédito'}];
+  const e=parseExpense('Gasté 50.000 pesos en supermercado con crédito Mercado Pago',cards);
+  assert.equal(e.method,'Crédito');
+  assert.equal(e.card,'Mercado Pago');
+  assert.equal(e.installmentsSpecified,false);
+});

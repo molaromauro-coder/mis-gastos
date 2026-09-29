@@ -68,6 +68,13 @@ function cleanNumericText(text){
 
 export function parseAmount(text) {
   const clean=cleanNumericText(text);
+  let lucas=clean.match(/\b(\d+(?:\.\d{1,2})?)\s*(millones?|millon|mil)?\s*lucas?\b/i);
+  if(lucas) return Number(lucas[1])*multiplier(lucas[2])*1000;
+  const lucasPos=clean.search(/\blucas?\b/i);
+  if(lucasPos>=0){
+    const value=lastWordNumber(clean.slice(0,lucasPos));
+    if(value!=null) return value*1000;
+  }
   let match=clean.match(/(?:usd|u\$s|\$)\s*(\d+(?:\.\d{1,2})?)\s*(millones?|millon|mil)?/i);
   if(match) return Number(match[1])*multiplier(match[2]);
 
@@ -215,7 +222,7 @@ export function parseTemporal(text,referenceDate=new Date()){
 function cleanConcept(raw){
   return raw
     .replace(/\b(?:hoy|ayer|anteayer|hace|anterior|pasado|otro|domingo|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|horas?|hs|ma[nñ]ana|tarde|noche|mediod[ií]a)\b/gi,' ')
-    .replace(/\b(?:pagu[eé]|gast[eé]|compr[eé]|sali[oó]|cost[oó]|en|con|del?|la|el|a|las?|tarjeta|banco|efectivo|d[eé]bito|cr[eé]dito|pesos?|d[oó]lares?|usd|u\$s|cuotas?|mill[oó]n(?:es)?)\b/gi,' ')
+    .replace(/\b(?:pagu[eé]|gast[eé]|compr[eé]|sali[oó]|cost[oó]|en|con|del?|la|el|a|las?|tarjeta|banco|efectivo|d[eé]bito|cr[eé]dito|pesos?|lucas?|d[oó]lares?|usd|u\$s|cuotas?|mill[oó]n(?:es)?)\b/gi,' ')
     .replace(/[\d$.,:]+/g,' ');
 }
 
@@ -226,7 +233,8 @@ export function parseExpense(text,cards=[],categories=[],options={}){
   const amount=parseAmount(lower);
   const currency=/(?:usd|u\$s|dolar)/.test(lower)?'USD':'ARS';
   const installmentInfo=parseInstallments(lower);
-  const method=/credito|cuotas?/.test(lower)?'Crédito':/debito/.test(lower)?'Débito':/efectivo/.test(lower)?'Efectivo':'Sin definir';
+  let method=/credito|cuotas?/.test(lower)?'Crédito':/debito/.test(lower)?'Débito':/efectivo/.test(lower)?'Efectivo':'Sin definir';
+  if(method==='Sin definir'&&/\bmercado\s+pago\b/.test(lower)) method='Débito';
   const card=cards.find((item)=>item?.name&&(!item.type||item.type===method)&&lower.includes(normalized(item.name)))?.name||'';
   const category=categoryFor(raw,categories);
   const temporal=parseTemporal(raw,referenceDate);
