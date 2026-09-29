@@ -92,3 +92,6 @@ nav{display:none!important}.menu-dialog{background:#f5f9fc;border-radius:28px 28
 .pending-payment-actions button,.pending-payment-question>button{min-height:42px;border:1px solid #c7dbe8;border-radius:11px;background:#fff;color:#24485d;font-weight:800}
 .pending-payment-actions .voice-pay{grid-column:1/-1;background:#dceef8}
 .pending-card-select{width:100%;min-height:44px;border:1px solid #c7dbe8;border-radius:11px;background:#fff;padding:0 10px;color:#203c56}
+
+/* voice-cancel-v2 */
+dialog{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.voice-trash{display:flex;align-items:center;justify-content:center;gap:8px;min-height:38px;margin:0 auto 6px;opacity:0;transform:translateY(12px) scale(.9);transition:.18s;pointer-events:none;font-weight:800}.voice-trash span{font-size:24px}.voice-trash small{margin:0!important}.voice-zone.recording .voice-trash{opacity:.72;transform:translateY(0) scale(1)}.voice-zone.cancel-ready .voice-trash,.voice-trash.armed{opacity:1;transform:translateY(-2px) scale(1.08)}.voice-zone.cancel-ready .mic{background:#ef8178}.voice-pay.listening{opacity:.75;font-weight:800}

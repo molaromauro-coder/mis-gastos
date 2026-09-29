@@ -1,6 +1,6 @@
-import { parseExpenses } from './parser.js';
+import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses } from './reporting.js';
-import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard } from './finance.js';
+import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard, installmentDueDates } from './finance.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 const resaleApi = sharedMode ? null : await import('./resale.js');
 const normalizeSplit = resaleApi?.normalizeSplit;
@@ -15,17 +15,21 @@ function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE
 const state = loadState();
 function demoCardId(){return crypto.randomUUID?.() || ('demo-' + Date.now() + '-' + Math.random().toString(16).slice(2));}
 function seedDemoCardsOnce(){
-  if(sharedMode || state.settings?.demoCardsSeeded) return;
+  if(sharedMode || Number(state.settings?.demoCardsSeedVersion||0)>=2) return;
   if(!Array.isArray(state.cards)) state.cards=[];
-  if(state.cards.length===0){
-    state.cards.push(
-      {id:demoCardId(),name:'Banco Macro',type:'Débito',closingDay:0,dueDay:0,demo:true},
-      {id:demoCardId(),name:'Mercado Pago',type:'Débito',closingDay:0,dueDay:0,demo:true},
-      {id:demoCardId(),name:'Banco Francés',type:'Crédito',closingDay:25,dueDay:10,demo:true},
-      {id:demoCardId(),name:'Banco Macro',type:'Crédito',closingDay:25,dueDay:10,demo:true}
-    );
-  }
-  state.settings={...state.settings,demoCardsSeeded:true};
+  state.cards=state.cards.filter((card)=>!card.demo);
+  const demos=[
+    {name:'Mercado Pago',type:'Débito',closingDay:0,dueDay:0},
+    {name:'Brubank',type:'Débito',closingDay:0,dueDay:0},
+    {name:'Banco Francés',type:'Crédito',closingDay:20,dueDay:10},
+    {name:'Banco Macro',type:'Crédito',closingDay:25,dueDay:12}
+  ];
+  const existing=new Set(state.cards.map((card)=>`${String(card.name||'').toLowerCase()}|${card.type||''}`));
+  demos.forEach((demo)=>{
+    const key=`${demo.name.toLowerCase()}|${demo.type}`;
+    if(!existing.has(key)) state.cards.push({id:demoCardId(),...demo,demo:true});
+  });
+  state.settings={...state.settings,demoCardsSeeded:true,demoCardsSeedVersion:2};
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
 }
 seedDemoCardsOnce();
@@ -42,7 +46,7 @@ function renderHomeClock() {
   if($('#homeDate')) $('#homeDate').textContent=now.toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'long'});
   if($('#homeTime')) $('#homeTime').textContent=now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
 }
-function installmentExpenses(expense) { if (expense.method !== 'Crédito') return [expense]; const card = state.cards.find((c) => c.name === expense.card && c.type === 'Crédito'); if (!card) return [expense]; const first = firstDueDateForCard(card, new Date(expense.purchaseDate || expense.date)); const count = Math.max(1, Number(expense.installments || 1)); if (count === 1) return [{ ...expense, dueDate: first.toISOString(), installment: 1, installments: 1 }]; return Array.from({ length: count }, (_, i) => ({ ...expense, id: crypto.randomUUID(), parentId: expense.id, dueDate: dateWithCardDay(first.getFullYear(), first.getMonth() + i, card.dueDay).toISOString(), amount: expense.amount / count, installment: i + 1, installments: count })); }
+function installmentExpenses(expense) { if (expense.method !== 'Crédito') return [expense]; const card = state.cards.find((c) => c.name === expense.card && c.type === 'Crédito'); if (!card) return [expense]; const count = Math.max(1, Number(expense.installments || 1)); const dueDates=installmentDueDates(card,new Date(expense.purchaseDate || expense.date),count); if (count === 1) return [{ ...expense, dueDate: dueDates[0].toISOString(), installment: 1, installments: 1 }]; return dueDates.map((dueDate, i) => ({ ...expense, id: crypto.randomUUID(), parentId: expense.id, dueDate: dueDate.toISOString(), amount: expense.amount / count, installment: i + 1, installments: count })); }
 function totals(items) { return ['ARS', 'USD'].map((currency) => items.filter((e) => e.currency === currency).reduce((sum, e) => sum + Number(e.amount), 0)); }
 function totalsHTML(items) { const [ars, usd] = totals(items); return `${money(ars, 'ARS')}${usd ? ` · ${money(usd, 'USD')}` : ''}`; }
 function purchaseRows(date) { const day = state.expenses.filter((e) => sameDay(e.purchaseDate || e.date, date)); return day.filter((e) => !e.parentId || e.installment === 1); }
@@ -259,7 +263,7 @@ function pendingPaymentPrompt(e,i){
     return `<div class="pending-payment-question"><strong>¿Con qué ${e.method.toLowerCase()} pagaste?</strong>${cards.length?`<select class="pending-card-select" data-index="${i}"><option value="">Elegí tarjeta o cuenta</option>${cards.map((c)=>`<option value="${escape(c.name)}">${escape(c.name)}</option>`).join('')}</select>`:'<small class="muted">Primero agregá una tarjeta o cuenta de este tipo.</small>'}<button type="button" class="voice-pay" data-pending-pay-voice="${i}">🎙 Responder por voz</button></div>`;
   }
   if(needsInstallments){
-    return `<div class="pending-payment-question"><strong>¿En cuántas cuotas?</strong><select class="pending-installments-select" data-index="${i}"><option value="">Elegí la cantidad</option>${Array.from({length:36},(_,n)=>n+1).map((n)=>`<option value="${n}">${n} cuota${n===1?'':'s'}</option>`).join('')}</select></div>`;
+    return `<div class="pending-payment-question"><strong>¿En cuántas cuotas?</strong><select class="pending-installments-select" data-index="${i}"><option value="">Elegí la cantidad</option>${Array.from({length:36},(_,n)=>n+1).map((n)=>`<option value="${n}">${n} cuota${n===1?'':'s'}</option>`).join('')}</select><button type="button" class="voice-pay" data-pending-pay-voice="${i}">🎙 Responder por voz</button></div>`;
   }
   return '';
 }
@@ -275,8 +279,13 @@ function applyPendingPaymentVoice(index,phrase){
   if(method==='Efectivo'){item.card='';item.installments=1;item.installmentsSpecified=true;showPending();return;}
   if(method==='Débito'){item.installments=1;item.installmentsSpecified=true;}
   if(method==='Crédito'){
-    const installmentDigits=spoken.match(/\b(\d+)\s*cuotas?\b/);
-    if(installmentDigits){item.installments=Math.max(1,Number(installmentDigits[1]));item.installmentsSpecified=true;}
+    const installmentDigits=spoken.match(/\b(\d{1,2})(?:\s*cuotas?)?\b/);
+    let installmentCount=installmentDigits?Number(installmentDigits[1]):null;
+    if(!installmentCount){
+      const parsed=Number(parseAmount(spoken));
+      if(Number.isInteger(parsed)&&parsed>=1&&parsed<=36) installmentCount=parsed;
+    }
+    if(installmentCount&&installmentCount<=36){item.installments=installmentCount;item.installmentsSpecified=true;}
     else if(item.installmentsSpecified!==true)item.installmentsSpecified=false;
   }
   const cards=state.cards.filter((c)=>c.type===method);
@@ -285,16 +294,21 @@ function applyPendingPaymentVoice(index,phrase){
   showPending();
   if(!item.card) showToast(cards.length?'Decí o elegí qué tarjeta o cuenta usaste':'Primero agregá una tarjeta o cuenta de este tipo');
 }
+let pendingVoiceRecognition=null;
 function startPendingPaymentVoice(index){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   const process=(phrase)=>applyPendingPaymentVoice(index,phrase);
-  if(!SR){const phrase=prompt('Decí o escribí: efectivo, débito o crédito. Si usaste tarjeta, agregá su nombre.');if(phrase)process(phrase);return;}
-  const rec=new SR();rec.lang='es-AR';rec.interimResults=false;rec.continuous=false;rec.maxAlternatives=1;
+  const button=document.querySelector(`[data-pending-pay-voice="${index}"]`);
+  const restore=()=>{if(button){button.disabled=false;button.classList.remove('listening');button.textContent='🎙 Responder por voz';}};
+  if(pendingVoiceRecognition){showToast('Ya estoy escuchando');return;}
+  if(!SR){const phrase=prompt('Decí o escribí el medio, la tarjeta o la cantidad de cuotas.');if(phrase)process(phrase);return;}
+  const rec=new SR();pendingVoiceRecognition=rec;rec.lang='es-AR';rec.interimResults=false;rec.continuous=false;rec.maxAlternatives=1;
   let phrase='';
+  rec.onstart=()=>{if(button){button.disabled=true;button.classList.add('listening');button.textContent='🎙 Escuchando…';}showToast('🎙 Escuchando…');};
   rec.onresult=(event)=>{phrase=event.results[event.resultIndex][0].transcript.trim();};
-  rec.onerror=()=>showToast('No pude escuchar el medio de pago');
-  rec.onend=()=>{if(phrase)process(phrase);};
-  try{rec.start();}catch{showToast('No pude iniciar el micrófono');}
+  rec.onerror=(event)=>{if(event.error!=='aborted')showToast(event.error==='not-allowed'?'Activá el permiso del micrófono':'No pude escuchar la respuesta');};
+  rec.onend=()=>{pendingVoiceRecognition=null;restore();if(phrase)process(phrase);};
+  try{rec.start();}catch{pendingVoiceRecognition=null;restore();showToast('No pude iniciar el micrófono');}
 }
 function showPending() {
   if (!pending.length) { if ($('#confirmDialog').open) $('#confirmDialog').close(); return; }
@@ -738,12 +752,18 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 let activeRecognition = null;
 let voiceTranscript = '';
 let voiceError = '';
+let voiceCancelled = false;
+let voiceGestureStartY = null;
+let voiceCancelArmed = false;
 function resetExpenseVoiceUI() {
   $('#micBtn').classList.remove('listening');
+  $('#voiceZone')?.classList.remove('recording','cancel-ready');
+  $('#voiceTrash')?.classList.remove('armed');
   $('#voiceTitle').textContent='Mantener presionado';
   $('#voiceHint').textContent='para hablar';
 }
 function finishExpenseVoice() {
+  if(voiceCancelled){voiceTranscript='';voiceError='';voiceCancelled=false;voiceGestureStartY=null;voiceCancelArmed=false;resetExpenseVoiceUI();return;}
   const phrase=voiceTranscript.trim();
   const err=voiceError;
   voiceTranscript=''; voiceError='';
@@ -764,7 +784,7 @@ function startExpenseVoice() {
     if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories); showPending(); }
     return;
   }
-  voiceTranscript=''; voiceError='';
+  voiceTranscript=''; voiceError=''; voiceCancelled=false; voiceCancelArmed=false; voiceGestureStartY=null;
   const recognition = new SpeechRecognition();
   activeRecognition = recognition;
   recognition.lang='es-AR';
@@ -773,6 +793,7 @@ function startExpenseVoice() {
   recognition.maxAlternatives=1;
   recognition.onstart=()=>{
     $('#micBtn').classList.add('listening');
+    $('#voiceZone')?.classList.add('recording');
     $('#voiceTitle').textContent='Escuchando…';
     $('#voiceHint').textContent='Soltá cuando termines';
   };
@@ -797,14 +818,32 @@ function stopExpenseVoice() {
   try { activeRecognition.stop(); } catch {}
 }
 const micBtn=$('#micBtn');
+const voiceTrash=$('#voiceTrash');
+function updateVoiceCancelGesture(clientY){
+  if(voiceGestureStartY==null)return;
+  const armed=(voiceGestureStartY-clientY)>=70;
+  if(armed===voiceCancelArmed)return;
+  voiceCancelArmed=armed;
+  $('#voiceZone')?.classList.toggle('cancel-ready',armed);
+  voiceTrash?.classList.toggle('armed',armed);
+  $('#voiceHint').textContent=armed?'Soltá para cancelar':'Deslizá hacia el tacho para cancelar';
+}
+function cancelExpenseVoice(){
+  if(!activeRecognition)return;
+  voiceCancelled=true;voiceCancelArmed=false;voiceGestureStartY=null;
+  feedback(false);showToast('Grabación descartada');
+  try{activeRecognition.abort();}catch{resetExpenseVoiceUI();activeRecognition=null;voiceCancelled=false;}
+}
 if ('ontouchstart' in window) {
-  micBtn.addEventListener('touchstart',(e)=>{e.preventDefault();startExpenseVoice();},{passive:false});
-  micBtn.addEventListener('touchend',(e)=>{e.preventDefault();stopExpenseVoice();},{passive:false});
-  micBtn.addEventListener('touchcancel',(e)=>{e.preventDefault();stopExpenseVoice();},{passive:false});
+  micBtn.addEventListener('touchstart',(e)=>{e.preventDefault();voiceGestureStartY=e.touches[0]?.clientY??null;startExpenseVoice();},{passive:false});
+  micBtn.addEventListener('touchmove',(e)=>{e.preventDefault();if(e.touches[0])updateVoiceCancelGesture(e.touches[0].clientY);},{passive:false});
+  micBtn.addEventListener('touchend',(e)=>{e.preventDefault();const cancel=voiceCancelArmed;voiceGestureStartY=null;if(cancel)cancelExpenseVoice();else stopExpenseVoice();},{passive:false});
+  micBtn.addEventListener('touchcancel',(e)=>{e.preventDefault();cancelExpenseVoice();},{passive:false});
 } else {
-  micBtn.onpointerdown=(e)=>{e.preventDefault();startExpenseVoice();};
-  micBtn.onpointerup=(e)=>{e.preventDefault();stopExpenseVoice();};
-  micBtn.onpointercancel=stopExpenseVoice;
+  micBtn.onpointerdown=(e)=>{e.preventDefault();voiceGestureStartY=e.clientY;micBtn.setPointerCapture?.(e.pointerId);startExpenseVoice();};
+  micBtn.onpointermove=(e)=>{if(activeRecognition)updateVoiceCancelGesture(e.clientY);};
+  micBtn.onpointerup=(e)=>{e.preventDefault();const cancel=voiceCancelArmed;voiceGestureStartY=null;if(cancel)cancelExpenseVoice();else stopExpenseVoice();};
+  micBtn.onpointercancel=cancelExpenseVoice;
 }
 micBtn.oncontextmenu=(e)=>e.preventDefault();
 micBtn.onselectstart=(e)=>e.preventDefault();

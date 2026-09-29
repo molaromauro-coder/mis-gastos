@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { monthKey, budgetOutcome, stockMetrics, recoveryMonthMetrics, firstDueDateForCard } from '../finance.js';
+import { monthKey, budgetOutcome, stockMetrics, recoveryMonthMetrics, firstDueDateForCard, installmentDueDates } from '../finance.js';
 
 test('presupuesto mensual usa cuotas por vencimiento',()=>{
   const expenses=[{currency:'ARS',amount:100,dueDate:'2026-10-10T12:00:00'}];
@@ -33,4 +33,29 @@ test('vencimiento soporta tarjetas cuyo vencimiento cae después del cierre en e
   const card={closingDay:5,dueDay:20};
   assert.equal(firstDueDateForCard(card,new Date('2026-09-01T12:00:00')).toISOString().slice(0,10),'2026-09-20');
   assert.equal(firstDueDateForCard(card,new Date('2026-09-06T12:00:00')).toISOString().slice(0,10),'2026-10-20');
+});
+
+
+test('tarjetas demo respetan cierre y vencimiento del mes siguiente',()=>{
+  const frances={closingDay:20,dueDay:10};
+  const macro={closingDay:25,dueDay:12};
+  assert.equal(firstDueDateForCard(frances,new Date('2026-09-19T12:00:00')).toISOString().slice(0,10),'2026-10-10');
+  assert.equal(firstDueDateForCard(frances,new Date('2026-09-21T12:00:00')).toISOString().slice(0,10),'2026-11-10');
+  assert.equal(firstDueDateForCard(macro,new Date('2026-09-25T12:00:00')).toISOString().slice(0,10),'2026-10-12');
+  assert.equal(firstDueDateForCard(macro,new Date('2026-09-26T12:00:00')).toISOString().slice(0,10),'2026-11-12');
+});
+
+test('planes demo de 3, 6, 12 y 18 cuotas generan un vencimiento por mes',()=>{
+  const card={closingDay:25,dueDay:12};
+  for(const count of [3,6,12,18]){
+    const dates=installmentDueDates(card,new Date('2026-09-26T12:00:00'),count);
+    assert.equal(dates.length,count);
+    assert.equal(dates[0].toISOString().slice(0,10),'2026-11-12');
+    for(let i=1;i<dates.length;i++){
+      const prev=dates[i-1],curr=dates[i];
+      assert.equal(curr.getDate(),12);
+      const diff=(curr.getFullYear()*12+curr.getMonth())-(prev.getFullYear()*12+prev.getMonth());
+      assert.equal(diff,1);
+    }
+  }
 });

@@ -14,6 +14,11 @@ export function firstDueDateForCard(card,purchase=new Date()){
   if(due.getTime()<=closing.getTime()) due=dateWithCardDay(closing.getFullYear(),closing.getMonth()+1,dueDay);
   return due;
 }
+export function installmentDueDates(card,purchase=new Date(),count=1){
+  const total=Math.max(1,Math.floor(Number(count)||1));
+  const first=firstDueDateForCard(card,purchase);
+  return Array.from({length:total},(_,i)=>dateWithCardDay(first.getFullYear(),first.getMonth()+i,card?.dueDay||1));
+}
 
 export function accountingDate(item) {
   return new Date(item?.dueDate || item?.paidDate || item?.purchaseDate || item?.date);
