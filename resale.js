@@ -25,8 +25,8 @@ export const INITIAL_RESALE_PARTIES = [
   {
     id: 'seed-nacho-scoppa', name: 'NACHO SCOPPA', date: '2026-09-26',
     tickets: [
-      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 1', 26450, 4, [40000, 45000, 45000, 45000]),
-      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 2', 28750, 4, [42500, 42500, 45000, 45000])
+      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 1', 26450, 4),
+      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 2', 28750, 4)
     ]
   },
   {
@@ -118,7 +118,7 @@ export function ticketMetrics(ticket, split = { ownerPercent: 70, sellerPercent:
 
 export function partyMetrics(party, split) {
   const tickets = party?.tickets || [];
-  const investment = tickets.filter((t)=>(t.status || 'Disponible') !== 'Uso personal').reduce((sum, t) => sum + Number(t.cost || 0), 0);
+  const investment = tickets.reduce((sum, t) => sum + Number(t.cost || 0), 0);
   const metrics = tickets.map((t) => ticketMetrics(t, split));
   const sales = metrics.reduce((sum, m) => sum + m.salePrice, 0);
   const recovered = metrics.reduce((sum, m) => sum + m.recovered, 0);
