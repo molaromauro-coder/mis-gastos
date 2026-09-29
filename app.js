@@ -42,6 +42,22 @@ const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateStrin
 const escape = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const effectiveDate = (e) => new Date(e.dueDate || e.date);
 document.querySelectorAll('dialog .close').forEach((button)=>{button.textContent='←';button.setAttribute('aria-label','Volver');button.classList.add('back-button');});
+let previousViewId='home';
+document.addEventListener('click',(event)=>{
+  const trigger=event.target.closest?.('[data-menu-view],[data-view]');
+  if(!trigger)return;
+  const destination=trigger.dataset.menuView||trigger.dataset.view;
+  const current=document.querySelector('.view.active')?.id||'home';
+  if(destination&&destination!==current)previousViewId=current;
+  if(destination==='cards'){activeCardType='';setTimeout(renderCards,0);}
+},true);
+document.querySelectorAll('main > .view:not(#home)').forEach((view)=>{
+  if(view.querySelector(':scope > .view-back'))return;
+  const button=document.createElement('button');
+  button.type='button';button.className='view-back';button.textContent='← Atrás';button.setAttribute('aria-label','Volver a la pantalla anterior');
+  button.onclick=()=>goView(previousViewId||'home');
+  view.prepend(button);
+});
 function renderHomeClock() {
   const now=new Date();
   if($('#homeDate')) $('#homeDate').textContent=now.toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'long'});
