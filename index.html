@@ -6,9 +6,10 @@
   <strong class="today-ars" id="arsTotal">$ 0</strong>
   <div class="today-usd"><span>🇺🇸 USD hoy</span><strong id="usdTotal">US$ 0</strong></div>
 </div>
-<button id="manualBtn" class="home-action manual-action" type="button"><span class="home-action-icon">✎</span><span><strong>Carga manual</strong><small>Agregá un gasto sin usar la voz</small></span><b>›</b></button>
+<section class="recent-card"><div class="recent-head"><strong>Últimos movimientos</strong></div><div id="recentMovements" class="recent-list"></div><button id="recentMore" type="button" class="recent-more hidden">＋ Ver más</button></section>
 <div id="paymentReminders" class="hidden"></div><div id="budgetAlert" class="hidden"></div><div id="unusual" class="hidden"></div><div id="expenseList" class="hidden"></div>
-<div class="voice-zone" id="voiceZone"><div id="voiceTrash" class="voice-trash" aria-hidden="true"><span>🗑</span><small>Arrastrá acá para cancelar</small></div><button id="micBtn" class="mic" aria-label="Mantener presionado para registrar gasto por voz"><span></span></button><strong id="voiceTitle">Mantener presionado</strong><small id="voiceHint">para hablar</small></div>
+<button id="manualBtn" class="home-action manual-action" type="button"><span class="home-action-icon">✎</span><span><strong>Carga manual</strong><small>Agregá un gasto sin usar la voz</small></span><b>›</b></button>
+<div class="voice-zone" id="voiceZone"><div id="voiceTrash" class="voice-trash" aria-hidden="true"><span>🗑</span></div><button id="micBtn" class="mic" aria-label="Mantener presionado para registrar gasto por voz"><span></span></button><strong id="voiceTitle">Mantener presionado</strong><small id="voiceHint">para hablar</small></div>
 <button id="homeMenuBtn" class="home-menu-btn" type="button"><span>⌂</span><strong>Menú</strong></button>
 </section>
 <section id="history" class="view"><h2>Historial</h2><div class="range-tabs history-tabs"><button data-history="today" class="selected">Hoy</button><button data-history="day">Día</button><button data-history="month">Mes</button><button data-history="year">Año</button><button data-history="custom">Rango</button></div><div id="historyFilters" class="filter-grid"><input type="date" id="historyDate"><input type="month" id="historyMonth" class="hidden"><select id="historyYear" class="hidden"></select><div id="historyCustom" class="hidden form-row"><input type="date" id="historyFrom"><input type="date" id="historyTo"></div></div><div class="balances compact"><article><span>ARS</span><strong id="historyArs">$ 0</strong></article><article><span>USD</span><strong id="historyUsd">US$ 0</strong></article></div><div id="historyList" class="expense-list history-list"></div></section>
@@ -103,13 +104,13 @@
 <dialog id="recurringDialog"><form id="recurringForm"><div class="dialog-head"><div><small>GASTO RECURRENTE</small><h2 id="recurringTitle">Nuevo recurrente</h2></div><button type="button" class="close">×</button></div>
 <label>Concepto<input id="recurringConcept" required placeholder="Ej. Suscripción"></label>
 <div class="form-row"><label>Importe<input id="recurringAmount" type="number" min="0.01" step="0.01" required></label><label>Moneda<select id="recurringCurrency"><option>ARS</option><option>USD</option></select></label></div>
-<label>Categoría<input id="recurringCategory" placeholder="Opcional"></label>
+<label>Categoría<select id="recurringCategory"><option value="">Sin categoría</option></select></label>
 <label>Medio de pago<select id="recurringMethod"><option>Efectivo</option><option>Débito</option><option>Crédito</option></select></label>
 <label id="recurringCardWrap" class="hidden">Tarjeta<select id="recurringCard"></select></label>
 <label>Día del mes<input id="recurringDay" type="number" min="1" max="28" value="1" required></label>
 <button class="primary">Guardar recurrente</button></form></dialog>
 <dialog id="stockDialog"><form id="stockForm"><div class="dialog-head"><div><small>NUEVA COMPRA</small><h2>Agregar stock</h2></div><button type="button" class="close">×</button></div>
-<label>Producto<input id="stockProduct" required placeholder="Ej. Café"></label><label>Categoría<input id="stockCategory" placeholder="Ej. Almacén"></label>
+<label>Producto<input id="stockProduct" required placeholder="Ej. Café"></label><label>Categoría<select id="stockCategory"><option value="">Sin categoría</option></select></label>
 <div class="form-row"><label>Cantidad<input id="stockQty" type="number" min="1" step="1" required></label><label>Meses estimados<input id="stockMonths" type="number" min="1" max="60" value="1" required></label></div>
 <div class="form-row"><label>Importe total<input id="stockAmount" type="number" min="0" step="0.01" required></label><label>Moneda<select id="stockCurrency"><option>ARS</option><option>USD</option></select></label></div>
 <label>Fecha de pago<input id="stockPaidDate" type="date" required></label><button class="primary">Guardar compra</button></form></dialog>
