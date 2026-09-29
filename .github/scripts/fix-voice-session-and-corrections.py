@@ -74,8 +74,9 @@ new_parse_expense=r'''export function parseExpense(text,cards=[],categories=[],o
   };
 }
 '''
-p2,n=re.subn(r"export function parseExpense\(text,cards=\[\],categories=\[\],options=\{\}\)\{.*?\n\}\n\nconst NUMBER_START",new_parse_expense+'\nconst NUMBER_START',p,flags=re.S)
-assert n==1,f'parseExpense replacements={n}'
+pattern=r"export function parseExpense\(text,cards=\[\],categories=\[\],options=\{\}\)\{.*?\n\}\n\nconst NUMBER_START"
+matches=list(re.finditer(pattern,p,flags=re.S));assert len(matches)==1,f'parseExpense replacements={len(matches)}'
+p2=re.sub(pattern,lambda _:new_parse_expense+'\nconst NUMBER_START',p,count=1,flags=re.S)
 parser.write_text(p2)
 
 a=app.read_text()
@@ -122,8 +123,9 @@ new_apply=r'''function applyPendingPaymentVoice(index,phrase){
   if(!item.card) showToast(cards.length?'Decí o elegí qué tarjeta o cuenta usaste':'Primero agregá una tarjeta o cuenta de este tipo');
 }
 '''
-a,n=re.subn(r"function applyPendingPaymentVoice\(index,phrase\)\{.*?\n\}\nlet pendingVoiceRecognition",new_apply+'let pendingVoiceRecognition',a,flags=re.S)
-assert n==1,f'applyPendingPaymentVoice replacements={n}'
+pattern=r"function applyPendingPaymentVoice\(index,phrase\)\{.*?\n\}\nlet pendingVoiceRecognition"
+matches=list(re.finditer(pattern,a,flags=re.S));assert len(matches)==1,f'applyPendingPaymentVoice replacements={len(matches)}'
+a=re.sub(pattern,lambda _:new_apply+'let pendingVoiceRecognition',a,count=1,flags=re.S)
 
 new_pending_start=r'''function startPendingPaymentVoice(index){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -143,8 +145,9 @@ new_pending_start=r'''function startPendingPaymentVoice(index){
   try{rec.start();}catch{pendingVoiceRecognition=null;restore();showToast('No pude iniciar el micrófono');}
 }
 '''
-a,n=re.subn(r"function startPendingPaymentVoice\(index\)\{.*?\n\}\nfunction showPending",new_pending_start+'function showPending',a,flags=re.S)
-assert n==1,f'startPendingPaymentVoice replacements={n}'
+pattern=r"function startPendingPaymentVoice\(index\)\{.*?\n\}\nfunction showPending"
+matches=list(re.finditer(pattern,a,flags=re.S));assert len(matches)==1,f'startPendingPaymentVoice replacements={len(matches)}'
+a=re.sub(pattern,lambda _:new_pending_start+'function showPending',a,count=1,flags=re.S)
 
 new_voice=r'''let activeRecognition = null;
 let voiceTranscript = '';
@@ -217,8 +220,9 @@ function stopExpenseVoice() {
   else finishExpenseVoice();
 }
 '''
-a,n=re.subn(r"let activeRecognition = null;.*?function stopExpenseVoice\(\) \{.*?\n\}\n",new_voice,a,flags=re.S)
-assert n==1,f'voice block replacements={n}'
+pattern=r"let activeRecognition = null;.*?function stopExpenseVoice\(\) \{.*?\n\}\n"
+matches=list(re.finditer(pattern,a,flags=re.S));assert len(matches)==1,f'voice block replacements={len(matches)}'
+a=re.sub(pattern,lambda _:new_voice,a,count=1,flags=re.S)
 
 old_cancel="""function cancelExpenseVoice(){
   if(!activeRecognition)return;
