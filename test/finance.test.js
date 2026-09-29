@@ -26,7 +26,7 @@ test('recupero queda en el mes cobrado y no borra gasto',()=>{
 test('vencimiento se calcula desde el cierre del resumen',()=>{
   const card={closingDay:25,dueDay:10};
   assert.equal(firstDueDateForCard(card,new Date('2026-09-05T12:00:00')).toISOString().slice(0,10),'2026-10-10');
-  assert.equal(firstDueDateForCard(card,new Date('2026-09-25T12:00:00')).toISOString().slice(0,10),'2026-10-10');
+  assert.equal(firstDueDateForCard(card,new Date('2026-09-25T22:30:00')).toISOString().slice(0,10),'2026-10-10');
   assert.equal(firstDueDateForCard(card,new Date('2026-09-26T12:00:00')).toISOString().slice(0,10),'2026-11-10');
 });
 test('vencimiento soporta tarjetas cuyo vencimiento cae después del cierre en el mismo mes',()=>{
