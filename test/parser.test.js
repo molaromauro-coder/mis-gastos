@@ -57,6 +57,12 @@ test('la voz no asigna una tarjeta de tipo incorrecto',()=>{
 
 test('interpreta correctamente importes numéricos grandes y poco redondos',()=>{
   const cases=[
+    ['17500 pesos',17500],
+    ['17.500 pesos',17500],
+    ['diecisiete mil quinientos pesos',17500],
+    ['58000 pesos',58000],
+    ['58.000 pesos',58000],
+    ['cincuenta y ocho mil pesos',58000],
     ['1500000 pesos',1500000],
     ['0584562 pesos',584562],
     ['856340 pesos',856340],
