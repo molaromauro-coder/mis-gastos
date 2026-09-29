@@ -43,6 +43,7 @@ export function parseAmount(text) {
   // hay que tratarlos como separadores de miles, no como decimales.
   const clean = normalized(text)
     .replace(/([0-9])[.,](?=\d{3}(?:\D|$))/g, '$1')
+    .replace(/(\d)\s+(?=\d{3}(?:\D|$))/g, '$1')
     .replace(',', '.');
   const numeric = clean.match(/(?:usd|u\$s|dolares?|\$)?\s*(\d+(?:\.\d{1,2})?)\s*(millones?|millon|mil)?/i);
   if (numeric) return Number(numeric[1]) * (/millon/.test(numeric[2] || '') ? 1_000_000 : numeric[2] === 'mil' ? 1_000 : 1);
@@ -81,7 +82,7 @@ export function parseExpense(text, cards = [], categories = []) {
   const amount = parseAmount(lower);
   const currency = /(?:usd|u\$s|dolar)/.test(lower) ? 'USD' : 'ARS';
   const installments = parseInstallments(lower);
-  const method = /credito|cuotas?/.test(lower) ? 'Crédito' : /debito/.test(lower) ? 'Débito' : 'Efectivo';
+  const method = /credito|cuotas?/.test(lower) ? 'Crédito' : /debito/.test(lower) ? 'Débito' : /efectivo/.test(lower) ? 'Efectivo' : 'Sin definir';
   const card = cards.find((item) => item?.name && (!item.type || item.type === method) && lower.includes(normalized(item.name)))?.name || '';
   const category = categoryFor(raw, categories);
   let concept = raw.replace(/\b(pagu[eé]|gast[eé]|compr[eé]|en|con|del?|la|el|efectivo|d[eé]bito|cr[eé]dito|pesos?|d[oó]lares?|usd|u\$s|cuotas?|mill[oó]n(?:es)?)\b/gi, ' ')

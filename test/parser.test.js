@@ -18,6 +18,12 @@ test('interpreta separadores de miles usados por el reconocimiento de voz de iPh
   assert.equal(parseAmount('50,000 pesos'),50000);
   assert.equal(parseAmount('1.200.000 pesos'),1200000);
   assert.equal(parseAmount('1,200,000 pesos'),1200000);
+  assert.equal(parseAmount('50 000 pesos'),50000);
+  assert.equal(parseAmount('1 200 000 pesos'),1200000);
+});
+test('separa dos gastos cuando iPhone usa espacios para miles',()=>{
+  const items=parseExpenses('Gasté 50 000 pesos en supermercado y 70 000 pesos de combustible');
+  assert.equal(items.length,2); assert.deepEqual(items.map((x)=>x.amount),[50000,70000]);
 });
 test('separa múltiples gastos aunque el segundo no repita el verbo', () => {
   const items = parseExpenses('Gasté 10 mil en kiosco y 20 mil en supermercado');
@@ -38,10 +44,35 @@ test('entiende millones y categorías configuradas', () => {
 });
 test('no asigna una tarjeta desconocida', () => assert.equal(parseExpense('pagué 200 con débito del Francés', []).card, ''));
 
-test('si no se menciona medio de pago usa efectivo',()=>{
-  assert.equal(parseExpense('gasté cincuenta mil pesos en kiosco').method,'Efectivo');
+test('si no se menciona medio de pago queda pendiente de definición',()=>{
+  assert.equal(parseExpense('gasté cincuenta mil pesos en kiosco').method,'Sin definir');
+});
+test('si se dice efectivo por voz lo conserva',()=>{
+  assert.equal(parseExpense('gasté cincuenta mil pesos en kiosco en efectivo').method,'Efectivo');
 });
 test('la voz no asigna una tarjeta de tipo incorrecto',()=>{
   const e=parseExpense('pagué 200 con débito Visa',[{name:'Visa',type:'Crédito'}]);
   assert.equal(e.method,'Débito'); assert.equal(e.card,'');
+});
+
+test('interpreta correctamente importes numéricos grandes y poco redondos',()=>{
+  const cases=[
+    ['1500000 pesos',1500000],
+    ['0584562 pesos',584562],
+    ['856340 pesos',856340],
+    ['854266 pesos',854266],
+    ['679684321 pesos',679684321],
+    ['1.500.000 pesos',1500000],
+    ['1 500 000 pesos',1500000],
+    ['584.562 pesos',584562],
+    ['856 340 pesos',856340],
+    ['679.684.321 pesos',679684321],
+    ['679 684 321 pesos',679684321]
+  ];
+  for(const [spoken,expected] of cases) assert.equal(parseAmount(spoken),expected,spoken);
+});
+test('mantiene importes difíciles al separar varios gastos dictados juntos',()=>{
+  const items=parseExpenses('Gasté 856340 pesos en supermercado y 854266 pesos de combustible');
+  assert.equal(items.length,2);
+  assert.deepEqual(items.map((x)=>x.amount),[856340,854266]);
 });
