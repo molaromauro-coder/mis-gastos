@@ -1210,7 +1210,7 @@ function startExpenseVoice() {
     if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories, {subcategories:state.subcategories}); showPending(); }
     return;
   }
-  voiceTranscript='';voiceCycleText='';voiceError='';voiceCancelled=false;voiceCancelArmed=false;voiceGestureStartY=null;voiceStopRequested=false;voiceHoldActive=true;
+  voiceTranscript='';voiceCycleText='';voiceError='';voiceCancelled=false;voiceCancelArmed=false;voiceStopRequested=false;voiceHoldActive=true;
   launchExpenseRecognitionCycle();
 }
 function stopExpenseVoice() {
@@ -1241,12 +1241,12 @@ function cancelExpenseVoice(){
 if ('ontouchstart' in window) {
   micBtn.addEventListener('touchstart',(e)=>{e.preventDefault();voiceGestureStartY=e.touches[0]?.clientY??null;startExpenseVoice();},{passive:false});
   micBtn.addEventListener('touchmove',(e)=>{e.preventDefault();if(e.touches[0])updateVoiceCancelGesture(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
-  micBtn.addEventListener('touchend',(e)=>{e.preventDefault();const cancel=voiceCancelArmed;voiceGestureStartY=null;if(cancel)cancelExpenseVoice();else stopExpenseVoice();},{passive:false});
+  micBtn.addEventListener('touchend',(e)=>{e.preventDefault();const point=e.changedTouches?.[0];if(point)updateVoiceCancelGesture(point.clientX,point.clientY);const cancel=voiceCancelArmed;voiceGestureStartY=null;if(cancel)cancelExpenseVoice();else stopExpenseVoice();},{passive:false});
   micBtn.addEventListener('touchcancel',(e)=>{e.preventDefault();cancelExpenseVoice();},{passive:false});
 } else {
   micBtn.onpointerdown=(e)=>{e.preventDefault();voiceGestureStartY=e.clientY;micBtn.setPointerCapture?.(e.pointerId);startExpenseVoice();};
   micBtn.onpointermove=(e)=>{if(activeRecognition)updateVoiceCancelGesture(e.clientX,e.clientY);};
-  micBtn.onpointerup=(e)=>{e.preventDefault();const cancel=voiceCancelArmed;voiceGestureStartY=null;if(cancel)cancelExpenseVoice();else stopExpenseVoice();};
+  micBtn.onpointerup=(e)=>{e.preventDefault();updateVoiceCancelGesture(e.clientX,e.clientY);const cancel=voiceCancelArmed;voiceGestureStartY=null;if(cancel)cancelExpenseVoice();else stopExpenseVoice();};
   micBtn.onpointercancel=cancelExpenseVoice;
 }
 micBtn.oncontextmenu=(e)=>e.preventDefault();
