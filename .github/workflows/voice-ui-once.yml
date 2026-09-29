@@ -1,0 +1,32 @@
+name: Voice UI hardening (one time)
+
+on:
+  push:
+    paths:
+      - '.github/workflows/voice-ui-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply voice UI patch
+        run: python3 .github/scripts/apply-voice-ui.py
+      - name: Check JavaScript syntax
+        run: node --check app.js && node --check parser.js
+      - name: Run all tests
+        run: npm test
+      - name: Commit tested result and remove one-time helpers
+        run: |
+          rm .github/scripts/apply-voice-ui.py .github/workflows/voice-ui-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Harden voice dates, payment and installment confirmation"
+          git push
