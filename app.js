@@ -215,8 +215,8 @@ function renderHistory() { $('#historyYear').innerHTML = years().map((y) => `<op
 function showToast(message, undo = false) { const toast = $('#toast'); toast.textContent = undo ? `${message} · DESHACER` : message; toast.classList.add('show'); toast.style.pointerEvents = undo ? 'auto' : 'none'; toast.onclick = undo ? () => { if (discarded) pending.splice(discarded.index, 0, discarded.item); discarded = null; showPending(); showToast('Gasto recuperado'); } : null; clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove('show'), 3500); }
 function feedback(ok) { navigator.vibrate?.(ok ? 50 : [120, 50, 120]); try { const ctx = new AudioContext(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.frequency.value = ok ? 720 : 180; gain.gain.value = .035; osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + (ok ? .08 : .16)); } catch {} }
 function setManualStep(step) { manualStep = step; document.querySelectorAll('.step').forEach((e) => e.classList.toggle('active', Number(e.dataset.step) === step)); $('#stepLabel').textContent = `PASO ${step} DE 3`; $('#expenseDialogTitle').textContent = ['¿Cuánto gastaste?', 'Elegí una categoría', '¿Cómo pagaste?'][step - 1]; $('#prevStep').classList.toggle('hidden', step === 1); $('#nextStep').classList.toggle('hidden', step === 3); $('#saveExpense').classList.toggle('hidden', step !== 3); }
-function openExpense(data = {}) { $('#expenseForm').reset(); $('#amount').value = data.amount || ''; $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; $('#method').value = data.method === 'Sin definir' ? 'Efectivo' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; setManualStep(data.source === 'voice' ? 1 : 1); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
-function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
+function openExpense(data = {}) { $('#expenseForm').reset(); $('#amount').value = data.amount || ''; $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; const voiceNeedsMethod=data.source==='voice'&&data.method==='Sin definir'; $('#method').value = voiceNeedsMethod ? '' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; setManualStep(voiceNeedsMethod ? 3 : 1); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
+function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', !method || method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
 function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value), count = Number($('#installments').value || 1), amount = Number($('#amount').value || 0); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${count} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${card.dueDay} de cada mes.</span>`; }
 function pendingCreditDetail(e){
   if(e.method!=='Crédito'||!e.card||!e.amount)return '';
@@ -225,10 +225,65 @@ function pendingCreditDetail(e){
   const due=firstDueDateForCard(card,new Date(e.purchaseDate||e.date));
   return `<div class="pending-credit-detail"><span>${count} cuota${count===1?'':'s'} de <strong>${money(Number(e.amount)/count,e.currency)}</strong></span><span>Primera cuota: <strong>${due.toLocaleDateString('es-AR')}</strong></span></div>`;
 }
+function normVoiceChoice(text){return String(text||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+function pendingPaymentPrompt(e,i){
+  const needsMethod=e.method==='Sin definir';
+  const needsCard=['Débito','Crédito'].includes(e.method)&&!e.card;
+  if(needsMethod){
+    return `<div class="pending-payment-question"><strong>¿Con qué pagaste?</strong><div class="pending-payment-actions"><button type="button" data-pending-method="Efectivo" data-index="${i}">Efectivo</button><button type="button" data-pending-method="Débito" data-index="${i}">Débito</button><button type="button" data-pending-method="Crédito" data-index="${i}">Crédito</button><button type="button" class="voice-pay" data-pending-pay-voice="${i}">🎙 Responder</button></div></div>`;
+  }
+  if(needsCard){
+    const cards=state.cards.filter((c)=>c.type===e.method);
+    return `<div class="pending-payment-question"><strong>¿Con qué ${e.method.toLowerCase()} pagaste?</strong>${cards.length?`<select class="pending-card-select" data-index="${i}"><option value="">Elegí tarjeta o cuenta</option>${cards.map((c)=>`<option value="${escape(c.name)}">${escape(c.name)}</option>`).join('')}</select>`:'<small class="muted">Primero agregá una tarjeta o cuenta de este tipo.</small>'}<button type="button" class="voice-pay" data-pending-pay-voice="${i}">🎙 Responder por voz</button></div>`;
+  }
+  return '';
+}
+function applyPendingPaymentVoice(index,phrase){
+  const item=pending[index]; if(!item)return;
+  const spoken=normVoiceChoice(phrase);
+  let method=item.method;
+  if(/\befectivo\b/.test(spoken)) method='Efectivo';
+  else if(/\bdebito\b/.test(spoken)) method='Débito';
+  else if(/\bcredito\b/.test(spoken)) method='Crédito';
+  if(method==='Sin definir'){showToast('Decí efectivo, débito o crédito');return;}
+  item.method=method;
+  if(method==='Efectivo'){item.card='';item.installments=1;showPending();return;}
+  const cards=state.cards.filter((c)=>c.type===method);
+  const named=cards.find((c)=>spoken.includes(normVoiceChoice(c.name)));
+  if(named)item.card=named.name;
+  showPending();
+  if(!item.card) showToast(cards.length?'Decí o elegí qué tarjeta o cuenta usaste':'Primero agregá una tarjeta o cuenta de este tipo');
+}
+function startPendingPaymentVoice(index){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const process=(phrase)=>applyPendingPaymentVoice(index,phrase);
+  if(!SR){const phrase=prompt('Decí o escribí: efectivo, débito o crédito. Si usaste tarjeta, agregá su nombre.');if(phrase)process(phrase);return;}
+  const rec=new SR();rec.lang='es-AR';rec.interimResults=false;rec.continuous=false;rec.maxAlternatives=1;
+  let phrase='';
+  rec.onresult=(event)=>{phrase=event.results[event.resultIndex][0].transcript.trim();};
+  rec.onerror=()=>showToast('No pude escuchar el medio de pago');
+  rec.onend=()=>{if(phrase)process(phrase);};
+  try{rec.start();}catch{showToast('No pude iniciar el micrófono');}
+}
 function showPending() {
   if (!pending.length) { if ($('#confirmDialog').open) $('#confirmDialog').close(); return; }
-  $('#pendingList').innerHTML = pending.map((e, i) => { const needsCard=['Débito','Crédito'].includes(e.method)&&!e.card; return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape([e.category, e.method, e.card, e.installments > 1 ? `${e.installments} cuotas` : ''].filter(Boolean).join(' · '))}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingCreditDetail(e)}<div class="actions"><button class="edit">Corregir</button><button class="confirm" ${!e.amount || needsCard ? 'disabled' : ''}>✓ Confirmar</button></div>${needsCard ? '<p class="muted">Corregí el gasto y elegí una tarjeta o cuenta configurada.</p>' : ''}</article>`; }).join('');
+  $('#pendingList').innerHTML = pending.map((e, i) => {
+    const needsMethod=e.method==='Sin definir';
+    const needsCard=['Débito','Crédito'].includes(e.method)&&!e.card;
+    const methodLabel=needsMethod?'Medio de pago pendiente':e.method;
+    return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape([e.category, methodLabel, e.card, e.installments > 1 ? `${e.installments} cuotas` : ''].filter(Boolean).join(' · '))}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingCreditDetail(e)}${pendingPaymentPrompt(e,i)}<div class="actions"><button class="edit">Corregir</button><button class="confirm" ${!e.amount || needsMethod || needsCard ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
+  }).join('');
   if (!$('#confirmDialog').open) $('#confirmDialog').showModal();
+  document.querySelectorAll('[data-pending-method]').forEach((button)=>{
+    button.onclick=()=>{
+      const item=pending[Number(button.dataset.index)]; if(!item)return;
+      item.method=button.dataset.pendingMethod; item.card=''; if(item.method!=='Crédito')item.installments=1; showPending();
+    };
+  });
+  document.querySelectorAll('.pending-card-select').forEach((select)=>{
+    select.onchange=()=>{const item=pending[Number(select.dataset.index)];if(!item)return;item.card=select.value;showPending();};
+  });
+  document.querySelectorAll('[data-pending-pay-voice]').forEach((button)=>{button.onclick=()=>startPendingPaymentVoice(Number(button.dataset.pendingPayVoice));});
   document.querySelectorAll('.pending').forEach((card) => {
     const index = Number(card.dataset.index);
     card.querySelector('.confirm').onclick = () => confirmPending(index, card);
@@ -571,7 +626,7 @@ function goView(view) {
   if (view === 'usd') ensureUsdRate(false).then(() => renderUsd());
 }
 
-async function confirmPending(index, card) { card.classList.add('confirmed'); let item = pending.splice(index, 1)[0]; item.purchaseDate ||= item.date; item = await stampUsdExpense(item); state.expenses.push(...installmentExpenses(item)); save(); feedback(true); showToast('✓ Gasto confirmado'); setTimeout(() => { showPending(); render(); }, 180); }
+async function confirmPending(index, card) { const current=pending[index]; if(!current)return; if(current.method==='Sin definir')return showToast('Elegí o decí con qué pagaste'); if(['Débito','Crédito'].includes(current.method)&&!current.card)return showToast('Elegí o decí qué tarjeta o cuenta usaste'); card.classList.add('confirmed'); let item = pending.splice(index, 1)[0]; item.purchaseDate ||= item.date; item = await stampUsdExpense(item); state.expenses.push(...installmentExpenses(item)); save(); feedback(true); showToast('✓ Gasto confirmado'); setTimeout(() => { showPending(); render(); }, 180); }
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
 $('#manualBtn').onclick = () => openExpense(); $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
@@ -580,6 +635,7 @@ $('#method').onchange = updatePaymentFields; $('#expenseCard').onchange = update
 $('#expenseForm').onsubmit = async (event) => {
   event.preventDefault();
   const method=$('#method').value;
+  if (!method) return showToast('Elegí el medio de pago');
   if (method !== 'Efectivo' && !$('#expenseCard').value) return showToast('Elegí una tarjeta configurada');
   const now=new Date().toISOString();
   let expense={ id:crypto.randomUUID(), amount:Number($('#amount').value), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#category').value || 'Sin detalle', category:$('#category').value, method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
