@@ -67,6 +67,17 @@ test('separa varios gastos que empiezan con pagué cuando cada uno tiene importe
   assert.deepEqual(items.map((x)=>x.amount),[20000,30000]);
 });
 
+test('aplica a todos el medio, tarjeta y cuotas cuando se dice pagué todo con',()=>{
+  const cards=[{name:'Banco Francés',type:'Crédito'}];
+  const items=parseExpenses('Gasté 70 mil pesos en supermercado gasté 50 mil pesos en kiosco gasté 90 mil pesos de combustible, pagué todo con crédito Banco Francés en 3 cuotas',cards);
+  assert.equal(items.length,3);
+  assert.deepEqual(items.map((x)=>x.amount),[70000,50000,90000]);
+  assert.deepEqual(items.map((x)=>x.method),['Crédito','Crédito','Crédito']);
+  assert.deepEqual(items.map((x)=>x.card),['Banco Francés','Banco Francés','Banco Francés']);
+  assert.deepEqual(items.map((x)=>x.installments),[3,3,3]);
+  assert.deepEqual(items.map((x)=>x.installmentsSpecified),[true,true,true]);
+});
+
 test('una corrección con un segundo gasté sigue siendo un solo gasto',()=>{
   const items=parseExpenses('Gasté 60 mil en kiosco, perdón, gasté 50 mil en kiosco');
   assert.equal(items.length,1);
