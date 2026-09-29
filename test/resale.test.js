@@ -67,3 +67,13 @@ test('balance total suma todas las fiestas', () => {
   assert.equal(m.available, 1);
   assert.ok(Math.abs(m.gainPercent - ((160 - 300) / 300 * 100)) < 1e-9);
 });
+
+test('uso personal queda fuera de la inversión del negocio',()=>{
+  const m=partyMetrics({tickets:[
+    {cost:100,salePrice:160,status:'Vendida'},
+    {cost:200,salePrice:0,status:'Uso personal'}
+  ]},{ownerPercent:70,sellerPercent:30});
+  assert.equal(m.investment,100);
+  assert.equal(m.netGain,60);
+  assert.equal(m.personal,1);
+});
