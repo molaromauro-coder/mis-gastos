@@ -43,6 +43,7 @@ export function parseAmount(text) {
   // hay que tratarlos como separadores de miles, no como decimales.
   const clean = normalized(text)
     .replace(/([0-9])[.,](?=\d{3}(?:\D|$))/g, '$1')
+    .replace(/(\d)\s+(?=\d{3}(?:\D|$))/g, '$1')
     .replace(',', '.');
   const numeric = clean.match(/(?:usd|u\$s|dolares?|\$)?\s*(\d+(?:\.\d{1,2})?)\s*(millones?|millon|mil)?/i);
   if (numeric) return Number(numeric[1]) * (/millon/.test(numeric[2] || '') ? 1_000_000 : numeric[2] === 'mil' ? 1_000 : 1);
