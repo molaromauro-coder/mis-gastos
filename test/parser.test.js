@@ -18,6 +18,12 @@ test('interpreta separadores de miles usados por el reconocimiento de voz de iPh
   assert.equal(parseAmount('50,000 pesos'),50000);
   assert.equal(parseAmount('1.200.000 pesos'),1200000);
   assert.equal(parseAmount('1,200,000 pesos'),1200000);
+  assert.equal(parseAmount('50 000 pesos'),50000);
+  assert.equal(parseAmount('1 200 000 pesos'),1200000);
+});
+test('separa dos gastos cuando iPhone usa espacios para miles',()=>{
+  const items=parseExpenses('Gasté 50 000 pesos en supermercado y 70 000 pesos de combustible');
+  assert.equal(items.length,2); assert.deepEqual(items.map((x)=>x.amount),[50000,70000]);
 });
 test('separa múltiples gastos aunque el segundo no repita el verbo', () => {
   const items = parseExpenses('Gasté 10 mil en kiosco y 20 mil en supermercado');
