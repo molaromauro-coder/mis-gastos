@@ -25,8 +25,8 @@ export const INITIAL_RESALE_PARTIES = [
   {
     id: 'seed-nacho-scoppa', name: 'NACHO SCOPPA', date: '2026-09-26',
     tickets: [
-      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 1', 26450, 4, [40000, 45000, 45000, 45000]),
-      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 2', 28750, 4, [42500, 42500, 45000, 45000])
+      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 1', 26450, 4),
+      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 2', 28750, 4)
     ]
   },
   {

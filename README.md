@@ -1,80 +1,72 @@
 # Mis Gastos
 
-PWA móvil para registrar gastos en pesos y dólares, manualmente o mediante voz. No requiere instalar dependencias ni configurar una base de datos: los datos de prueba quedan guardados localmente en el navegador.
+PWA móvil para registrar y analizar gastos personales en pesos argentinos y dólares. Incluye carga manual, carga por voz en español argentino, tarjetas de débito y crédito, cuotas, informes, presupuesto, ahorro, stock, recuperos, papelera, exportación y un módulo privado de reventa de entradas.
 
-## Verla funcionando en la computadora
+Los datos se guardan localmente en el navegador del dispositivo. La sincronización automática entre iPhone y computadora todavía no forma parte de esta versión.
 
-### Requisitos
+## Probarla en computadora
 
-- Python 3.
-- Un navegador moderno. Chrome o Safari permiten probar más funciones de voz y PWA.
-
-### Inicio rápido
-
-Desde la raíz del proyecto ejecutá:
+Desde la raíz del proyecto:
 
 ```bash
 npm start
 ```
 
-Después abrí esta dirección en el navegador:
+Abrí **http://localhost:4173**. No hace falta ejecutar `npm install`: la aplicación no tiene dependencias externas.
 
-**<http://localhost:4173>**
+## Recorrido de prueba recomendado
 
-No hay que ejecutar `npm install`: la aplicación no tiene dependencias externas. Para detener el servidor presioná `Ctrl+C` en la terminal.
+1. Entrá en **Tarjetas** y cargá tus tarjetas de débito y crédito. Para las de crédito indicá día de cierre y día de vencimiento.
+2. En **Inicio**, usá **Carga manual** y verificá Efectivo, Débito y Crédito. Al elegir Débito o Crédito aparecen solamente las tarjetas de ese tipo.
+3. Para Crédito, elegí la cantidad de cuotas. La primera cuota se calcula a partir del cierre de la tarjeta y luego se distribuye por vencimiento mensual.
+4. Probá la voz manteniendo presionado el micrófono, hablando y soltándolo al terminar. Ejemplos:
+   - `Gasté cincuenta mil pesos en el kiosco`.
+   - `Gasté diez mil en kiosco y veinte mil en supermercado`.
+   - `Gasté un millón en una heladera con crédito Mi Visa en doce cuotas`.
+5. Antes de guardar un gasto reconocido por voz, revisá importe, medio de pago, tarjeta, cantidad de cuotas, valor de cada cuota y fecha de la primera cuota.
+6. Entrá en **Informes** y verificá total ARS, total USD, equivalente, comparación con período anterior, gráfico por categoría, categorías, medios de pago y mayores gastos.
+7. Probá **Presupuesto**, **Ahorro**, **Stock**, **Gastos recuperados**, **Papelera** y **Consultas**.
+8. En **Reventa de entradas**, comprobá Balance general, reparto Mauro/vendedor, fiestas plegadas por nombre, detalle individual y nuevas fiestas.
 
-> Es importante abrirla mediante `http://localhost:4173` y no haciendo doble clic sobre `index.html`. El servidor es necesario para que funcionen correctamente los módulos JavaScript, el service worker y la instalación como PWA.
+## iPhone / PWA
 
-## Recorrido de prueba sugerido
+La aplicación debe servirse mediante HTTPS para usar correctamente instalación PWA, micrófono y biometría.
 
-1. Abrí **Tarjetas** y seleccioná **Agregar**.
-2. Creá una tarjeta con un alias inventado para la prueba, por ejemplo `Mi tarjeta`, y configurá sus días de cierre y vencimiento.
-3. Volvé a **Inicio** y tocá **Agregar manual** para cargar un gasto en pesos o dólares.
-4. Elegí crédito, seleccioná la tarjeta creada y cargá `12` cuotas. La aplicación distribuirá el importe entre los meses correspondientes.
-5. Tocá el botón amarillo del micrófono y decí solamente un gasto, por ejemplo: `Pagué 2500 pesos en efectivo en supermercado`. La escucha se corta automáticamente cuando termina la frase.
-6. Confirmá cada tarjeta detectada con la tilde verde. También podés corregirla o deslizarla hacia arriba para descartarla; el aviso inferior permite deshacer.
-7. Entrá en **Informes** para revisar los totales separados en ARS y USD por mes, año o rango personalizado.
-
-Si el navegador no ofrece reconocimiento de voz, la aplicación muestra un campo de texto de respaldo. Escribí allí la misma frase para probar el intérprete sin micrófono.
-
-## Probarla desde un teléfono en la misma red
-
-1. Con la computadora y el teléfono conectados a la misma red Wi-Fi, iniciá el servidor con `npm start`.
-2. Obtené la IP local de la computadora:
-
-   ```bash
-   hostname -I
-   ```
-
-3. En el teléfono abrí `http://IP_DE_TU_COMPUTADORA:4173`; por ejemplo, `http://192.168.1.25:4173`.
-
-La interfaz y la carga manual se pueden revisar así. Sin embargo, los navegadores normalmente exigen un contexto seguro HTTPS para habilitar micrófono, service workers, instalación PWA y biometría. `localhost` es una excepción únicamente en el mismo dispositivo.
-
-## Instalarla en un iPhone
-
-Para probar todas las capacidades en un iPhone, publicá estos archivos estáticos en cualquier hosting con HTTPS. No hace falta un proceso de compilación: se publica el contenido completo del repositorio.
-
-Una vez disponible mediante una URL `https://`:
-
-1. Abrí la URL en **Safari**.
+1. Abrí la URL publicada en **Safari**.
 2. Tocá **Compartir**.
-3. Elegí **Agregar a inicio**.
-4. Confirmá con **Agregar**.
-5. Abrí **Mis Gastos** desde el icono nuevo y aceptá el permiso de micrófono cuando Safari lo solicite.
+3. Elegí **Agregar a pantalla de inicio**.
+4. Abrí Mis Gastos desde el nuevo icono.
 
-Los datos permanecen en el navegador del dispositivo y no se sincronizan con otros equipos en esta primera versión. Para empezar de cero, eliminá los datos del sitio desde la configuración de Safari o las herramientas del navegador.
+La pantalla de Inicio está diseñada para entrar completa en el viewport del iPhone sin necesidad de reducir el zoom. Las demás secciones tienen desplazamiento vertical cuando el contenido supera la pantalla.
 
-## Ejecutar las pruebas automáticas
+## Persistencia
+
+Cada modificación relevante se guarda inmediatamente en `localStorage`, y se vuelve a persistir al ocultar o cerrar la aplicación. Una actualización del código no cambia la clave de almacenamiento, por lo que no debería borrar los datos del mismo origen/navegador.
+
+Importante: Safari y una PWA instalada pueden comportarse como contextos de almacenamiento distintos según la versión/configuración de iOS. Para datos reales conviene elegir el acceso que se va a usar habitualmente y continuar allí hasta incorporar sincronización en la nube.
+
+## Exportación
+
+En **Consultas**:
+- **Exportar para Excel (CSV)** genera un CSV UTF-8 compatible con Excel.
+- **Guardar / imprimir PDF** abre la vista de impresión del navegador para guardarla como PDF.
+
+En **Reventa** se puede exportar el detalle en CSV.
+
+## Versión compartida
+
+Con `?shared=1`, Reventa no aparece y su módulo no se descarga ni se ejecuta. La versión personal mantiene Reventa disponible.
+
+## Pruebas automáticas
 
 ```bash
 npm test
 ```
 
-Las pruebas validan el reconocimiento de moneda, medio de pago, tarjetas configuradas, cuotas y múltiples gastos en una frase.
+Las pruebas cubren números e importes en español, múltiples gastos en una frase, tarjetas y cuotas, cálculo de cierre/vencimiento, presupuesto, stock, recuperos, informes y matemática de Reventa.
 
 ## Solución de problemas
 
-- **La página no abre:** comprobá que la terminal muestre `Serving HTTP on 0.0.0.0 port 4173` y que ningún otro programa esté usando ese puerto.
-- **El teléfono no conecta:** revisá que ambos dispositivos estén en la misma Wi-Fi y que el firewall permita conexiones al puerto 4173.
-- **El micrófono no aparece o no responde:** usá Chrome/Safari y una URL HTTPS. Mientras tanto, usá el ingreso de texto de respaldo del botón de micrófono.
-- **No veo cambios recientes:** recargá la página; si la versión anterior quedó en caché, eliminá los datos del sitio y volvé a abrirla.
+- Si el micrófono no responde, comprobá permiso de micrófono y que la URL use HTTPS.
+- Si ves una versión anterior, recargá Safari; el service worker utiliza una caché versionada y elimina las versiones previas.
+- Si no aparece una tarjeta al cargar un gasto, verificá que esté configurada con el mismo tipo de medio de pago: Débito o Crédito.

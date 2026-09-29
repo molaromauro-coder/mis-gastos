@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeSplit, ticketMetrics, partyMetrics, portfolioMetrics, withPortfolioPercent } from '../resale.js';
+import { normalizeSplit, ticketMetrics, partyMetrics, portfolioMetrics, withPortfolioPercent, INITIAL_RESALE_PARTIES } from '../resale.js';
 
 test('reparto editable siempre suma 100', () => {
   assert.deepEqual(normalizeSplit(80, 20), { ownerPercent: 80, sellerPercent: 20 });
@@ -66,4 +66,17 @@ test('balance total suma todas las fiestas', () => {
   assert.equal(m.netGain, 60);
   assert.equal(m.available, 1);
   assert.ok(Math.abs(m.gainPercent - ((160 - 300) / 300 * 100)) < 1e-9);
+});
+
+
+test('datos iniciales coinciden con la planilla final',()=>{
+  const m=withPortfolioPercent(portfolioMetrics(INITIAL_RESALE_PARTIES,{ownerPercent:70,sellerPercent:30}));
+  assert.equal(m.investment,2392000);
+  assert.equal(m.sales,250000);
+  assert.equal(m.recovered,105800);
+  assert.equal(m.netGain,144200);
+  assert.equal(Math.round(m.totalForOwner),206740);
+  assert.equal(m.available,63);
+  assert.equal(m.sold,4);
+  assert.equal(m.personal,1);
 });

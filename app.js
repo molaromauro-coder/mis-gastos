@@ -1,8 +1,15 @@
 import { parseExpenses } from './parser.js';
-import { normalizeSplit, ticketMetrics, partyMetrics, portfolioMetrics, withPortfolioPercent } from './resale.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses } from './reporting.js';
-import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics } from './finance.js';
-const STORAGE_KEY = 'mis-gastos-v1';
+import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard } from './finance.js';
+const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
+const resaleApi = sharedMode ? null : await import('./resale.js');
+const normalizeSplit = resaleApi?.normalizeSplit;
+const ticketMetrics = resaleApi?.ticketMetrics;
+const partyMetrics = resaleApi?.partyMetrics;
+const portfolioMetrics = resaleApi?.portfolioMetrics;
+const withPortfolioPercent = resaleApi?.withPortfolioPercent;
+if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
+const STORAGE_KEY = sharedMode ? 'mis-gastos-shared-v1' : 'mis-gastos-v1';
 const defaults = { expenses: [], cards: [], categories: [], stock: [], recoveries: [], budgets: {}, recurring: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 4 };
 function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], stock: old.stock || [], recoveries: old.recoveries || [], budgets: old.budgets || {}, recurring: old.recurring || [], trash: old.trash || [], security: { ...defaults.security, ...(old.security || {}) }, settings: { ...defaults.settings, ...(old.settings || {}), usdRateCache: old.settings?.usdRateCache || {} }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 4 }; } catch { return structuredClone(defaults); } }
 const state = loadState();
@@ -19,9 +26,7 @@ function renderHomeClock() {
   if($('#homeDate')) $('#homeDate').textContent=now.toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'long'});
   if($('#homeTime')) $('#homeTime').textContent=now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
 }
-function dateWithDay(y, m, d) { return new Date(y, m, Math.min(d || 1, new Date(y, m + 1, 0).getDate()), 12); }
-function firstDueDate(card, purchase = new Date()) { let due = dateWithDay(purchase.getFullYear(), purchase.getMonth(), card.dueDay); if (purchase.getDate() > Number(card.closingDay || card.dueDay) || due < purchase) due = dateWithDay(purchase.getFullYear(), purchase.getMonth() + 1, card.dueDay); return due; }
-function installmentExpenses(expense) { if (expense.method !== 'Crédito') return [expense]; const card = state.cards.find((c) => c.name === expense.card); if (!card) return [expense]; const first = firstDueDate(card, new Date(expense.purchaseDate || expense.date)); const count = Math.max(1, Number(expense.installments || 1)); if (count === 1) return [{ ...expense, dueDate: first.toISOString(), installment: 1, installments: 1 }]; return Array.from({ length: count }, (_, i) => ({ ...expense, id: crypto.randomUUID(), parentId: expense.id, dueDate: dateWithDay(first.getFullYear(), first.getMonth() + i, card.dueDay).toISOString(), amount: expense.amount / count, installment: i + 1, installments: count })); }
+function installmentExpenses(expense) { if (expense.method !== 'Crédito') return [expense]; const card = state.cards.find((c) => c.name === expense.card); if (!card) return [expense]; const first = firstDueDateForCard(card, new Date(expense.purchaseDate || expense.date)); const count = Math.max(1, Number(expense.installments || 1)); if (count === 1) return [{ ...expense, dueDate: first.toISOString(), installment: 1, installments: 1 }]; return Array.from({ length: count }, (_, i) => ({ ...expense, id: crypto.randomUUID(), parentId: expense.id, dueDate: dateWithCardDay(first.getFullYear(), first.getMonth() + i, card.dueDay).toISOString(), amount: expense.amount / count, installment: i + 1, installments: count })); }
 function totals(items) { return ['ARS', 'USD'].map((currency) => items.filter((e) => e.currency === currency).reduce((sum, e) => sum + Number(e.amount), 0)); }
 function totalsHTML(items) { const [ars, usd] = totals(items); return `${money(ars, 'ARS')}${usd ? ` · ${money(usd, 'USD')}` : ''}`; }
 function purchaseRows(date) { const day = state.expenses.filter((e) => sameDay(e.purchaseDate || e.date, date)); return day.filter((e) => !e.parentId || e.installment === 1); }
@@ -36,7 +41,7 @@ function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay
 function fillCategories() { $('#category').innerHTML = '<option value="">Sin categoría</option>' + state.categories.map((c) => `<option>${escape(c)}</option>`).join(''); $('#categoryList').innerHTML = state.categories.length ? state.categories.map((c, i) => `<button class="chip" data-category-index="${i}">${escape(c)} <span>×</span></button>`).join('') : '<p class="muted">Creá categorías como quieras; no hay una lista cerrada.</p>'; document.querySelectorAll('[data-category-index]').forEach((b) => { b.onclick = () => { state.categories.splice(Number(b.dataset.categoryIndex), 1); save(); fillCategories(); }; }); }
 function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
 function monthlyCardTotal(card, date) { return state.expenses.filter((e) => e.card === card.name && effectiveDate(e).getFullYear() === date.getFullYear() && effectiveDate(e).getMonth() === date.getMonth()); }
-function nextDue(card, now = new Date()) { let due = dateWithDay(now.getFullYear(), now.getMonth(), card.dueDay); if (due < now) due = dateWithDay(now.getFullYear(), now.getMonth() + 1, card.dueDay); return due; }
+function nextDue(card, now = new Date()) { const base=dateWithCardDay(now.getFullYear(),now.getMonth(),now.getDate()); let due = dateWithCardDay(base.getFullYear(), base.getMonth(), card.dueDay); if (due < base) due = dateWithCardDay(base.getFullYear(), base.getMonth() + 1, card.dueDay); return due; }
 function renderCards() {
   const now = new Date();
   $('#cardList').innerHTML = state.cards.length ? state.cards.map((card, i) => {
@@ -48,8 +53,12 @@ function renderCards() {
       ? `Cierra el ${card.closingDay} · Vence el ${card.dueDay}`
       : 'Débito inmediato · sin vencimiento de pago';
     const totalLabel = card.type === 'Crédito' ? 'ACUMULADO DEL MES' : 'TOTAL ACUMULADO';
+    const debitDetail = card.type === 'Débito'
+      ? `<details class="debit-detail"><summary>Ver movimientos</summary>${all.length ? all.slice().sort((a,b)=>new Date(b.purchaseDate||b.date)-new Date(a.purchaseDate||a.date)).map((e)=>`<div class="due-line"><span>${new Date(e.purchaseDate||e.date).toLocaleDateString('es-AR')} · ${escape(e.concept||'Sin detalle')}</span><strong>${money(e.amount,e.currency)}</strong></div>`).join('') : '<small class="muted">Sin movimientos.</small>'}</details>`
+      : '';
     return `<article class="card-item"><div class="top"><strong>${escape(card.name)}</strong><span>${card.type}</span></div>
       <p>${creditMeta}</p><div class="card-total"><small>${totalLabel}</small><strong>${card.type === 'Crédito' ? monthTotal : accumulated}</strong></div>
+      ${debitDetail}
       <div class="card-actions"><button class="edit-card" data-card-index="${i}">Editar</button><button class="delete-card" data-card-index="${i}">Eliminar</button></div></article>`;
   }).join('') : '<div class="empty">No agregaste tarjetas todavía.</div>';
 
@@ -69,7 +78,13 @@ function renderCards() {
   });
   document.querySelectorAll('.delete-card').forEach((b) => {
     b.onclick = () => {
-      if (!confirm('¿Eliminar esta tarjeta? Los gastos guardados no se borrarán.')) return;
+      const card=state.cards[Number(b.dataset.cardIndex)];
+      const linked=(state.recurring||[]).filter((r)=>r.card===card?.name);
+      const message=linked.length
+        ? `¿Eliminar ${card.name}? Los gastos guardados no se borrarán. ${linked.length} gasto(s) recurrente(s) quedarán desactivados.`
+        : '¿Eliminar esta tarjeta? Los gastos guardados no se borrarán.';
+      if (!confirm(message)) return;
+      if(card) state.recurring.forEach((r)=>{if(r.card===card.name){r.card='';r.active=false;}});
       state.cards.splice(Number(b.dataset.cardIndex), 1);
       save(); render();
     };
@@ -103,6 +118,11 @@ function reportLabel(range, from, to) {
 function renderReportRows(target, rows, kind) {
   target.innerHTML = rows.length ? rows.map((r) => `<button class="report-row" data-report-kind="${kind}" data-report-key="${escape(r.key)}"><span><strong>${escape(r.key)}</strong><small>${r.count} movimiento${r.count === 1 ? '' : 's'}${r.usd ? ` · ${money(r.usd,'USD')}` : ''}</small></span><strong>${money(r.arsEquivalent,'ARS')}</strong></button>`).join('') : '<div class="empty">Sin movimientos.</div>';
 }
+function renderReportChart(rows){
+  const target=$('#reportChart'); if(!target)return;
+  const top=rows.slice(0,6), max=Math.max(...top.map((r)=>r.arsEquivalent),1);
+  target.innerHTML=top.length?top.map((r)=>`<div class="report-chart-row"><span>${escape(r.key)}</span><div><i style="width:${Math.max(2,r.arsEquivalent/max*100)}%"></i></div><strong>${money(r.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin datos para graficar.</div>';
+}
 function renderReport() {
   if (!$('#reportCategories')) return;
   const [from,to] = boundsForRange(reportRange,new Date(),$('#fromDate').value,$('#toDate').value);
@@ -118,7 +138,9 @@ function renderReport() {
   $('#reportCombinedArs').textContent = money(combined,'ARS');
   const diff = prevCombined ? ((combined-prevCombined)/prevCombined)*100 : null;
   $('#reportComparison').textContent = diff == null ? 'Sin período previo' : `${diff >= 0 ? '+' : ''}${diff.toLocaleString('es-AR',{maximumFractionDigits:1})}%`;
-  renderReportRows($('#reportCategories'),groupExpenses(items,e=>e.category || 'Sin categoría'),'category');
+  const categoryRows=groupExpenses(items,e=>e.category || 'Sin categoría');
+  renderReportChart(categoryRows);
+  renderReportRows($('#reportCategories'),categoryRows,'category');
   renderReportRows($('#reportMethods'),groupExpenses(items,e=>e.method || 'Sin definir'),'method');
   const top = items.slice().sort((a,b)=>expenseArsEquivalent(b)-expenseArsEquivalent(a)).slice(0,8);
   $('#reportTop').innerHTML = top.length ? top.map((e) => `<button class="report-row report-expense"><span><strong>${escape(e.concept || 'Sin detalle')}</strong><small>${new Date(e.purchaseDate || e.date).toLocaleDateString('es-AR')} · ${escape(e.category || 'Sin categoría')} · ${escape(e.method || '')}</small></span><strong>${money(e.amount,e.currency)}</strong></button>`).join('') : '<div class="empty">Sin movimientos.</div>';
@@ -195,34 +217,55 @@ function feedback(ok) { navigator.vibrate?.(ok ? 50 : [120, 50, 120]); try { con
 function setManualStep(step) { manualStep = step; document.querySelectorAll('.step').forEach((e) => e.classList.toggle('active', Number(e.dataset.step) === step)); $('#stepLabel').textContent = `PASO ${step} DE 3`; $('#expenseDialogTitle').textContent = ['¿Cuánto gastaste?', 'Elegí una categoría', '¿Cómo pagaste?'][step - 1]; $('#prevStep').classList.toggle('hidden', step === 1); $('#nextStep').classList.toggle('hidden', step === 3); $('#saveExpense').classList.toggle('hidden', step !== 3); }
 function openExpense(data = {}) { $('#expenseForm').reset(); $('#amount').value = data.amount || ''; $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; $('#method').value = data.method === 'Sin definir' ? 'Efectivo' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; setManualStep(data.source === 'voice' ? 1 : 1); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
 function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
-function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value), count = Number($('#installments').value || 1), amount = Number($('#amount').value || 0); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDate(card); $('#installmentPreview').innerHTML = `<strong>${count} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${card.dueDay} de cada mes.</span>`; }
-function showPending() { if (!pending.length) { if ($('#confirmDialog').open) $('#confirmDialog').close(); return; } $('#pendingList').innerHTML = pending.map((e, i) => `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape([e.category, e.method, e.card, e.installments > 1 ? `${e.installments} cuotas` : ''].filter(Boolean).join(' · '))}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div><div class="actions"><button class="edit">Corregir</button><button class="confirm" ${!e.amount || (e.method === 'Crédito' && !e.card) ? 'disabled' : ''}>✓ Confirmar</button></div>${e.method === 'Crédito' && !e.card ? '<p class="muted">Corregí el gasto y elegí una tarjeta de crédito configurada.</p>' : ''}</article>`).join(''); if (!$('#confirmDialog').open) $('#confirmDialog').showModal(); document.querySelectorAll('.pending').forEach((card) => { const index = Number(card.dataset.index); card.querySelector('.confirm').onclick = () => confirmPending(index, card); card.querySelector('.edit').onclick = () => { const item = pending.splice(index, 1)[0]; $('#confirmDialog').close(); openExpense(item); }; let startY = 0; card.ontouchstart = (ev) => { startY = ev.touches[0].clientY; }; card.ontouchend = (ev) => { if (startY - ev.changedTouches[0].clientY < 65) return; card.classList.add('removing'); setTimeout(() => { discarded = { item: pending.splice(index, 1)[0], index }; feedback(false); showPending(); showToast('Gasto descartado', true); }, 180); }; }); }
+function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value), count = Number($('#installments').value || 1), amount = Number($('#amount').value || 0); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${count} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${card.dueDay} de cada mes.</span>`; }
+function pendingCreditDetail(e){
+  if(e.method!=='Crédito'||!e.card||!e.amount)return '';
+  const card=state.cards.find((c)=>c.name===e.card); if(!card)return '';
+  const count=Math.max(1,Number(e.installments||1));
+  const due=firstDueDateForCard(card,new Date(e.purchaseDate||e.date));
+  return `<div class="pending-credit-detail"><span>${count} cuota${count===1?'':'s'} de <strong>${money(Number(e.amount)/count,e.currency)}</strong></span><span>Primera cuota: <strong>${due.toLocaleDateString('es-AR')}</strong></span></div>`;
+}
+function showPending() {
+  if (!pending.length) { if ($('#confirmDialog').open) $('#confirmDialog').close(); return; }
+  $('#pendingList').innerHTML = pending.map((e, i) => { const needsCard=['Débito','Crédito'].includes(e.method)&&!e.card; return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape([e.category, e.method, e.card, e.installments > 1 ? `${e.installments} cuotas` : ''].filter(Boolean).join(' · '))}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingCreditDetail(e)}<div class="actions"><button class="edit">Corregir</button><button class="confirm" ${!e.amount || needsCard ? 'disabled' : ''}>✓ Confirmar</button></div>${needsCard ? '<p class="muted">Corregí el gasto y elegí una tarjeta o cuenta configurada.</p>' : ''}</article>`; }).join('');
+  if (!$('#confirmDialog').open) $('#confirmDialog').showModal();
+  document.querySelectorAll('.pending').forEach((card) => {
+    const index = Number(card.dataset.index);
+    card.querySelector('.confirm').onclick = () => confirmPending(index, card);
+    card.querySelector('.edit').onclick = () => { const item = pending.splice(index, 1)[0]; $('#confirmDialog').close(); openExpense(item); };
+    let startY = 0;
+    card.ontouchstart = (ev) => { startY = ev.touches[0].clientY; };
+    card.ontouchend = (ev) => { if (startY - ev.changedTouches[0].clientY < 65) return; card.classList.add('removing'); setTimeout(() => { discarded = { item: pending.splice(index, 1)[0], index }; feedback(false); showPending(); showToast('Gasto descartado', true); }, 180); };
+  });
+}
 
 const uid = () => crypto.randomUUID?.() || ('id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
 const pct = (n) => `${Number(n || 0).toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`;
 function resaleSplit() { return normalizeSplit(state.resale.ownerPercent, state.resale.sellerPercent); }
 function renderResale() {
-  if (!$('#resaleList')) return;
+  if (sharedMode || !$('#resaleList') || !resaleApi) return;
   const split = resaleSplit();
   state.resale.ownerPercent = split.ownerPercent;
   state.resale.sellerPercent = split.sellerPercent;
   const total = withPortfolioPercent(portfolioMetrics(state.resale.parties, split));
-  $('#resaleInvestment').textContent = money(total.investment, 'ARS');
+  $('#resaleRecovered').textContent = money(total.recovered, 'ARS');
   $('#resaleSales').textContent = money(total.sales, 'ARS');
   $('#resaleNet').textContent = money(total.netGain, 'ARS');
+  $('#resaleGainPercent').textContent = `${pct(total.gainPercent)} global de ganancias`;
   $('#resaleOwner').textContent = money(total.totalForOwner, 'ARS');
+  $('#resaleSeller').textContent = money(total.sellerGain, 'ARS');
   $('#resaleSplitLabel').textContent = `${split.ownerPercent}% Mauro · ${split.sellerPercent}% vendedor`;
   $('#resaleStock').textContent = `${total.available} disponibles · ${total.sold} vendidas · ${total.personal} uso personal`;
-  if ($('#resaleOwnerHead')) $('#resaleOwnerHead').textContent = `Mauro (${split.ownerPercent}%)`;
-  if ($('#resaleSellerHead')) $('#resaleSellerHead').textContent = `Vendedor (${split.sellerPercent}%)`;
+  if ($('#resaleOwnerHead')) $('#resaleOwnerHead').textContent = `Ganancia Mauro (${split.ownerPercent}%)`;
+  if ($('#resaleSellerHead')) $('#resaleSellerHead').textContent = `Total vendedor (${split.sellerPercent}%)`;
   if ($('#resaleBalanceBody')) {
     $('#resaleBalanceBody').innerHTML = state.resale.parties.map((party) => {
       const m = partyMetrics(party, split);
-      return `<tr><td><strong>${escape(party.name)}</strong></td><td>${money(m.investment,'ARS')}</td><td>${money(m.sales,'ARS')}</td><td>${money(m.recovered,'ARS')}</td><td>${money(m.totalForOwner,'ARS')}</td><td>${money(m.netGain,'ARS')}</td><td>${pct(m.gainPercent)}</td><td>${money(m.ownerGain,'ARS')}</td><td>${money(m.sellerGain,'ARS')}</td></tr>`;
+      return `<tr><td><strong>${escape(party.name)}</strong></td><td>${money(m.investment,'ARS')}</td><td>${money(m.recovered,'ARS')}</td><td>${money(m.sales,'ARS')}</td><td>${money(m.totalForOwner,'ARS')}</td><td>${money(m.netGain,'ARS')}</td><td>${pct(m.gainPercent)}</td><td>${money(m.ownerGain,'ARS')}</td><td>${money(m.sellerGain,'ARS')}</td></tr>`;
     }).join('');
   }
   if ($('#resaleBalanceTotal')) {
-    $('#resaleBalanceTotal').innerHTML = `<tr><th>TOTAL GENERAL</th><th>${money(total.investment,'ARS')}</th><th>${money(total.sales,'ARS')}</th><th>${money(total.recovered,'ARS')}</th><th>${money(total.totalForOwner,'ARS')}</th><th>${money(total.netGain,'ARS')}</th><th>${pct(total.gainPercent)}</th><th>${money(total.ownerGain,'ARS')}</th><th>${money(total.sellerGain,'ARS')}</th></tr>`;
+    $('#resaleBalanceTotal').innerHTML = `<tr><th>TOTAL GENERAL</th><th>${money(total.investment,'ARS')}</th><th>${money(total.recovered,'ARS')}</th><th>${money(total.sales,'ARS')}</th><th>${money(total.totalForOwner,'ARS')}</th><th>${money(total.netGain,'ARS')}</th><th>${pct(total.gainPercent)}</th><th>${money(total.ownerGain,'ARS')}</th><th>${money(total.sellerGain,'ARS')}</th></tr>`;
   }
   if (!state.resale.parties.length) {
     $('#resaleList').innerHTML = '<div class="empty">Todavía no cargaste ninguna fiesta. Tocá “＋ Compra” para empezar.</div>';
@@ -241,8 +284,9 @@ function renderResale() {
         <div class="resale-ticket-result"><span>Recuperado <strong>${money(tm.recovered, 'ARS')}</strong></span><span>Ganancia <strong>${money(tm.netGain, 'ARS')}</strong></span><span>% <strong>${sold ? pct(tm.gainPercent) : '—'}</strong></span><span>Mauro <strong>${money(tm.ownerGain, 'ARS')}</strong></span><span>Vendedor <strong>${money(tm.sellerGain, 'ARS')}</strong></span></div></div>
       </div>`;
     }).join('');
-    return `<details class="resale-party" data-party-id="${escape(party.id)}" open><summary><div><strong>${escape(party.name)}</strong><small>${party.date ? new Date(party.date + 'T12:00:00').toLocaleDateString('es-AR') : ''} · ${m.totalTickets} entradas</small></div><span>${money(m.netGain, 'ARS')}</span></summary>
-      <div class="resale-metrics"><div><small>Inversión</small><strong>${money(m.investment,'ARS')}</strong></div><div><small>Ventas</small><strong>${money(m.sales,'ARS')}</strong></div><div><small>Recuperado</small><strong>${money(m.recovered,'ARS')}</strong></div><div><small>Ganancia neta</small><strong>${money(m.netGain,'ARS')}</strong></div><div><small>% general</small><strong>${pct(m.gainPercent)}</strong></div><div><small>Total Mauro</small><strong>${money(m.totalForOwner,'ARS')}</strong></div></div>
+    return `<details class="resale-party" data-party-id="${escape(party.id)}"><summary><strong>${escape(party.name)}</strong><span>›</span></summary>
+      <div class="resale-party-meta">${party.date ? new Date(party.date + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin fecha'} · ${m.totalTickets} entradas</div>
+      <div class="resale-metrics"><div><small>Costo recuperado</small><strong>${money(m.recovered,'ARS')}</strong></div><div><small>Ventas</small><strong>${money(m.sales,'ARS')}</strong></div><div class="metric-wide"><small>Ganancia neta</small><strong>${money(m.netGain,'ARS')}</strong><em>${pct(m.gainPercent)} general</em></div><div><small>Total Mauro</small><strong>${money(m.totalForOwner,'ARS')}</strong></div><div><small>Total vendedor</small><strong>${money(m.sellerGain,'ARS')}</strong></div></div>
       <div class="resale-tickets">${tickets}</div><button class="delete-party" type="button">Eliminar fiesta</button></details>`;
   }).join('');
   document.querySelectorAll('.resale-ticket').forEach((row) => {
@@ -309,7 +353,12 @@ function renderRecurringSettings(){if(!$('#recurringList'))return;$('#recurringL
 function prepareRecurringDue(){const now=new Date(),key=monthKey(now),due=[];for(const r of state.recurring){if(r.active===false||Number(r.day||1)>now.getDate()||r.lastPromptedMonth===key)continue;due.push({id:uid(),amount:Number(r.amount),currency:r.currency,concept:r.concept,category:r.category||'',method:r.method,card:r.card||'',installments:1,date:now.toISOString(),purchaseDate:now.toISOString(),source:'recurring',recurringId:r.id});r.lastPromptedMonth=key;}if(due.length){pending.push(...due);save();showPending();}}
 
 function exportRowsForConsultation(){return consultationItems().map((e)=>({Fecha:new Date(e.purchaseDate||e.date).toLocaleString('es-AR'),Concepto:e.concept||'',Categoría:e.category||'',Medio:e.method||'',Tarjeta:e.card||'',Moneda:e.currency,Importe:Number(e.amount||0),Cotización:e.fxRate||'',EquivalenteARS:expenseArsEquivalent(e)}));}
-function exportConsultExcel(){const rows=exportRowsForConsultation(),headers=Object.keys(rows[0]||{Fecha:'',Concepto:'',Categoría:'',Medio:'',Tarjeta:'',Moneda:'',Importe:'',Cotización:'',EquivalenteARS:''});const esc=(v)=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const table=`<table><tr>${headers.map((h)=>`<th>${esc(h)}</th>`).join('')}</tr>${rows.map((r)=>`<tr>${headers.map((h)=>`<td>${esc(r[h])}</td>`).join('')}</tr>`).join('')}</table>`;const blob=new Blob(['\ufeff<html><meta charset="utf-8">'+table+'</html>'],{type:'application/vnd.ms-excel;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='mis-gastos.xls';a.click();URL.revokeObjectURL(url);}
+function exportConsultExcel(){
+  const rows=exportRowsForConsultation(),headers=Object.keys(rows[0]||{Fecha:'',Concepto:'',Categoría:'',Medio:'',Tarjeta:'',Moneda:'',Importe:'',Cotización:'',EquivalenteARS:''});
+  const csv=[headers,...rows.map((r)=>headers.map((h)=>r[h]))].map((row)=>row.map((v)=>`"${String(v??'').replaceAll('"','""')}"`).join(';')).join('\n');
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='mis-gastos-para-excel.csv';a.click();URL.revokeObjectURL(url);
+}
 function exportConsultPdf(){const rows=exportRowsForConsultation(),w=window.open('','_blank');if(!w)return showToast('El navegador bloqueó la ventana de exportación');const body=rows.map((r)=>`<tr><td>${escape(r.Fecha)}</td><td>${escape(r.Concepto)}</td><td>${escape(r.Categoría)}</td><td>${escape(r.Medio)}</td><td>${escape(r.Moneda)}</td><td>${escape(r.Importe)}</td><td>${escape(r.EquivalenteARS)}</td></tr>`).join('');w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Mis Gastos</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #ccc;padding:6px;text-align:left}h1{font-size:20px}</style></head><body><h1>Mis Gastos</h1><p>Exportación filtrada</p><table><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Medio</th><th>Moneda</th><th>Importe</th><th>Equiv. ARS</th></tr>${body}</table><script>window.onload=()=>window.print()<\/script></body></html>`);w.document.close();}
 
 function bytesToBase64(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes)));}
@@ -525,7 +574,7 @@ function goView(view) {
 async function confirmPending(index, card) { card.classList.add('confirmed'); let item = pending.splice(index, 1)[0]; item.purchaseDate ||= item.date; item = await stampUsdExpense(item); state.expenses.push(...installmentExpenses(item)); save(); feedback(true); showToast('✓ Gasto confirmado'); setTimeout(() => { showPending(); render(); }, 180); }
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
-$('#manualBtn').onclick = () => openExpense(); $('#homeSavingsBtn').onclick = () => goView('savings'); $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
+$('#manualBtn').onclick = () => openExpense(); $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
 $('#nextStep').onclick = () => { if (manualStep === 1 && !$('#amount').value) return $('#amount').reportValidity(); setManualStep(manualStep + 1); }; $('#prevStep').onclick = () => setManualStep(manualStep - 1);
 $('#method').onchange = updatePaymentFields; $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = updateInstallmentPreview; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
 $('#expenseForm').onsubmit = async (event) => {
@@ -535,7 +584,7 @@ $('#expenseForm').onsubmit = async (event) => {
   const now=new Date().toISOString();
   let expense={ id:crypto.randomUUID(), amount:Number($('#amount').value), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#category').value || 'Sin detalle', category:$('#category').value, method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
   expense=await stampUsdExpense(expense);
-  state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render();
+  state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render(); if(pending.length) setTimeout(showPending,180);
 };
 $('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textContent = 'Nueva tarjeta'; $('#cardForm').reset(); $('#creditCardDates').classList.remove('hidden'); $('#cardDialog').showModal(); }; $('#cardType').onchange = () => $('#creditCardDates').classList.toggle('hidden', $('#cardType').value !== 'Crédito'); $('#cardForm').onsubmit = (event) => {
   event.preventDefault();
@@ -549,6 +598,7 @@ $('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textCo
       const previousName = card.name;
       Object.assign(card, data);
       state.expenses.forEach((e) => { if (e.card === previousName) e.card = name; });
+      state.recurring.forEach((r) => { if (r.card === previousName) r.card = name; });
     }
   } else state.cards.push({ id: crypto.randomUUID(), ...data });
   editingCardId = null;
@@ -600,7 +650,7 @@ function startExpenseVoice() {
   activeRecognition = recognition;
   recognition.lang='es-AR';
   recognition.interimResults=true;
-  recognition.continuous=true;
+  recognition.continuous=false;
   recognition.maxAlternatives=1;
   recognition.onstart=()=>{
     $('#micBtn').classList.add('listening');
@@ -690,6 +740,7 @@ $('#consultMic').onclick=()=>{const SR=window.SpeechRecognition||window.webkitSp
 
 document.querySelectorAll('[data-menu-view]').forEach((button) => { button.onclick = () => { $('#menuDialog').close(); goView(button.dataset.menuView); }; });
 document.querySelectorAll('[data-menu-coming]').forEach((button) => { button.onclick = () => showToast(`${button.dataset.menuComing}: lo terminamos en la siguiente revisión`); });
+if(!sharedMode && resaleApi){
 $('#addResaleParty').onclick = () => $('#resalePartyDialog').showModal();
 $('#resalePartyForm').onsubmit = (event) => {
   event.preventDefault();
@@ -713,8 +764,9 @@ $('#resaleSplitForm').onsubmit = (event) => {
   save(); $('#resaleSplitDialog').close(); renderResale(); showToast('Reparto actualizado en toda Reventa');
 };
 $('#exportResale').onclick = exportResaleCsv;
-const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
+}
 
+
+window.addEventListener('pagehide',()=>{try{save();}catch{}}); document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){try{save();}catch{}}});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
 const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#consultFrom').value=todayISO.slice(0,8)+'01'; $('#consultTo').value=todayISO; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
