@@ -54,3 +54,25 @@ test('la voz no asigna una tarjeta de tipo incorrecto',()=>{
   const e=parseExpense('pagué 200 con débito Visa',[{name:'Visa',type:'Crédito'}]);
   assert.equal(e.method,'Débito'); assert.equal(e.card,'');
 });
+
+test('interpreta correctamente importes numéricos grandes y poco redondos',()=>{
+  const cases=[
+    ['1500000 pesos',1500000],
+    ['0584562 pesos',584562],
+    ['856340 pesos',856340],
+    ['854266 pesos',854266],
+    ['679684321 pesos',679684321],
+    ['1.500.000 pesos',1500000],
+    ['1 500 000 pesos',1500000],
+    ['584.562 pesos',584562],
+    ['856 340 pesos',856340],
+    ['679.684.321 pesos',679684321],
+    ['679 684 321 pesos',679684321]
+  ];
+  for(const [spoken,expected] of cases) assert.equal(parseAmount(spoken),expected,spoken);
+});
+test('mantiene importes difíciles al separar varios gastos dictados juntos',()=>{
+  const items=parseExpenses('Gasté 856340 pesos en supermercado y 854266 pesos de combustible');
+  assert.equal(items.length,2);
+  assert.deepEqual(items.map((x)=>x.amount),[856340,854266]);
+});
