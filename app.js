@@ -34,7 +34,7 @@ function seedDemoCardsOnce(){
 }
 seedDemoCardsOnce();
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
-let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '';
+let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null;
 const $ = (s) => document.querySelector(s);
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -118,17 +118,65 @@ function fillCategories() {
   const selected=$('#category')?.value||'';
   $('#category').innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(c)}</option>`).join('');
   if(selected&&state.categories.includes(selected))$('#category').value=selected;
-  $('#categoryList').innerHTML=state.categories.length?state.categories.map((c,i)=>{
-    const subs=subcategoriesFor(c);
-    return `<article class="settings-item reorderable" data-category-index="${i}" data-reorder-index="${i}"><div class="reorder-row"><span class="drag-grip">↕</span><div class="reorder-content"><strong>${escape(c)}</strong><div class="chips" data-subcategory-parent="${escape(c)}">${subs.length?subs.map((s,si)=>`<span class="chip subcategory-chip reorderable" data-reorder-index="${si}"><span class="drag-grip mini">↕</span><span>${escape(s)}</span><button type="button" class="chip-delete" data-delete-subcategory="${si}" data-category-name="${escape(c)}" aria-label="Eliminar ${escape(s)}">×</button></span>`).join(''):'<small class="muted">Sin subcategorías.</small>'}</div></div></div><div class="mini-actions"><button type="button" data-add-subcategory="${i}">＋ Subcategoría</button><button type="button" data-delete-category="${i}">Eliminar</button></div></article>`;
-  }).join(''):'<p class="muted">Creá categorías como quieras; cada una puede tener subcategorías.</p>';
-  document.querySelectorAll('[data-add-subcategory]').forEach((b)=>{b.onclick=()=>{const category=state.categories[Number(b.dataset.addSubcategory)];if(!category)return;const value=prompt(`Nueva subcategoría dentro de ${category}:`)?.trim();if(!value)return;const list=subcategoriesFor(category);if(list.some((s)=>s.toLowerCase()===value.toLowerCase()))return showToast('Esa subcategoría ya existe');state.subcategories[category]=[...list,value];save();fillCategories();};});
-  document.querySelectorAll('[data-delete-subcategory]').forEach((b)=>{b.onclick=()=>{const category=b.dataset.categoryName;const list=subcategoriesFor(category);const index=Number(b.dataset.deleteSubcategory);if(index<0||index>=list.length)return;state.subcategories[category]=list.filter((_,i)=>i!==index);save();fillCategories();};});
-  document.querySelectorAll('[data-delete-category]').forEach((b)=>{b.onclick=()=>{const index=Number(b.dataset.deleteCategory);const category=state.categories[index];if(!category)return;state.categories.splice(index,1);delete state.subcategories[category];save();fillCategories();};});
-  installPointerReorder($('#categoryList'),':scope > .settings-item',(from,to)=>{const [item]=state.categories.splice(from,1);state.categories.splice(to,0,item);save();fillCategories();},'button,.subcategory-chip,input,select');
-  document.querySelectorAll('.chips[data-subcategory-parent]').forEach((container)=>{
-    installPointerReorder(container,'.subcategory-chip',(from,to)=>{const category=container.dataset.subcategoryParent;const list=[...subcategoriesFor(category)];const [item]=list.splice(from,1);list.splice(to,0,item);state.subcategories[category]=list;save();fillCategories();},'button');
-  });
+
+  const list=$('#categoryList');
+  if(!list)return;
+  const active=activeSettingsCategory&&state.categories.includes(activeSettingsCategory)?activeSettingsCategory:'';
+  activeSettingsCategory=active;
+  $('#categoryForm')?.classList.toggle('hidden',!!active);
+  $('#categorySettingsIntro')?.classList.toggle('hidden',!!active);
+  if($('#categorySettingsTitle')) $('#categorySettingsTitle').textContent=active?active:'Categorías y subcategorías';
+
+  if(active){
+    const subs=subcategoriesFor(active);
+    list.innerHTML=`<div class="category-folder-head"><button type="button" id="categoryFolderBack" class="screen-back">← Categorías</button><small>SUBCATEGORÍAS DE</small><strong>${escape(active)}</strong></div>
+      <form id="subcategoryInlineForm" class="inline-form"><input id="newInlineSubcategory" maxlength="40" placeholder="Nueva subcategoría" required><button class="primary">Agregar</button></form>
+      <div id="subcategoryFolderList" class="subcategory-folder-list">${subs.length?subs.map((s,si)=>`<article class="subcategory-folder-item reorderable" data-reorder-index="${si}"><span class="drag-grip">↕</span><strong>${escape(s)}</strong><button type="button" class="chip-delete" data-delete-subcategory="${si}" aria-label="Eliminar ${escape(s)}">×</button></article>`).join(''):'<div class="empty">Todavía no agregaste subcategorías dentro de esta categoría.</div>'}</div>`;
+    $('#categoryFolderBack').onclick=()=>{activeSettingsCategory='';fillCategories();};
+    $('#subcategoryInlineForm').onsubmit=(event)=>{
+      event.preventDefault();
+      const value=$('#newInlineSubcategory').value.trim();
+      if(!value)return;
+      const current=subcategoriesFor(active);
+      if(current.some((s)=>s.toLowerCase()===value.toLowerCase()))return showToast('Esa subcategoría ya existe');
+      state.subcategories[active]=[...current,value];
+      $('#newInlineSubcategory').value='';
+      save();fillCategories();renderReport();
+    };
+    document.querySelectorAll('#subcategoryFolderList [data-delete-subcategory]').forEach((button)=>{
+      button.onclick=()=>{
+        const index=Number(button.dataset.deleteSubcategory), current=[...subcategoriesFor(active)];
+        if(index<0||index>=current.length)return;
+        const removed=current[index];
+        state.subcategories[active]=current.filter((_,i)=>i!==index);
+        state.expenses.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
+        save();fillCategories();renderReport();
+      };
+    });
+    installPointerReorder($('#subcategoryFolderList'),'.subcategory-folder-item',(from,to)=>{
+      const current=[...subcategoriesFor(active)], [item]=current.splice(from,1);
+      current.splice(to,0,item);state.subcategories[active]=current;save();fillCategories();renderReport();
+    },'button');
+  } else {
+    list.innerHTML=state.categories.length?state.categories.map((c,i)=>{
+      const count=subcategoriesFor(c).length;
+      return `<article class="category-folder-row reorderable" data-reorder-index="${i}"><span class="drag-grip">↕</span><button type="button" class="category-folder-open" data-open-category="${i}"><span><strong>${escape(c)}</strong><small>${count?count+' subcategoría'+(count===1?'':'s'):'Sin subcategorías'}</small></span><b>›</b></button><button type="button" class="category-folder-delete" data-delete-category="${i}" aria-label="Eliminar ${escape(c)}">×</button></article>`;
+    }).join(''):'<p class="muted">Creá categorías como quieras; cada una puede tener subcategorías.</p>';
+    document.querySelectorAll('[data-open-category]').forEach((button)=>{
+      button.onclick=()=>{activeSettingsCategory=state.categories[Number(button.dataset.openCategory)]||'';fillCategories();};
+    });
+    document.querySelectorAll('[data-delete-category]').forEach((button)=>{
+      button.onclick=()=>{
+        const index=Number(button.dataset.deleteCategory), category=state.categories[index];
+        if(!category)return;
+        if(!confirm(`¿Eliminar la categoría ${category}? Los gastos ya registrados conservarán el nombre hasta que los edites.`))return;
+        state.categories.splice(index,1);delete state.subcategories[category];save();fillCategories();renderReport();
+      };
+    });
+    installPointerReorder(list,'.category-folder-row',(from,to)=>{
+      const [item]=state.categories.splice(from,1);state.categories.splice(to,0,item);save();fillCategories();renderReport();
+    },'button');
+  }
   fillSubcategories();
 }
 function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
@@ -179,6 +227,20 @@ function renderReportChart(rows){
   const top=rows.slice(0,6), max=Math.max(...top.map((r)=>r.arsEquivalent),1);
   target.innerHTML=top.length?top.map((r)=>`<div class="report-chart-row"><span>${escape(r.key)}</span><div><i style="width:${Math.max(2,r.arsEquivalent/max*100)}%"></i></div><strong>${money(r.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin datos para graficar.</div>';
 }
+function configuredCategoryRows(items){
+  const grouped=groupExpenses(items,e=>e.category || 'Sin categoría');
+  const map=new Map(grouped.map((row)=>[row.key,row]));
+  const configured=state.categories.map((category)=>map.get(category)||{key:category,ars:0,usd:0,arsEquivalent:0,count:0});
+  const extras=grouped.filter((row)=>!state.categories.includes(row.key));
+  return [...configured,...extras];
+}
+function configuredCardRows(items,method){
+  const grouped=groupExpenses(items.filter((e)=>e.method===method),e=>e.card || 'Sin tarjeta');
+  const map=new Map(grouped.map((row)=>[row.key,row]));
+  const configured=state.cards.filter((card)=>card.type===method).map((card)=>map.get(card.name)||{key:card.name,ars:0,usd:0,arsEquivalent:0,count:0});
+  const extras=grouped.filter((row)=>!state.cards.some((card)=>card.type===method&&card.name===row.key));
+  return [...configured,...extras];
+}
 function renderReport() {
   if (!$('#reportCategories')) return;
   const [from,to] = boundsForRange(reportRange,new Date(),$('#fromDate').value,$('#toDate').value);
@@ -194,8 +256,8 @@ function renderReport() {
   $('#reportCombinedArs').textContent = money(combined,'ARS');
   const diff = prevCombined ? ((combined-prevCombined)/prevCombined)*100 : null;
   $('#reportComparison').textContent = diff == null ? 'Sin período previo' : `${diff >= 0 ? '+' : ''}${diff.toLocaleString('es-AR',{maximumFractionDigits:1})}%`;
-  const categoryRows=groupExpenses(items,e=>e.category || 'Sin categoría');
-  renderReportChart(categoryRows);
+  const categoryRows=configuredCategoryRows(items);
+  renderReportChart(categoryRows.filter((r)=>r.arsEquivalent>0));
   renderReportRows($('#reportCategories'),categoryRows,'category');
   renderReportRows($('#reportMethods'),groupExpenses(items,e=>e.method || 'Sin definir'),'method');
   const top = items.slice().sort((a,b)=>expenseArsEquivalent(b)-expenseArsEquivalent(a)).slice(0,8);
@@ -203,8 +265,24 @@ function renderReport() {
   $('#reportDrilldown').classList.add('hidden');
   document.querySelectorAll('[data-report-kind]').forEach((b) => b.onclick = () => {
     const kind=b.dataset.reportKind, key=b.dataset.reportKey;
-    const filtered=items.filter((e)=> (kind==='category' ? (e.category || 'Sin categoría') : (e.method || 'Sin definir')) === key);
-    $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">Cerrar</button></div>${filtered.map((e)=>expenseHTML(e,true)).join('')}`;
+    if(kind==='category'){
+      const filtered=items.filter((e)=>(e.category||'Sin categoría')===key);
+      const configuredSubs=subcategoriesFor(key);
+      const groupedSubs=groupExpenses(filtered,e=>e.subcategory || 'Sin subcategoría');
+      const subMap=new Map(groupedSubs.map((row)=>[row.key,row]));
+      const rows=[
+        ...configuredSubs.map((sub)=>subMap.get(sub)||{key:sub,ars:0,usd:0,arsEquivalent:0,count:0}),
+        ...groupedSubs.filter((row)=>!configuredSubs.includes(row.key))
+      ];
+      $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">← Atrás</button></div><p class="muted">Subcategorías</p><div class="report-list">${rows.length?rows.map((row)=>`<div class="report-row static"><span><strong>${escape(row.key)}</strong><small>${row.count} movimiento${row.count===1?'':'s'}</small></span><strong>${money(row.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin subcategorías.</div>'}</div>${filtered.length?filtered.map((e)=>expenseHTML(e,true)).join(''):'<div class="empty">Todavía no hay gastos en esta categoría.</div>'}`;
+    } else if(kind==='method'&&['Débito','Crédito'].includes(key)){
+      const filtered=items.filter((e)=>e.method===key);
+      const rows=configuredCardRows(items,key);
+      $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">← Atrás</button></div><p class="muted">${key==='Débito'?'Tarjetas y cuentas de débito':'Tarjetas de crédito'}</p><div class="report-list">${rows.map((row)=>`<div class="report-row static"><span><strong>${escape(row.key)}</strong><small>${row.count} movimiento${row.count===1?'':'s'}</small></span><strong>${money(row.arsEquivalent,'ARS')}</strong></div>`).join('')}</div>${filtered.length?filtered.map((e)=>expenseHTML(e,true)).join(''):'<div class="empty">Todavía no hay gastos con este medio de pago.</div>'}`;
+    } else {
+      const filtered=items.filter((e)=>(e.method||'Sin definir')===key);
+      $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">← Atrás</button></div>${filtered.length?filtered.map((e)=>expenseHTML(e,true)).join(''):'<div class="empty">Sin movimientos.</div>'}`;
+    }
     $('#reportDrilldown').classList.remove('hidden');
     $('#closeReportDetail').onclick=()=>$('#reportDrilldown').classList.add('hidden');
   });
@@ -924,7 +1002,37 @@ $('#categoryForm').onsubmit = (event) => { event.preventDefault(); addCategory()
 $('#quickCategory').onclick = () => { const value = prompt('Nombre de la nueva categoría:')?.trim(); if (!value) return; $('#newCategory').value = value; addCategory(); $('#category').value = value; fillSubcategories(); };
 $('#quickSubcategory').onclick = () => { const category=$('#category').value; if(!category)return showToast('Elegí primero una categoría'); const value=prompt(`Nueva subcategoría dentro de ${category}:`)?.trim(); if(!value)return; if(!addSubcategory(category,value))return showToast('Esa subcategoría ya existe'); fillSubcategories(value); };
 function renderReminderSettings() { const labels = { 3: '3 días antes', 2: '2 días antes', 1: '1 día antes' }; $('#reminderSettings').innerHTML = [3, 2, 1].map((d) => `<label><input type="checkbox" value="${d}" ${state.settings.reminderDays.includes(d) ? 'checked' : ''}>${labels[d]}</label>`).join(''); $('#reminderSettings').onchange = () => { state.settings.reminderDays = [...$('#reminderSettings').querySelectorAll(':checked')].map((i) => Number(i.value)); save(); renderPaymentReminders(); }; }
-$('#settingsBtn').onclick = () => { renderReminderSettings(); fillCategories(); renderRecurringSettings(); renderTrash(); renderSecurityStatus(); $('#settingsDialog').showModal(); }; $('#biometricBtn').onclick = openSecuritySetup;
+function cloneState(){return typeof structuredClone==='function'?structuredClone(state):JSON.parse(JSON.stringify(state));}
+function restoreState(snapshot){
+  Object.keys(state).forEach((key)=>delete state[key]);
+  Object.assign(state,cloneState.call(null,snapshot));
+}
+function settingsHasChanges(){return settingsSnapshot&&JSON.stringify(state)!==JSON.stringify(settingsSnapshot);}
+function closeSettingsKeepingChanges(){
+  save();settingsSnapshot=null;activeSettingsCategory='';$('#settingsDialog').close();render();
+}
+function closeSettingsDiscardingChanges(){
+  if(settingsSnapshot){restoreState(settingsSnapshot);save();}
+  settingsSnapshot=null;activeSettingsCategory='';$('#settingsSaveDialog')?.close();$('#settingsDialog').close();render();
+}
+$('#settingsBtn').onclick = () => {
+  settingsSnapshot=cloneState();activeSettingsCategory='';
+  renderReminderSettings();fillCategories();renderRecurringSettings();renderTrash();renderSecurityStatus();
+  $('#settingsDialog').showModal();
+};
+$('#settingsBack').onclick=()=>{
+  if(activeSettingsCategory){activeSettingsCategory='';fillCategories();return;}
+  closeSettingsKeepingChanges();
+};
+$('#settingsClose').onclick=()=>{
+  if(!settingsHasChanges()){settingsSnapshot=null;activeSettingsCategory='';$('#settingsDialog').close();return;}
+  $('#settingsSaveDialog').showModal();
+};
+$('#settingsKeep').onclick=()=>{ $('#settingsSaveDialog').close(); closeSettingsKeepingChanges(); };
+$('#settingsDiscard').onclick=()=>closeSettingsDiscardingChanges();
+$('#settingsCancelClose').onclick=()=>$('#settingsSaveDialog').close();
+$('#settingsDialog').addEventListener('cancel',(event)=>{event.preventDefault();$('#settingsClose').click();});
+$('#biometricBtn').onclick = openSecuritySetup;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let activeRecognition = null;
 let voiceTranscript = '';
