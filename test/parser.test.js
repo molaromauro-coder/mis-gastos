@@ -37,6 +37,41 @@ test('separa dos gastos cuando iPhone transcribe miles con coma',()=>{
   const items=parseExpenses('Gasté 50,000 pesos en kiosco y 50,000 pesos en supermercado');
   assert.equal(items.length,2); assert.deepEqual(items.map((x)=>x.amount),[50000,50000]);
 });
+
+test('separa tres gastos cuando se repite gasté sin decir y',()=>{
+  const items=parseExpenses('Gasté 70 mil pesos en supermercado gasté 50 mil pesos en kiosco gasté 90 mil pesos de combustible');
+  assert.equal(items.length,3);
+  assert.deepEqual(items.map((x)=>x.amount),[70000,50000,90000]);
+  assert.match(items[0].concept,/supermercado/i);
+  assert.match(items[1].concept,/kiosco/i);
+  assert.match(items[2].concept,/combustible/i);
+});
+
+test('separa tres gastos aunque el importe vaya después del concepto',()=>{
+  const items=parseExpenses('Gasté en supermercado 70 mil pesos, gasté en kiosco 50 mil pesos, gasté combustible 90 mil pesos');
+  assert.equal(items.length,3);
+  assert.deepEqual(items.map((x)=>x.amount),[70000,50000,90000]);
+});
+
+test('no separa pagué con una tarjeta como si fuera otro gasto',()=>{
+  const cards=[{name:'Mercado Pago',type:'Débito'}];
+  const items=parseExpenses('Gasté 50 mil pesos en supermercado, pagué con Mercado Pago',cards);
+  assert.equal(items.length,1);
+  assert.equal(items[0].amount,50000);
+  assert.equal(items[0].card,'Mercado Pago');
+});
+
+test('separa varios gastos que empiezan con pagué cuando cada uno tiene importe',()=>{
+  const items=parseExpenses('Pagué 20 mil pesos en kiosco pagué 30 mil pesos de combustible');
+  assert.equal(items.length,2);
+  assert.deepEqual(items.map((x)=>x.amount),[20000,30000]);
+});
+
+test('una corrección con un segundo gasté sigue siendo un solo gasto',()=>{
+  const items=parseExpenses('Gasté 60 mil en kiosco, perdón, gasté 50 mil en kiosco');
+  assert.equal(items.length,1);
+  assert.equal(items[0].amount,50000);
+});
 test('entiende millones y categorías configuradas', () => {
   assert.equal(parseAmount('un millón de pesos'), 1000000);
   const e = parseExpense('gasté 50 dólares en comida', [], ['Comida']);
