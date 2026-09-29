@@ -118,7 +118,7 @@ export function ticketMetrics(ticket, split = { ownerPercent: 70, sellerPercent:
 
 export function partyMetrics(party, split) {
   const tickets = party?.tickets || [];
-  const investment = tickets.reduce((sum, t) => sum + Number(t.cost || 0), 0);
+  const investment = tickets.filter((t)=>(t.status || 'Disponible') !== 'Uso personal').reduce((sum, t) => sum + Number(t.cost || 0), 0);
   const metrics = tickets.map((t) => ticketMetrics(t, split));
   const sales = metrics.reduce((sum, m) => sum + m.salePrice, 0);
   const recovered = metrics.reduce((sum, m) => sum + m.recovered, 0);
