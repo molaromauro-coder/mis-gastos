@@ -4,7 +4,8 @@ export function dateWithCardDay(year,month,day){
   return new Date(year,month,Math.min(Number(day||1),new Date(year,month+1,0).getDate()),12);
 }
 export function firstDueDateForCard(card,purchase=new Date()){
-  const bought=purchase instanceof Date?purchase:new Date(purchase);
+  const source=purchase instanceof Date?purchase:new Date(purchase);
+  const bought=dateWithCardDay(source.getFullYear(),source.getMonth(),source.getDate());
   const closingDay=Number(card?.closingDay||card?.dueDay||1);
   const dueDay=Number(card?.dueDay||1);
   let closing=dateWithCardDay(bought.getFullYear(),bought.getMonth(),closingDay);
