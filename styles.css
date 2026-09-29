@@ -95,3 +95,6 @@ nav{display:none!important}.menu-dialog{background:#f5f9fc;border-radius:28px 28
 
 /* voice-cancel-v2 */
 dialog{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.voice-trash{display:flex;align-items:center;justify-content:center;gap:8px;min-height:38px;margin:0 auto 6px;opacity:0;transform:translateY(12px) scale(.9);transition:.18s;pointer-events:none;font-weight:800}.voice-trash span{font-size:24px}.voice-trash small{margin:0!important}.voice-zone.recording .voice-trash{opacity:.72;transform:translateY(0) scale(1)}.voice-zone.cancel-ready .voice-trash,.voice-trash.armed{opacity:1;transform:translateY(-2px) scale(1.08)}.voice-zone.cancel-ready .mic{background:#ef8178}.voice-pay.listening{opacity:.75;font-weight:800}
+
+/* pending-voice-feedback-v22 */
+.voice-pay,.pending-payment-actions button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}.voice-pay.listening{animation:voiceAnswerPulse .9s ease-in-out infinite;opacity:1}@keyframes voiceAnswerPulse{50%{transform:scale(1.02);box-shadow:0 0 0 7px rgba(23,63,55,.12)}}

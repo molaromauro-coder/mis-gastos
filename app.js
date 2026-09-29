@@ -295,6 +295,15 @@ function applyPendingPaymentVoice(index,phrase){
   if(!item.card) showToast(cards.length?'Decí o elegí qué tarjeta o cuenta usaste':'Primero agregá una tarjeta o cuenta de este tipo');
 }
 let pendingVoiceRecognition=null;
+function pendingVoiceStartCue(){
+  navigator.vibrate?.(25);
+  try{
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    if(!AudioCtx)return;
+    const ctx=new AudioCtx(),osc=ctx.createOscillator(),gain=ctx.createGain();
+    osc.frequency.value=620; gain.gain.value=.02; osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+.06);
+  }catch{}
+}
 function startPendingPaymentVoice(index){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   const process=(phrase)=>applyPendingPaymentVoice(index,phrase);
@@ -304,6 +313,8 @@ function startPendingPaymentVoice(index){
   if(!SR){const phrase=prompt('Decí o escribí el medio, la tarjeta o la cantidad de cuotas.');if(phrase)process(phrase);return;}
   const rec=new SR();pendingVoiceRecognition=rec;rec.lang='es-AR';rec.interimResults=false;rec.continuous=false;rec.maxAlternatives=1;
   let phrase='';
+  if(button){button.classList.add('listening');button.textContent='🎙 Escuchando…';}
+  pendingVoiceStartCue();
   rec.onstart=()=>{if(button){button.disabled=true;button.classList.add('listening');button.textContent='🎙 Escuchando…';}showToast('🎙 Escuchando…');};
   rec.onresult=(event)=>{phrase=event.results[event.resultIndex][0].transcript.trim();};
   rec.onerror=(event)=>{if(event.error!=='aborted')showToast(event.error==='not-allowed'?'Activá el permiso del micrófono':'No pude escuchar la respuesta');};
