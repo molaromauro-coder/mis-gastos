@@ -309,15 +309,26 @@ function pendingPaymentPrompt(e,i){
 function applyPendingPaymentVoice(index,phrase){
   const item=pending[index]; if(!item)return;
   const spoken=normVoiceChoice(phrase);
-  let method=item.method;
-  if(/\befectivo\b/.test(spoken)) method='Efectivo';
-  else if(/\bdebito\b/.test(spoken)) method='Débito';
-  else if(/\bcredito\b/.test(spoken)) method='Crédito';
-  if(method==='Sin definir'){showToast('Decí efectivo, débito o crédito');return;}
+  const namedAll=state.cards
+    .filter((c)=>c?.name&&spoken.includes(normVoiceChoice(c.name)))
+    .map((c)=>({c,index:spoken.lastIndexOf(normVoiceChoice(c.name))}))
+    .sort((a,b)=>b.index-a.index);
+  const explicit=[...spoken.matchAll(/\b(efectivo|debito|credito)\b/g)];
+  let method=explicit.length?({efectivo:'Efectivo',debito:'Débito',credito:'Crédito'}[explicit.at(-1)[1]]):item.method;
+  if(!explicit.length&&namedAll.length){
+    if(namedAll.some(({c})=>normVoiceChoice(c.name)==='mercado pago')) method='Débito';
+    else {
+      const types=[...new Set(namedAll.map(({c})=>c.type).filter(Boolean))];
+      if(types.length===1) method=types[0];
+    }
+  }
+  if(method==='Sin definir'){showToast('Decí efectivo, débito o crédito, o nombrá una tarjeta configurada');return;}
+  const methodChanged=item.method!==method;
   item.method=method;
   if(method==='Efectivo'){item.card='';item.installments=1;item.installmentsSpecified=true;showPending();return;}
   if(method==='Débito'){item.installments=1;item.installmentsSpecified=true;}
   if(method==='Crédito'){
+    if(methodChanged&&item.installmentsSpecified!==true)item.installmentsSpecified=false;
     const installmentDigits=spoken.match(/\b(\d{1,2})(?:\s*cuotas?)?\b/);
     let installmentCount=installmentDigits?Number(installmentDigits[1]):null;
     if(!installmentCount){
@@ -328,8 +339,9 @@ function applyPendingPaymentVoice(index,phrase){
     else if(item.installmentsSpecified!==true)item.installmentsSpecified=false;
   }
   const cards=state.cards.filter((c)=>c.type===method);
-  const named=cards.find((c)=>spoken.includes(normVoiceChoice(c.name)));
+  const named=namedAll.find(({c})=>c.type===method)?.c || cards.find((c)=>spoken.includes(normVoiceChoice(c.name)));
   if(named)item.card=named.name;
+  else if(methodChanged)item.card='';
   showPending();
   if(!item.card) showToast(cards.length?'Decí o elegí qué tarjeta o cuenta usaste':'Primero agregá una tarjeta o cuenta de este tipo');
 }
@@ -350,14 +362,14 @@ function startPendingPaymentVoice(index){
   const restore=()=>{if(button){button.disabled=false;button.classList.remove('listening');button.textContent='🎙 Responder por voz';}};
   if(pendingVoiceRecognition){showToast('Ya estoy escuchando');return;}
   if(!SR){const phrase=prompt('Decí o escribí el medio, la tarjeta o la cantidad de cuotas.');if(phrase)process(phrase);return;}
-  const rec=new SR();pendingVoiceRecognition=rec;rec.lang='es-AR';rec.interimResults=false;rec.continuous=false;rec.maxAlternatives=1;
+  const rec=new SR();pendingVoiceRecognition=rec;rec.lang='es-AR';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
   let phrase='';
   if(button){button.classList.add('listening');button.textContent='🎙 Escuchando…';}
   pendingVoiceStartCue();
   rec.onstart=()=>{if(button){button.disabled=true;button.classList.add('listening');button.textContent='🎙 Escuchando…';}showToast('🎙 Escuchando…');};
-  rec.onresult=(event)=>{phrase=event.results[event.resultIndex][0].transcript.trim();};
+  rec.onresult=(event)=>{let text='';for(let i=0;i<event.results.length;i++)text+=' '+(event.results[i][0]?.transcript||'');phrase=text.trim();};
   rec.onerror=(event)=>{if(event.error!=='aborted')showToast(event.error==='not-allowed'?'Activá el permiso del micrófono':'No pude escuchar la respuesta');};
-  rec.onend=()=>{pendingVoiceRecognition=null;restore();if(phrase)process(phrase);};
+  rec.onend=()=>{pendingVoiceRecognition=null;restore();if(phrase)process(phrase);else showToast('No escuché una respuesta. Probá de nuevo o elegí manualmente');};
   try{rec.start();}catch{pendingVoiceRecognition=null;restore();showToast('No pude iniciar el micrófono');}
 }
 function showPending() {
@@ -815,8 +827,11 @@ $('#settingsBtn').onclick = () => { renderReminderSettings(); fillCategories(); 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let activeRecognition = null;
 let voiceTranscript = '';
+let voiceCycleText = '';
 let voiceError = '';
 let voiceCancelled = false;
+let voiceHoldActive = false;
+let voiceStopRequested = false;
 let voiceGestureStartY = null;
 let voiceCancelArmed = false;
 function resetExpenseVoiceUI() {
@@ -827,59 +842,58 @@ function resetExpenseVoiceUI() {
   $('#voiceHint').textContent='para hablar';
 }
 function finishExpenseVoice() {
-  if(voiceCancelled){voiceTranscript='';voiceError='';voiceCancelled=false;voiceGestureStartY=null;voiceCancelArmed=false;resetExpenseVoiceUI();return;}
+  voiceHoldActive=false; voiceStopRequested=false;
+  if(voiceCancelled){voiceTranscript='';voiceCycleText='';voiceError='';voiceCancelled=false;voiceGestureStartY=null;voiceCancelArmed=false;resetExpenseVoiceUI();return;}
   const phrase=voiceTranscript.trim();
   const err=voiceError;
-  voiceTranscript=''; voiceError='';
+  voiceTranscript=''; voiceCycleText=''; voiceError='';
   resetExpenseVoiceUI();
   if (phrase) {
-    pending=parseExpenses(phrase,state.cards,state.categories);
+    pending=parseExpenses(phrase,state.cards,state.categories,{subcategories:state.subcategories});
     if (pending.length) showPending();
     else showToast('Escuché el audio, pero no pude interpretar el gasto');
   } else if (!err) {
     showToast('No llegué a reconocer lo que dijiste. Probá de nuevo');
   }
 }
-function startExpenseVoice() {
-  if (activeRecognition) return;
-  window.getSelection?.()?.removeAllRanges?.();
-  if (!SpeechRecognition) {
-    const phrase = prompt('El navegador no ofrece reconocimiento de voz. Escribí los gastos:');
-    if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories); showPending(); }
-    return;
-  }
-  voiceTranscript=''; voiceError=''; voiceCancelled=false; voiceCancelArmed=false; voiceGestureStartY=null;
-  const recognition = new SpeechRecognition();
-  activeRecognition = recognition;
-  recognition.lang='es-AR';
-  recognition.interimResults=true;
-  recognition.continuous=false;
-  recognition.maxAlternatives=1;
+function launchExpenseRecognitionCycle(){
+  if(!voiceHoldActive||voiceCancelled||voiceStopRequested||activeRecognition)return;
+  const recognition=new SpeechRecognition();
+  activeRecognition=recognition; voiceCycleText='';
+  recognition.lang='es-AR'; recognition.interimResults=true; recognition.continuous=false; recognition.maxAlternatives=1;
   recognition.onstart=()=>{
     $('#micBtn').classList.add('listening');
     $('#voiceZone')?.classList.add('recording');
     $('#voiceTitle').textContent='Escuchando…';
-    $('#voiceHint').textContent='Soltá cuando termines';
+    $('#voiceHint').textContent='Seguí hablando; soltá cuando termines';
   };
-  recognition.onresult=(event)=>{
-    let text='';
-    for(let i=0;i<event.results.length;i++) text += ' ' + (event.results[i][0]?.transcript || '');
-    voiceTranscript=text.trim();
-  };
-  recognition.onerror=(event)=>{
-    voiceError=event.error || 'error';
-    if (!['aborted','no-speech'].includes(voiceError)) showToast('No pude escuchar. Revisá el permiso del micrófono');
-  };
+  recognition.onresult=(event)=>{let text='';for(let i=0;i<event.results.length;i++)text+=' '+(event.results[i][0]?.transcript||'');voiceCycleText=text.trim();};
+  recognition.onerror=(event)=>{voiceError=event.error||'error';if(!['aborted','no-speech'].includes(voiceError))showToast('No pude escuchar. Revisá el permiso del micrófono');};
   recognition.onend=()=>{
-    activeRecognition=null;
+    if(voiceCycleText){voiceTranscript=[voiceTranscript,voiceCycleText].filter(Boolean).join(' ').trim();}
+    activeRecognition=null; voiceCycleText='';
+    if(voiceCancelled){finishExpenseVoice();return;}
+    if(voiceHoldActive&&!voiceStopRequested){setTimeout(launchExpenseRecognitionCycle,120);return;}
     finishExpenseVoice();
   };
-  try { recognition.start(); }
-  catch { activeRecognition=null; resetExpenseVoiceUI(); showToast('No pude iniciar el micrófono'); }
+  try{recognition.start();}catch{activeRecognition=null;if(voiceHoldActive&&!voiceStopRequested)setTimeout(launchExpenseRecognitionCycle,180);else finishExpenseVoice();}
+}
+function startExpenseVoice() {
+  if (activeRecognition||voiceHoldActive) return;
+  window.getSelection?.()?.removeAllRanges?.();
+  if (!SpeechRecognition) {
+    const phrase = prompt('El navegador no ofrece reconocimiento de voz. Escribí los gastos:');
+    if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories, {subcategories:state.subcategories}); showPending(); }
+    return;
+  }
+  voiceTranscript='';voiceCycleText='';voiceError='';voiceCancelled=false;voiceCancelArmed=false;voiceGestureStartY=null;voiceStopRequested=false;voiceHoldActive=true;
+  launchExpenseRecognitionCycle();
 }
 function stopExpenseVoice() {
-  if (!activeRecognition) return;
-  try { activeRecognition.stop(); } catch {}
+  if(!voiceHoldActive&&!activeRecognition)return;
+  voiceHoldActive=false;voiceStopRequested=true;
+  if(activeRecognition){try{activeRecognition.stop();}catch{activeRecognition=null;finishExpenseVoice();}}
+  else finishExpenseVoice();
 }
 const micBtn=$('#micBtn');
 const voiceTrash=$('#voiceTrash');
@@ -893,10 +907,11 @@ function updateVoiceCancelGesture(clientY){
   $('#voiceHint').textContent=armed?'Soltá para cancelar':'Deslizá hacia el tacho para cancelar';
 }
 function cancelExpenseVoice(){
-  if(!activeRecognition)return;
-  voiceCancelled=true;voiceCancelArmed=false;voiceGestureStartY=null;
+  if(!activeRecognition&&!voiceHoldActive)return;
+  voiceCancelled=true;voiceHoldActive=false;voiceStopRequested=true;voiceCancelArmed=false;voiceGestureStartY=null;
   feedback(false);showToast('Grabación descartada');
-  try{activeRecognition.abort();}catch{resetExpenseVoiceUI();activeRecognition=null;voiceCancelled=false;}
+  if(activeRecognition){try{activeRecognition.abort();}catch{activeRecognition=null;finishExpenseVoice();}}
+  else finishExpenseVoice();
 }
 if ('ontouchstart' in window) {
   micBtn.addEventListener('touchstart',(e)=>{e.preventDefault();voiceGestureStartY=e.touches[0]?.clientY??null;startExpenseVoice();},{passive:false});

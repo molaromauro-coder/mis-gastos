@@ -239,18 +239,62 @@ export function parseExpense(text,cards=[],categories=[],options={}){
   const raw=String(text||'').trim();
   const lower=normalized(raw);
   const referenceDate=options?.now?new Date(options.now):new Date();
-  const amount=parseAmount(lower);
+  const correctionParts=lower.split(/\b(?:no+|perdon|quise decir|mejor)\b/).map((x)=>x.trim()).filter(Boolean);
+
+  let amount=parseAmount(lower);
+  for(let i=correctionParts.length-1;i>=1;i--){
+    const candidate=parseAmount(correctionParts[i]);
+    if(candidate!=null&&candidate>0){amount=candidate;break;}
+  }
   const currency=/(?:usd|u\$s|dolar)/.test(lower)?'USD':'ARS';
-  const installmentInfo=parseInstallments(lower);
-  let method=/credito|cuotas?/.test(lower)?'Crédito':/debito/.test(lower)?'Débito':/efectivo/.test(lower)?'Efectivo':'Sin definir';
-  if(method==='Sin definir'&&/\bmercado\s+pago\b/.test(lower)) method='Débito';
-  const card=cards.find((item)=>item?.name&&(!item.type||item.type===method)&&lower.includes(normalized(item.name)))?.name||'';
-  const category=categoryFor(raw,categories);
+
+  let installmentInfo=parseInstallments(lower);
+  for(let i=correctionParts.length-1;i>=1;i--){
+    const candidate=parseInstallments(correctionParts[i]);
+    if(candidate.specified){installmentInfo=candidate;break;}
+  }
+
+  const paymentMentions=[...lower.matchAll(/\b(efectivo|debito|credito)\b/g)];
+  let method=paymentMentions.length
+    ? ({efectivo:'Efectivo',debito:'Débito',credito:'Crédito'}[paymentMentions.at(-1)[1]])
+    : (/\bcuotas?\b/.test(lower)?'Crédito':'Sin definir');
+
+  const namedCandidates=cards
+    .filter((item)=>item?.name&&lower.includes(normalized(item.name)))
+    .map((item)=>({item,index:lower.lastIndexOf(normalized(item.name))}))
+    .sort((a,b)=>b.index-a.index);
+
+  if(method==='Sin definir'){
+    if(/\bmercado\s+pago\b/.test(lower)) method='Débito';
+    else {
+      const types=[...new Set(namedCandidates.map(({item})=>item.type).filter(Boolean))];
+      if(types.length===1) method=types[0];
+    }
+  }
+
+  let card=namedCandidates.find(({item})=>!item.type||item.type===method)?.item?.name||'';
+  if(method==='Efectivo') card='';
+
+  let category=categoryFor(raw,categories),subcategory='';
+  const subMap=options?.subcategories||{};
+  outer: for(const [parent,values] of Object.entries(subMap)){
+    for(const value of Array.isArray(values)?values:[]){
+      if(value&&lower.includes(normalized(value))){category=parent;subcategory=value;break outer;}
+    }
+  }
+
   const temporal=parseTemporal(raw,referenceDate);
-  let concept=cleanConcept(raw);
+  const correctionIndex=raw.search(/\b(?:no+|perd[oó]n|quise decir|mejor)\b/i);
+  let conceptSource=correctionIndex>0?raw.slice(0,correctionIndex):raw;
+  for(const item of cards){
+    if(!item?.name) continue;
+    const pattern=item.name.split(/\s+/).filter(Boolean).map((part)=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s+');
+    if(pattern) conceptSource=conceptSource.replace(new RegExp(pattern,'ig'),' ');
+  }
+  let concept=cleanConcept(conceptSource);
   concept=stripNumberWords(concept).replace(/\s+/g,' ').trim();
   return {
-    id:crypto.randomUUID(),amount,currency,concept:concept||category||'Sin concepto',category,method,card,
+    id:crypto.randomUUID(),amount,currency,concept:concept||subcategory||category||'Sin concepto',category,subcategory,method,card,
     installments:installmentInfo.count,installmentsSpecified:installmentInfo.specified,
     date:temporal.date,purchaseDate:temporal.date,dateSpecified:temporal.dateSpecified,timeSpecified:temporal.timeSpecified,
     dateAmbiguous:temporal.dateAmbiguous,dateChoices:temporal.dateChoices,source:'voice'

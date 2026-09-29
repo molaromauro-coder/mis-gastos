@@ -215,3 +215,30 @@ test('barre 100 importes de 8 cifras con puntos de miles',()=>{
     assert.equal(parseAmount(`${dotted(value)} pesos`),value,`${dotted(value)} pesos`);
   }
 });
+
+
+test('infere el tipo por una tarjeta configurada univoca y limpia el concepto',()=>{
+  const cards=[{name:'Mercado Pago',type:'Débito'},{name:'Banco Macro',type:'Crédito'}];
+  const e=parseExpense('Gasté 10 lucas de vianda, pagué con Banco Macro',cards);
+  assert.equal(e.amount,10000);
+  assert.equal(e.method,'Crédito');
+  assert.equal(e.card,'Banco Macro');
+  assert.equal(e.installmentsSpecified,false);
+  assert.match(e.concept,/vianda/i);
+  assert.doesNotMatch(e.concept,/macro/i);
+});
+
+test('la ultima correccion verbal reemplaza importe y medio de pago',()=>{
+  const cards=[{name:'Mercado Pago',type:'Débito'}];
+  const e=parseExpense('Gasté 60 mil en kiosco en efectivo, no perdón, 50 mil con débito Mercado Pago',cards);
+  assert.equal(e.amount,50000);
+  assert.equal(e.method,'Débito');
+  assert.equal(e.card,'Mercado Pago');
+  assert.match(e.concept,/kiosco/i);
+});
+
+test('reconoce subcategoria por voz y asigna su categoria madre',()=>{
+  const e=parseExpense('Gasté 25.000 pesos de luz',[],['Gastos fijos'],{subcategories:{'Gastos fijos':['Luz','Gas']}});
+  assert.equal(e.category,'Gastos fijos');
+  assert.equal(e.subcategory,'Luz');
+});
