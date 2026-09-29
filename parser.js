@@ -313,15 +313,20 @@ const SPLIT_RE=new RegExp('\\s*(?:;|\\n|,?\\s+y\\s+)(?=(?:(?:pagu[eé]|gast[eé]
 function splitRepeatedExpenseVerbs(transcript){
   const raw=String(transcript||'').trim();
   if(!raw)return [];
-  const matches=[...raw.matchAll(/\\b(?:gast[eé]|compr[eé]|pagu[eé])\\b/gi)];
-  if(matches.length<2)return [raw];
+  const verbMatches=[];
+  const verbRe=/(^|[^a-záéíóúñ0-9_])(gast[eé]|compr[eé]|pagu[eé])(?=\\s)/gi;
+  let verbMatch;
+  while((verbMatch=verbRe.exec(raw))){
+    verbMatches.push({index:verbMatch.index+verbMatch[1].length,verb:verbMatch[2]});
+  }
+  if(verbMatches.length<2)return [raw];
 
   const starts=[];
-  for(let i=0;i<matches.length;i++){
-    const current=matches[i];
-    const next=matches[i+1];
+  for(let i=0;i<verbMatches.length;i++){
+    const current=verbMatches[i];
+    const next=verbMatches[i+1];
     const chunk=raw.slice(current.index,next?.index??raw.length);
-    const verb=normalized(current[0]);
+    const verb=normalized(current.verb);
     const pagueStartsWithAmount=verb==='pague'
       ? new RegExp('^\\s*pagu[eé]\\s+(?:\\$\\s*)?'+NUMBER_START,'i').test(chunk)
       : true;
