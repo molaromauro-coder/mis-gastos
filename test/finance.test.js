@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { monthKey, budgetOutcome, stockMetrics, recoveryMonthMetrics, firstDueDateForCard, installmentDueDates } from '../finance.js';
+import { monthKey, budgetOutcome, stockMetrics, recoveryMonthMetrics, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from '../finance.js';
 
 test('presupuesto mensual usa cuotas por vencimiento',()=>{
   const expenses=[{currency:'ARS',amount:100,dueDate:'2026-10-10T12:00:00'}];
@@ -58,4 +58,19 @@ test('planes demo de 3, 6, 12 y 18 cuotas generan un vencimiento por mes',()=>{
       assert.equal(diff,1);
     }
   }
+});
+
+
+test('fecha completa de cierre y vencimiento conserva el mes configurado y repite el ciclo mensualmente',()=>{
+  const card={closingDate:'2026-10-25',dueDate:'2026-11-12',closingDay:25,dueDay:12};
+  assert.equal(nextClosingDateForCard(card,new Date('2026-09-29T12:00:00')).toISOString().slice(0,10),'2026-10-25');
+  assert.equal(firstDueDateForCard(card,new Date('2026-09-29T12:00:00')).toISOString().slice(0,10),'2026-11-12');
+  assert.equal(firstDueDateForCard(card,new Date('2026-10-26T12:00:00')).toISOString().slice(0,10),'2026-12-12');
+  assert.equal(firstDueDateForCard(card,new Date('2026-11-26T12:00:00')).toISOString().slice(0,10),'2027-01-12');
+});
+
+test('proximo vencimiento usa la fecha ancla y luego avanza un mes',()=>{
+  const card={closingDate:'2026-10-25',dueDate:'2026-11-12',closingDay:25,dueDay:12};
+  assert.equal(nextDueDateForCard(card,new Date('2026-11-01T12:00:00')).toISOString().slice(0,10),'2026-11-12');
+  assert.equal(nextDueDateForCard(card,new Date('2026-11-13T12:00:00')).toISOString().slice(0,10),'2026-12-12');
 });

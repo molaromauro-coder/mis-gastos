@@ -3,9 +3,58 @@ import { expenseArsEquivalent } from './reporting.js';
 export function dateWithCardDay(year,month,day){
   return new Date(year,month,Math.min(Number(day||1),new Date(year,month+1,0).getDate()),12);
 }
+function normalizeCardDate(value){
+  if(value instanceof Date) return dateWithCardDay(value.getFullYear(),value.getMonth(),value.getDate());
+  const match=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!match)return null;
+  return dateWithCardDay(Number(match[1]),Number(match[2])-1,Number(match[3]));
+}
+function monthIndex(date){return date.getFullYear()*12+date.getMonth();}
+function occurrenceFromAnchor(anchor,reference){
+  const target=reference instanceof Date?dateWithCardDay(reference.getFullYear(),reference.getMonth(),reference.getDate()):normalizeCardDate(reference);
+  if(!anchor||!target)return null;
+  let cycles=monthIndex(target)-monthIndex(anchor);
+  let candidate=dateWithCardDay(anchor.getFullYear(),anchor.getMonth()+cycles,anchor.getDate());
+  if(candidate.getTime()<target.getTime()){
+    cycles+=1;
+    candidate=dateWithCardDay(anchor.getFullYear(),anchor.getMonth()+cycles,anchor.getDate());
+  }
+  return {date:candidate,cycles};
+}
+export function nextClosingDateForCard(card,now=new Date()){
+  const source=now instanceof Date?dateWithCardDay(now.getFullYear(),now.getMonth(),now.getDate()):normalizeCardDate(now);
+  const anchor=normalizeCardDate(card?.closingDate);
+  if(anchor){
+    const next=occurrenceFromAnchor(anchor,source);
+    if(next)return next.date;
+  }
+  let closing=dateWithCardDay(source.getFullYear(),source.getMonth(),card?.closingDay||1);
+  if(closing.getTime()<source.getTime())closing=dateWithCardDay(source.getFullYear(),source.getMonth()+1,card?.closingDay||1);
+  return closing;
+}
+export function nextDueDateForCard(card,now=new Date()){
+  const source=now instanceof Date?dateWithCardDay(now.getFullYear(),now.getMonth(),now.getDate()):normalizeCardDate(now);
+  const anchor=normalizeCardDate(card?.dueDate);
+  if(anchor){
+    const next=occurrenceFromAnchor(anchor,source);
+    if(next)return next.date;
+  }
+  let due=dateWithCardDay(source.getFullYear(),source.getMonth(),card?.dueDay||1);
+  if(due.getTime()<source.getTime())due=dateWithCardDay(source.getFullYear(),source.getMonth()+1,card?.dueDay||1);
+  return due;
+}
 export function firstDueDateForCard(card,purchase=new Date()){
   const source=purchase instanceof Date?purchase:new Date(purchase);
   const bought=dateWithCardDay(source.getFullYear(),source.getMonth(),source.getDate());
+  const closingAnchor=normalizeCardDate(card?.closingDate);
+  const dueAnchor=normalizeCardDate(card?.dueDate);
+  if(closingAnchor&&dueAnchor){
+    const closingOccurrence=occurrenceFromAnchor(closingAnchor,bought);
+    const closing=closingOccurrence.date;
+    let due=dateWithCardDay(dueAnchor.getFullYear(),dueAnchor.getMonth()+closingOccurrence.cycles,dueAnchor.getDate());
+    while(due.getTime()<=closing.getTime())due=dateWithCardDay(due.getFullYear(),due.getMonth()+1,dueAnchor.getDate());
+    return due;
+  }
   const closingDay=Number(card?.closingDay||card?.dueDay||1);
   const dueDay=Number(card?.dueDay||1);
   let closing=dateWithCardDay(bought.getFullYear(),bought.getMonth(),closingDay);
@@ -17,7 +66,7 @@ export function firstDueDateForCard(card,purchase=new Date()){
 export function installmentDueDates(card,purchase=new Date(),count=1){
   const total=Math.max(1,Math.floor(Number(count)||1));
   const first=firstDueDateForCard(card,purchase);
-  return Array.from({length:total},(_,i)=>dateWithCardDay(first.getFullYear(),first.getMonth()+i,card?.dueDay||1));
+  return Array.from({length:total},(_,i)=>dateWithCardDay(first.getFullYear(),first.getMonth()+i,card?.dueDay||first.getDate()||1));
 }
 
 export function accountingDate(item) {

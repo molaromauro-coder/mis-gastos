@@ -1,6 +1,6 @@
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
-import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard, installmentDueDates } from './finance.js';
+import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 const resaleApi = sharedMode ? null : await import('./resale.js');
 const normalizeSplit = resaleApi?.normalizeSplit;
@@ -283,7 +283,15 @@ function fillCategories() {
 }
 function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
 function monthlyCardTotal(card, date) { return state.expenses.filter((e) => e.card === card.name && e.method === card.type && effectiveDate(e).getFullYear() === date.getFullYear() && effectiveDate(e).getMonth() === date.getMonth()); }
-function nextDue(card, now = new Date()) { const base=dateWithCardDay(now.getFullYear(),now.getMonth(),now.getDate()); let due = dateWithCardDay(base.getFullYear(), base.getMonth(), card.dueDay); if (due < base) due = dateWithCardDay(base.getFullYear(), base.getMonth() + 1, card.dueDay); return due; }
+function dateInputValue(value){const d=value instanceof Date?value:new Date(value);if(Number.isNaN(d.getTime()))return '';return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function dateFromInput(value){const match=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return match?dateWithCardDay(Number(match[1]),Number(match[2])-1,Number(match[3])):null;}
+function setCreditDateDefaults(card=null){
+  const closeField=$('#closingDate'),dueField=$('#dueDate');if(!closeField||!dueField)return;
+  const base=card||{closingDay:25,dueDay:10};
+  if(!closeField.value)closeField.value=card?.closingDate||dateInputValue(nextClosingDateForCard(base,new Date()));
+  if(!dueField.value)dueField.value=card?.dueDate||dateInputValue(firstDueDateForCard(base,new Date()));
+}
+function nextDue(card, now = new Date()) { return nextDueDateForCard(card,now); }
 function renderCards() {
   const chooser=$('#cardTypeChooser'),back=$('#cardsBack'),list=$('#cardList'),title=$('#cardSectionTitle'),creditOnly=$('#creditOnly');
   if(!chooser||!list)return;
@@ -297,13 +305,14 @@ function renderCards() {
   const now=new Date(),rows=state.cards.map((card,index)=>({card,index})).filter(({card})=>card.type===type);
   list.innerHTML=rows.length?rows.map(({card,index},orderIndex)=>{
     const all=state.expenses.filter((e)=>e.card===card.name&&e.method===card.type),current=monthlyCardTotal(card,now);
-    const meta=card.type==='Crédito'?`Cierra el ${card.closingDay} · Vence el ${card.dueDay}`:'Débito inmediato · sin vencimiento de pago';
+    const closeForCycle=card.type==='Crédito'?nextClosingDateForCard(card,now):null,dueForCycle=card.type==='Crédito'?firstDueDateForCard(card,now):null;
+    const meta=card.type==='Crédito'?`Cierra ${closeForCycle.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})} · Vence ${dueForCycle.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}`:'Débito inmediato · sin vencimiento de pago';
     const label=card.type==='Crédito'?'Crédito':'Cuenta / Débito';
     const debitDetail=card.type==='Débito'?`<details class="debit-detail"><summary>Ver movimientos</summary>${all.length?all.slice().sort((a,b)=>new Date(b.purchaseDate||b.date)-new Date(a.purchaseDate||a.date)).map((e)=>`<div class="due-line"><span>${new Date(e.purchaseDate||e.date).toLocaleDateString('es-AR')} · ${escape(e.concept||'Sin detalle')}</span><strong>${money(e.amount,e.currency)}</strong></div>`).join(''):'<small class="muted">Sin movimientos.</small>'}</details>`:'';
     return `<article class="card-item reorderable" data-card-id="${escape(card.id)}" data-reorder-index="${orderIndex}" style="--card-color:${escape(card.color||'#173f37')}"><div class="top"><div class="card-name-line"><span class="drag-grip light">↕</span><strong>${escape(card.name)}</strong></div><span>${label}</span></div><p>${meta}</p><div class="card-total"><small>${card.type==='Crédito'?'ACUMULADO DEL MES':'TOTAL ACUMULADO'}</small><strong>${card.type==='Crédito'?totalsHTML(current):totalsHTML(all)}</strong></div>${debitDetail}<div class="card-actions"><button class="edit-card" data-card-id="${escape(card.id)}">Editar</button><button class="delete-card" data-card-id="${escape(card.id)}">Eliminar</button></div></article>`;
   }).join(''):'<div class="empty">No agregaste medios de pago de este tipo.</div>';
 
-  document.querySelectorAll('.edit-card').forEach((b)=>{b.onclick=()=>{const card=state.cards.find((c)=>c.id===b.dataset.cardId);if(!card)return;editingCardId=card.id;$('#cardDialog h2').textContent='Editar tarjeta / cuenta';$('#cardName').value=card.name;$('#cardType').value=card.type;$('#cardColor').value=card.color||'#173f37';$('#closingDay').value=card.closingDay||25;$('#dueDay').value=card.dueDay||10;$('#creditCardDates').classList.toggle('hidden',card.type!=='Crédito');$('#cardDialog').showModal();};});
+  document.querySelectorAll('.edit-card').forEach((b)=>{b.onclick=()=>{const card=state.cards.find((c)=>c.id===b.dataset.cardId);if(!card)return;editingCardId=card.id;$('#cardDialog h2').textContent='Editar tarjeta / cuenta';$('#cardName').value=card.name;$('#cardType').value=card.type;$('#cardColor').value=card.color||'#173f37';$('#closingDate').value='';$('#dueDate').value='';$('#creditCardDates').classList.toggle('hidden',card.type!=='Crédito');if(card.type==='Crédito')setCreditDateDefaults(card);$('#cardDialog').showModal();};});
   document.querySelectorAll('.delete-card').forEach((b)=>{b.onclick=()=>{const index=state.cards.findIndex((c)=>c.id===b.dataset.cardId),card=state.cards[index];if(index<0||!card)return;const linked=(state.recurring||[]).filter((r)=>r.card===card.name&&r.method===card.type);const message=linked.length?`¿Eliminar ${card.name}? Los gastos guardados no se borrarán. ${linked.length} gasto(s) recurrente(s) quedarán desactivados.`:'¿Eliminar este medio de pago? Los gastos guardados no se borrarán.';if(!confirm(message))return;state.recurring.forEach((r)=>{if(r.card===card.name&&r.method===card.type){r.card='';r.active=false;}});state.cards.splice(index,1);save();render();};});
   installPointerReorder(list,'.card-item',(from,to)=>{const positions=state.cards.map((card,index)=>card.type===type?index:-1).filter((index)=>index>=0),ordered=positions.map((index)=>state.cards[index]);const [item]=ordered.splice(from,1);ordered.splice(to,0,item);positions.forEach((position,i)=>state.cards[position]=ordered[i]);save();renderCards();},'button,details,summary');
 
@@ -1072,13 +1081,17 @@ $('#expenseForm').onsubmit = async (event) => {
   expense=await stampUsdExpense(expense);
   state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render(); if(pending.length) setTimeout(showPending,180);
 };
-$('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textContent = 'Nuevo medio de pago'; $('#cardForm').reset(); $('#cardType').value=activeCardType||'Crédito'; $('#cardColor').value='#173f37'; $('#creditCardDates').classList.toggle('hidden',$('#cardType').value!=='Crédito'); $('#cardDialog').showModal(); }; $('#cardType').onchange = () => $('#creditCardDates').classList.toggle('hidden', $('#cardType').value !== 'Crédito'); $('#cardForm').onsubmit = (event) => {
+$('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textContent = 'Nuevo medio de pago'; $('#cardForm').reset(); $('#cardType').value=activeCardType||'Crédito'; $('#cardColor').value='#173f37'; $('#creditCardDates').classList.toggle('hidden',$('#cardType').value!=='Crédito'); if($('#cardType').value==='Crédito')setCreditDateDefaults(); $('#cardDialog').showModal(); }; $('#cardType').onchange = () => { const isCredit=$('#cardType').value==='Crédito'; $('#creditCardDates').classList.toggle('hidden',!isCredit); if(isCredit)setCreditDateDefaults(); }; $('#cardForm').onsubmit = (event) => {
   event.preventDefault();
   const name = $('#cardName').value.trim();
   const selectedType = $('#cardType').value;
   const duplicate = state.cards.some((c) => c.id !== editingCardId && c.name.toLowerCase() === name.toLowerCase() && c.type === selectedType);
   if (duplicate) return showToast('Ya existe una tarjeta o cuenta con ese nombre');
-  const data = { name, type: selectedType, color:$('#cardColor').value||'#173f37', closingDay: selectedType==='Crédito'?Number($('#closingDay').value):0, dueDay: selectedType==='Crédito'?Number($('#dueDay').value):0 };
+  const closingDate=selectedType==='Crédito'?$('#closingDate').value:'',dueDate=selectedType==='Crédito'?$('#dueDate').value:'';
+  if(selectedType==='Crédito'&&(!closingDate||!dueDate))return showToast('Completá fecha de cierre y fecha de vencimiento');
+  const closingParsed=dateFromInput(closingDate),dueParsed=dateFromInput(dueDate);
+  if(selectedType==='Crédito'&&(!closingParsed||!dueParsed||dueParsed.getTime()<=closingParsed.getTime()))return showToast('El vencimiento debe ser posterior al cierre');
+  const data = { name, type: selectedType, color:$('#cardColor').value||'#173f37', closingDate, dueDate, closingDay: selectedType==='Crédito'?closingParsed.getDate():0, dueDay: selectedType==='Crédito'?dueParsed.getDate():0 };
   if (editingCardId) {
     const card = state.cards.find((c) => c.id === editingCardId);
     if (card) {
