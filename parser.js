@@ -310,6 +310,72 @@ export function parseExpense(text,cards=[],categories=[],options={}){
 const NUMBER_START='(?:\\d|un(?:a|o)?|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieci\\w+|veinti\\w+|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos|mil|millon)';
 const SPLIT_RE=new RegExp('\\s*(?:;|\\n|,?\\s+y\\s+)(?=(?:(?:pagu[eé]|gast[eé]|compr[eé])\\s+)?'+NUMBER_START+')','i');
 
+function splitRepeatedExpenseVerbs(transcript){
+  const raw=String(transcript||'').trim();
+  if(!raw)return [];
+  const verbMatches=[];
+  const verbRe=/(^|[^a-záéíóúñ0-9_])(gast[eé]|compr[eé]|pagu[eé])(?=\s)/gi;
+  let verbMatch;
+  while((verbMatch=verbRe.exec(raw))){
+    verbMatches.push({index:verbMatch.index+verbMatch[1].length,verb:verbMatch[2]});
+  }
+  if(verbMatches.length<2)return [raw];
+
+  const starts=[];
+  for(let i=0;i<verbMatches.length;i++){
+    const current=verbMatches[i];
+    const next=verbMatches[i+1];
+    const chunk=raw.slice(current.index,next?.index??raw.length);
+    const verb=normalized(current.verb);
+    const pagueStartsWithAmount=verb==='pague'
+      ? new RegExp('^\\s*pagu[eé]\\s+(?:\\$\\s*)?'+NUMBER_START,'i').test(chunk)
+      : true;
+    if(parseAmount(chunk)==null||!pagueStartsWithAmount)continue;
+
+    if(starts.length){
+      const previousIndex=starts.at(-1);
+      const between=raw.slice(previousIndex,current.index);
+      if(/\b(?:no+|perd[oó]n|quise decir|mejor)\b/i.test(between))continue;
+    }
+    starts.push(current.index);
+  }
+  if(starts.length<2)return [raw];
+
+  const parts=[];
+  for(let i=0;i<starts.length;i++){
+    const from=i===0?0:starts[i];
+    const to=starts[i+1]??raw.length;
+    const part=raw.slice(from,to).trim().replace(/^[,;\s]+|[,;\s]+$/g,'');
+    if(part)parts.push(part);
+  }
+  return parts.length>1?parts:[raw];
+}
+
 export function parseExpenses(transcript,cards=[],categories=[],options={}){
-  return String(transcript||'').split(SPLIT_RE).map((x)=>x.trim()).filter(Boolean).map((part)=>parseExpense(part,cards,categories,options));
+  const raw=String(transcript||'');
+  const chunks=splitRepeatedExpenseVerbs(raw);
+  const items=chunks
+    .flatMap((chunk)=>chunk.split(SPLIT_RE))
+    .map((x)=>x.trim())
+    .filter(Boolean)
+    .map((part)=>parseExpense(part,cards,categories,options));
+
+  const lower=normalized(raw);
+  const sharedPayment=/\b(?:pague|pago)\s+(?:todo|todos|todas)\b|\b(?:todo|todos|todas)\s+(?:con|en)\b|\b(?:los|las)\s+(?:dos|tres|cuatro)\s+(?:con|en)\b/.test(lower);
+  if(items.length>1&&sharedPayment){
+    const shared=parseExpense(raw,cards,categories,options);
+    items.forEach((item)=>{
+      if(item.method==='Sin definir'&&shared.method!=='Sin definir'){
+        item.method=shared.method;
+        item.card=shared.card;
+      }else if(!item.card&&item.method===shared.method&&shared.card){
+        item.card=shared.card;
+      }
+      if(!item.installmentsSpecified&&shared.installmentsSpecified){
+        item.installments=shared.installments;
+        item.installmentsSpecified=true;
+      }
+    });
+  }
+  return items;
 }
