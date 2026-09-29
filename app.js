@@ -15,32 +15,33 @@ function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE
 const state = loadState();
 function demoCardId(){return crypto.randomUUID?.() || ('demo-' + Date.now() + '-' + Math.random().toString(16).slice(2));}
 function seedDemoCardsOnce(){
-  if(sharedMode || Number(state.settings?.demoCardsSeedVersion||0)>=2) return;
+  if(sharedMode || Number(state.settings?.demoCardsSeedVersion||0)>=3) return;
   if(!Array.isArray(state.cards)) state.cards=[];
-  state.cards=state.cards.filter((card)=>!card.demo);
   const demos=[
-    {name:'Mercado Pago',type:'Débito',closingDay:0,dueDay:0},
-    {name:'Brubank',type:'Débito',closingDay:0,dueDay:0},
-    {name:'Banco Francés',type:'Crédito',closingDay:20,dueDay:10},
-    {name:'Banco Macro',type:'Crédito',closingDay:25,dueDay:12}
+    {name:'Mercado Pago',type:'Débito',closingDay:0,dueDay:0,color:'#3787e8'},
+    {name:'Brubank',type:'Débito',closingDay:0,dueDay:0,color:'#7657d5'},
+    {name:'Cuenta Banco Macro',type:'Débito',closingDay:0,dueDay:0,color:'#2f80ed'},
+    {name:'Banco Francés',type:'Crédito',closingDay:20,dueDay:10,color:'#b9942f'},
+    {name:'Banco Macro',type:'Crédito',closingDay:25,dueDay:12,color:'#2f80ed'}
   ];
-  const existing=new Set(state.cards.map((card)=>`${String(card.name||'').toLowerCase()}|${card.type||''}`));
   demos.forEach((demo)=>{
-    const key=`${demo.name.toLowerCase()}|${demo.type}`;
-    if(!existing.has(key)) state.cards.push({id:demoCardId(),...demo,demo:true});
+    const found=state.cards.find((card)=>String(card.name||'').toLowerCase()===demo.name.toLowerCase()&&card.type===demo.type);
+    if(found){if(!found.color)found.color=demo.color;return;}
+    state.cards.push({id:demoCardId(),...demo,demo:true});
   });
-  state.settings={...state.settings,demoCardsSeeded:true,demoCardsSeedVersion:2};
+  state.settings={...state.settings,demoCardsSeeded:true,demoCardsSeedVersion:3};
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
 }
 seedDemoCardsOnce();
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
-let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null;
+let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '';
 const $ = (s) => document.querySelector(s);
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 const escape = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const effectiveDate = (e) => new Date(e.dueDate || e.date);
+document.querySelectorAll('dialog .close').forEach((button)=>{button.textContent='←';button.setAttribute('aria-label','Volver');button.classList.add('back-button');});
 function renderHomeClock() {
   const now=new Date();
   if($('#homeDate')) $('#homeDate').textContent=now.toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'long'});
@@ -71,84 +72,78 @@ function fillSubcategories(selected=''){
   $('#subcategoryWrap')?.classList.toggle('hidden',!category);
   $('#quickSubcategory')?.classList.toggle('hidden',!category);
 }
+
+function installPointerReorder(container,selector,onMove,ignore='button,input,select,summary,details,a'){
+  if(!container)return;
+  let source=null,target=null,pointerId=null;
+  const clear=()=>{source?.classList.remove('drag-selected');target?.classList.remove('drag-target');source=null;target=null;pointerId=null;};
+  container.querySelectorAll(selector).forEach((row)=>{
+    row.onpointerdown=(event)=>{
+      if(event.target.closest?.(ignore))return;
+      source=row;target=row;pointerId=event.pointerId;row.classList.add('drag-selected');
+      row.setPointerCapture?.(pointerId);event.preventDefault();
+    };
+    row.onpointermove=(event)=>{
+      if(!source||event.pointerId!==pointerId)return;
+      const candidate=document.elementFromPoint(event.clientX,event.clientY)?.closest?.(selector);
+      if(!candidate||!container.contains(candidate)||candidate===target)return;
+      target?.classList.remove('drag-target');target=candidate;if(target!==source)target.classList.add('drag-target');
+    };
+    row.onpointerup=(event)=>{
+      if(!source||event.pointerId!==pointerId){clear();return;}
+      const from=Number(source.dataset.reorderIndex),to=Number(target?.dataset.reorderIndex);
+      if(Number.isInteger(from)&&Number.isInteger(to)&&from!==to)onMove(from,to);
+      clear();
+    };
+    row.onpointercancel=clear;
+  });
+}
 function fillCategories() {
   const selected=$('#category')?.value||'';
   $('#category').innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(c)}</option>`).join('');
   if(selected&&state.categories.includes(selected))$('#category').value=selected;
   $('#categoryList').innerHTML=state.categories.length?state.categories.map((c,i)=>{
     const subs=subcategoriesFor(c);
-    return `<article class="settings-item" data-category-index="${i}"><div><strong>${escape(c)}</strong><div class="chips">${subs.length?subs.map((s,si)=>`<button type="button" class="chip" data-delete-subcategory="${si}" data-category-name="${escape(c)}">${escape(s)} <span>×</span></button>`).join(''):'<small class="muted">Sin subcategorías.</small>'}</div></div><div class="mini-actions"><button type="button" data-add-subcategory="${i}">＋ Subcategoría</button><button type="button" data-delete-category="${i}">Eliminar</button></div></article>`;
+    return `<article class="settings-item reorderable" data-category-index="${i}" data-reorder-index="${i}"><div class="reorder-row"><span class="drag-grip">↕</span><div class="reorder-content"><strong>${escape(c)}</strong><div class="chips" data-subcategory-parent="${escape(c)}">${subs.length?subs.map((s,si)=>`<span class="chip subcategory-chip reorderable" data-reorder-index="${si}"><span class="drag-grip mini">↕</span><span>${escape(s)}</span><button type="button" class="chip-delete" data-delete-subcategory="${si}" data-category-name="${escape(c)}" aria-label="Eliminar ${escape(s)}">×</button></span>`).join(''):'<small class="muted">Sin subcategorías.</small>'}</div></div></div><div class="mini-actions"><button type="button" data-add-subcategory="${i}">＋ Subcategoría</button><button type="button" data-delete-category="${i}">Eliminar</button></div></article>`;
   }).join(''):'<p class="muted">Creá categorías como quieras; cada una puede tener subcategorías.</p>';
   document.querySelectorAll('[data-add-subcategory]').forEach((b)=>{b.onclick=()=>{const category=state.categories[Number(b.dataset.addSubcategory)];if(!category)return;const value=prompt(`Nueva subcategoría dentro de ${category}:`)?.trim();if(!value)return;const list=subcategoriesFor(category);if(list.some((s)=>s.toLowerCase()===value.toLowerCase()))return showToast('Esa subcategoría ya existe');state.subcategories[category]=[...list,value];save();fillCategories();};});
   document.querySelectorAll('[data-delete-subcategory]').forEach((b)=>{b.onclick=()=>{const category=b.dataset.categoryName;const list=subcategoriesFor(category);const index=Number(b.dataset.deleteSubcategory);if(index<0||index>=list.length)return;state.subcategories[category]=list.filter((_,i)=>i!==index);save();fillCategories();};});
   document.querySelectorAll('[data-delete-category]').forEach((b)=>{b.onclick=()=>{const index=Number(b.dataset.deleteCategory);const category=state.categories[index];if(!category)return;state.categories.splice(index,1);delete state.subcategories[category];save();fillCategories();};});
+  installPointerReorder($('#categoryList'),':scope > .settings-item',(from,to)=>{const [item]=state.categories.splice(from,1);state.categories.splice(to,0,item);save();fillCategories();},'button,.subcategory-chip,input,select');
+  document.querySelectorAll('.chips[data-subcategory-parent]').forEach((container)=>{
+    installPointerReorder(container,'.subcategory-chip',(from,to)=>{const category=container.dataset.subcategoryParent;const list=[...subcategoriesFor(category)];const [item]=list.splice(from,1);list.splice(to,0,item);state.subcategories[category]=list;save();fillCategories();},'button');
+  });
   fillSubcategories();
 }
 function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
 function monthlyCardTotal(card, date) { return state.expenses.filter((e) => e.card === card.name && e.method === card.type && effectiveDate(e).getFullYear() === date.getFullYear() && effectiveDate(e).getMonth() === date.getMonth()); }
 function nextDue(card, now = new Date()) { const base=dateWithCardDay(now.getFullYear(),now.getMonth(),now.getDate()); let due = dateWithCardDay(base.getFullYear(), base.getMonth(), card.dueDay); if (due < base) due = dateWithCardDay(base.getFullYear(), base.getMonth() + 1, card.dueDay); return due; }
 function renderCards() {
-  const now = new Date();
-  $('#cardList').innerHTML = state.cards.length ? state.cards.map((card, i) => {
-    const all = state.expenses.filter((e) => e.card === card.name && e.method === card.type);
-    const current = monthlyCardTotal(card, now);
-    const accumulated = totalsHTML(all);
-    const monthTotal = totalsHTML(current);
-    const creditMeta = card.type === 'Crédito'
-      ? `Cierra el ${card.closingDay} · Vence el ${card.dueDay}`
-      : 'Débito inmediato · sin vencimiento de pago';
-    const totalLabel = card.type === 'Crédito' ? 'ACUMULADO DEL MES' : 'TOTAL ACUMULADO';
-    const debitDetail = card.type === 'Débito'
-      ? `<details class="debit-detail"><summary>Ver movimientos</summary>${all.length ? all.slice().sort((a,b)=>new Date(b.purchaseDate||b.date)-new Date(a.purchaseDate||a.date)).map((e)=>`<div class="due-line"><span>${new Date(e.purchaseDate||e.date).toLocaleDateString('es-AR')} · ${escape(e.concept||'Sin detalle')}</span><strong>${money(e.amount,e.currency)}</strong></div>`).join('') : '<small class="muted">Sin movimientos.</small>'}</details>`
-      : '';
-    return `<article class="card-item"><div class="top"><strong>${escape(card.name)}</strong><span>${card.type}</span></div>
-      <p>${creditMeta}</p><div class="card-total"><small>${totalLabel}</small><strong>${card.type === 'Crédito' ? monthTotal : accumulated}</strong></div>
-      ${debitDetail}
-      <div class="card-actions"><button class="edit-card" data-card-index="${i}">Editar</button><button class="delete-card" data-card-index="${i}">Eliminar</button></div></article>`;
-  }).join('') : '<div class="empty">No agregaste tarjetas todavía.</div>';
+  const chooser=$('#cardTypeChooser'),back=$('#cardsBack'),list=$('#cardList'),title=$('#cardSectionTitle'),creditOnly=$('#creditOnly');
+  if(!chooser||!list)return;
+  const type=activeCardType;
+  chooser.classList.toggle('hidden',!!type);back?.classList.toggle('hidden',!type);title?.classList.toggle('hidden',!type);creditOnly?.classList.toggle('hidden',type!=='Crédito');
+  if(title)title.textContent=type==='Débito'?'Débito / Cuentas':'Tarjetas de crédito';
+  document.querySelectorAll('[data-card-type-view]').forEach((button)=>{button.onclick=()=>{activeCardType=button.dataset.cardTypeView;renderCards();};});
+  if(back)back.onclick=()=>{activeCardType='';renderCards();};
+  if(!type){list.innerHTML='';return;}
 
-  document.querySelectorAll('.edit-card').forEach((b) => {
-    b.onclick = () => {
-      const card = state.cards[Number(b.dataset.cardIndex)];
-      if (!card) return;
-      editingCardId = card.id;
-      $('#cardDialog h2').textContent = 'Editar tarjeta';
-      $('#cardName').value = card.name;
-      $('#cardType').value = card.type;
-      $('#closingDay').value = card.closingDay || 25;
-      $('#dueDay').value = card.dueDay || 10;
-      $('#creditCardDates').classList.toggle('hidden', card.type !== 'Crédito');
-      $('#cardDialog').showModal();
-    };
-  });
-  document.querySelectorAll('.delete-card').forEach((b) => {
-    b.onclick = () => {
-      const card=state.cards[Number(b.dataset.cardIndex)];
-      const linked=(state.recurring||[]).filter((r)=>r.card===card?.name&&r.method===card?.type);
-      const message=linked.length
-        ? `¿Eliminar ${card.name}? Los gastos guardados no se borrarán. ${linked.length} gasto(s) recurrente(s) quedarán desactivados.`
-        : '¿Eliminar esta tarjeta? Los gastos guardados no se borrarán.';
-      if (!confirm(message)) return;
-      if(card) state.recurring.forEach((r)=>{if(r.card===card.name&&r.method===card.type){r.card='';r.active=false;}});
-      state.cards.splice(Number(b.dataset.cardIndex), 1);
-      save(); render();
-    };
-  });
+  const now=new Date(),rows=state.cards.map((card,index)=>({card,index})).filter(({card})=>card.type===type);
+  list.innerHTML=rows.length?rows.map(({card,index},orderIndex)=>{
+    const all=state.expenses.filter((e)=>e.card===card.name&&e.method===card.type),current=monthlyCardTotal(card,now);
+    const meta=card.type==='Crédito'?`Cierra el ${card.closingDay} · Vence el ${card.dueDay}`:'Débito inmediato · sin vencimiento de pago';
+    const label=card.type==='Crédito'?'Crédito':'Cuenta / Débito';
+    const debitDetail=card.type==='Débito'?`<details class="debit-detail"><summary>Ver movimientos</summary>${all.length?all.slice().sort((a,b)=>new Date(b.purchaseDate||b.date)-new Date(a.purchaseDate||a.date)).map((e)=>`<div class="due-line"><span>${new Date(e.purchaseDate||e.date).toLocaleDateString('es-AR')} · ${escape(e.concept||'Sin detalle')}</span><strong>${money(e.amount,e.currency)}</strong></div>`).join(''):'<small class="muted">Sin movimientos.</small>'}</details>`:'';
+    return `<article class="card-item reorderable" data-card-id="${escape(card.id)}" data-reorder-index="${orderIndex}" style="--card-color:${escape(card.color||'#173f37')}"><div class="top"><div class="card-name-line"><span class="drag-grip light">↕</span><strong>${escape(card.name)}</strong></div><span>${label}</span></div><p>${meta}</p><div class="card-total"><small>${card.type==='Crédito'?'ACUMULADO DEL MES':'TOTAL ACUMULADO'}</small><strong>${card.type==='Crédito'?totalsHTML(current):totalsHTML(all)}</strong></div>${debitDetail}<div class="card-actions"><button class="edit-card" data-card-id="${escape(card.id)}">Editar</button><button class="delete-card" data-card-id="${escape(card.id)}">Eliminar</button></div></article>`;
+  }).join(''):'<div class="empty">No agregaste medios de pago de este tipo.</div>';
 
-  const credit = state.cards.filter((c) => c.type === 'Crédito');
-  $('#dueList').innerHTML = credit.length ? credit.map((c) => {
-    const due = nextDue(c);
-    const items = monthlyCardTotal(c, due).slice().sort((a,b) => effectiveDate(a) - effectiveDate(b));
-    const details = items.length ? items.map((e) => `<div class="due-line"><span>${escape(e.concept || 'Sin detalle')}${e.installments > 1 ? ` · cuota ${e.installment || 1} de ${e.installments}` : ''}</span><strong>${money(e.amount,e.currency)}</strong></div>`).join('') : '<small class="muted">Sin consumos para este vencimiento.</small>';
-    return `<article class="due-item"><div class="due-main"><strong>${escape(c.name)}</strong><p>Próximo vencimiento: ${due.toLocaleDateString('es-AR')}</p><strong class="due-total">${totalsHTML(items)}</strong><div class="due-lines">${details}</div></div></article>`;
-  }).join('') : '<div class="empty">Agregá una tarjeta de crédito para ver vencimientos.</div>';
+  document.querySelectorAll('.edit-card').forEach((b)=>{b.onclick=()=>{const card=state.cards.find((c)=>c.id===b.dataset.cardId);if(!card)return;editingCardId=card.id;$('#cardDialog h2').textContent='Editar tarjeta / cuenta';$('#cardName').value=card.name;$('#cardType').value=card.type;$('#cardColor').value=card.color||'#173f37';$('#closingDay').value=card.closingDay||25;$('#dueDay').value=card.dueDay||10;$('#creditCardDates').classList.toggle('hidden',card.type!=='Crédito');$('#cardDialog').showModal();};});
+  document.querySelectorAll('.delete-card').forEach((b)=>{b.onclick=()=>{const index=state.cards.findIndex((c)=>c.id===b.dataset.cardId),card=state.cards[index];if(index<0||!card)return;const linked=(state.recurring||[]).filter((r)=>r.card===card.name&&r.method===card.type);const message=linked.length?`¿Eliminar ${card.name}? Los gastos guardados no se borrarán. ${linked.length} gasto(s) recurrente(s) quedarán desactivados.`:'¿Eliminar este medio de pago? Los gastos guardados no se borrarán.';if(!confirm(message))return;state.recurring.forEach((r)=>{if(r.card===card.name&&r.method===card.type){r.card='';r.active=false;}});state.cards.splice(index,1);save();render();};});
+  installPointerReorder(list,'.card-item',(from,to)=>{const positions=state.cards.map((card,index)=>card.type===type?index:-1).filter((index)=>index>=0),ordered=positions.map((index)=>state.cards[index]);const [item]=ordered.splice(from,1);ordered.splice(to,0,item);positions.forEach((position,i)=>state.cards[position]=ordered[i]);save();renderCards();},'button,details,summary');
 
-  $('#cardHistory').innerHTML = credit.map((c) => `<details class="history-card"><summary>${escape(c.name)}</summary>${Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const items = monthlyCardTotal(c, d);
-    const lines = items.map((e) => `<small>${escape(e.concept || 'Sin detalle')}${e.installments > 1 ? ` · ${e.installment || 1} de ${e.installments}` : ''}: ${money(e.amount,e.currency)}</small>`).join('');
-    return `<div class="history-row"><div><span>${d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}</span>${lines}</div><strong>${totalsHTML(items)}</strong></div>`;
-  }).join('')}</details>`).join('');
+  const credit=state.cards.filter((c)=>c.type==='Crédito');
+  $('#dueList').innerHTML=credit.length?credit.map((c)=>{const due=nextDue(c),items=monthlyCardTotal(c,due).slice().sort((a,b)=>effectiveDate(a)-effectiveDate(b));const details=items.length?items.map((e)=>`<div class="due-line"><span>${escape(e.concept||'Sin detalle')}${e.installments>1?` · cuota ${e.installment||1} de ${e.installments}`:''}</span><strong>${money(e.amount,e.currency)}</strong></div>`).join(''):'<small class="muted">Sin consumos para este vencimiento.</small>';return `<article class="due-item"><div class="due-main"><strong>${escape(c.name)}</strong><p>Próximo vencimiento: ${due.toLocaleDateString('es-AR')}</p><strong class="due-total">${totalsHTML(items)}</strong><div class="due-lines">${details}</div></div></article>`;}).join(''):'<div class="empty">Agregá una tarjeta de crédito para ver vencimientos.</div>';
+  $('#cardHistory').innerHTML=credit.map((c)=>`<details class="history-card"><summary>${escape(c.name)}</summary>${Array.from({length:6},(_,i)=>{const d=new Date(now.getFullYear(),now.getMonth()-i,1),items=monthlyCardTotal(c,d),lines=items.map((e)=>`<small>${escape(e.concept||'Sin detalle')}${e.installments>1?` · ${e.installment||1} de ${e.installments}`:''}: ${money(e.amount,e.currency)}</small>`).join('');return `<div class="history-row"><div><span>${d.toLocaleDateString('es-AR',{month:'long',year:'numeric'})}</span>${lines}</div><strong>${totalsHTML(items)}</strong></div>`;}).join('')}</details>`).join('');
 }
 function renderPaymentReminders() { const today = new Date(); today.setHours(12, 0, 0, 0); const allowed = state.settings.reminderDays; const reminders = state.cards.filter((c) => c.type === 'Crédito').map((card) => ({ card, due: nextDue(card, today) })).map((x) => ({ ...x, days: Math.round((x.due - today) / 86400000) })).filter((x) => allowed.includes(x.days)); $('#paymentReminders').innerHTML = reminders.map(({ card, due, days }) => `<article class="payment-alert"><span>▰</span><div><strong>${days ? `Vence en ${days} día${days > 1 ? 's' : ''}` : 'Vence hoy'} · ${escape(card.name)}</strong><small>Disponible necesario: ${totalsHTML(monthlyCardTotal(card, due))}</small></div></article>`).join(''); }
 function years() { const now = new Date().getFullYear(); return Array.from(new Set([now, ...state.expenses.map((e) => effectiveDate(e).getFullYear())])).sort((a, b) => b - a); }
@@ -791,13 +786,13 @@ $('#expenseForm').onsubmit = async (event) => {
   expense=await stampUsdExpense(expense);
   state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render(); if(pending.length) setTimeout(showPending,180);
 };
-$('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textContent = 'Nueva tarjeta'; $('#cardForm').reset(); $('#creditCardDates').classList.remove('hidden'); $('#cardDialog').showModal(); }; $('#cardType').onchange = () => $('#creditCardDates').classList.toggle('hidden', $('#cardType').value !== 'Crédito'); $('#cardForm').onsubmit = (event) => {
+$('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textContent = 'Nuevo medio de pago'; $('#cardForm').reset(); $('#cardType').value=activeCardType||'Crédito'; $('#cardColor').value='#173f37'; $('#creditCardDates').classList.toggle('hidden',$('#cardType').value!=='Crédito'); $('#cardDialog').showModal(); }; $('#cardType').onchange = () => $('#creditCardDates').classList.toggle('hidden', $('#cardType').value !== 'Crédito'); $('#cardForm').onsubmit = (event) => {
   event.preventDefault();
   const name = $('#cardName').value.trim();
   const selectedType = $('#cardType').value;
   const duplicate = state.cards.some((c) => c.id !== editingCardId && c.name.toLowerCase() === name.toLowerCase() && c.type === selectedType);
-  if (duplicate) return showToast('Ya existe una tarjeta con ese nombre');
-  const data = { name, type: selectedType, closingDay: Number($('#closingDay').value), dueDay: Number($('#dueDay').value) };
+  if (duplicate) return showToast('Ya existe una tarjeta o cuenta con ese nombre');
+  const data = { name, type: selectedType, color:$('#cardColor').value||'#173f37', closingDay: selectedType==='Crédito'?Number($('#closingDay').value):0, dueDay: selectedType==='Crédito'?Number($('#dueDay').value):0 };
   if (editingCardId) {
     const card = state.cards.find((c) => c.id === editingCardId);
     if (card) {
@@ -808,7 +803,7 @@ $('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textCo
     }
   } else state.cards.push({ id: crypto.randomUUID(), ...data });
   editingCardId = null;
-  save(); event.target.reset(); $('#cardDialog').close(); showToast('Tarjeta guardada'); render();
+  save(); event.target.reset(); $('#cardDialog').close(); activeCardType=selectedType; showToast('Medio de pago guardado'); render();
 };
 document.querySelectorAll('[data-range]').forEach((button) => { button.onclick=()=>{ reportRange=button.dataset.range; document.querySelectorAll('[data-range]').forEach((b)=>b.classList.remove('selected')); button.classList.add('selected'); $('#customRange').classList.toggle('hidden',reportRange!=='custom'); renderReport(); }; });
 $('#fromDate').onchange=renderReport; $('#toDate').onchange=renderReport;
