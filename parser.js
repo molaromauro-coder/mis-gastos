@@ -321,7 +321,11 @@ function splitRepeatedExpenseVerbs(transcript){
     const current=matches[i];
     const next=matches[i+1];
     const chunk=raw.slice(current.index,next?.index??raw.length);
-    if(parseAmount(chunk)==null)continue;
+    const verb=normalized(current[0]);
+    const pagueStartsWithAmount=verb==='pague'
+      ? new RegExp('^\\s*pagu[eé]\\s+(?:\\$\\s*)?'+NUMBER_START,'i').test(chunk)
+      : true;
+    if(parseAmount(chunk)==null||!pagueStartsWithAmount)continue;
 
     if(starts.length){
       const previousIndex=starts.at(-1);
@@ -343,10 +347,30 @@ function splitRepeatedExpenseVerbs(transcript){
 }
 
 export function parseExpenses(transcript,cards=[],categories=[],options={}){
-  const chunks=splitRepeatedExpenseVerbs(transcript);
-  return chunks
+  const raw=String(transcript||'');
+  const chunks=splitRepeatedExpenseVerbs(raw);
+  const items=chunks
     .flatMap((chunk)=>chunk.split(SPLIT_RE))
     .map((x)=>x.trim())
     .filter(Boolean)
     .map((part)=>parseExpense(part,cards,categories,options));
+
+  const lower=normalized(raw);
+  const sharedPayment=/\\b(?:pague|pago)\\s+(?:todo|todos|todas)\\b|\\b(?:todo|todos|todas)\\s+(?:con|en)\\b|\\b(?:los|las)\\s+(?:dos|tres|cuatro)\\s+(?:con|en)\\b/.test(lower);
+  if(items.length>1&&sharedPayment){
+    const shared=parseExpense(raw,cards,categories,options);
+    items.forEach((item)=>{
+      if(item.method==='Sin definir'&&shared.method!=='Sin definir'){
+        item.method=shared.method;
+        item.card=shared.card;
+      }else if(!item.card&&item.method===shared.method&&shared.card){
+        item.card=shared.card;
+      }
+      if(!item.installmentsSpecified&&shared.installmentsSpecified){
+        item.installments=shared.installments;
+        item.installmentsSpecified=true;
+      }
+    });
+  }
+  return items;
 }
