@@ -16,5 +16,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verificar sintaxis JavaScript
+        run: |
+          node --check app.js
+          node --check parser.js
+          node --check reporting.js
+          node --check finance.js
       - name: Ejecutar pruebas automáticas
         run: npm test

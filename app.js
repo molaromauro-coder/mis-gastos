@@ -34,7 +34,7 @@ function seedDemoCardsOnce(){
 }
 seedDemoCardsOnce();
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
-let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '';
+let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = (window.innerHeight < 760 ? 3 : 4);
 const $ = (s) => document.querySelector(s);
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -73,11 +73,99 @@ function expenseHTML(e, showDate = false) {
   const when=new Date(e.purchaseDate||e.date);
   return `<article class="expense" data-expense-id="${escape(e.id)}"><div class="expense-icon">${e.method==='Efectivo'?'◆':'▰'}</div><div class="expense-info"><strong>${escape(e.concept||'Sin detalle')}</strong><span class="meta">${escape(detail)}${showDate?` · ${when.toLocaleDateString('es-AR')} ${when.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`:` · ${when.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`}</span></div><div class="amount">${money(showDate?e.amount:purchaseAmount(e),e.currency)}<small>${e.currency}</small></div>${showDate?`<button class="expense-delete" type="button" data-delete-expense="${escape(e.id)}" aria-label="Eliminar gasto">⌫</button>`:''}</article>`;
 }
-function render() { renderHomeClock(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderConsultationFilters(); fillCardSelect(); fillCategories(); }
+function chronologicalPurchases(){
+  return state.expenses
+    .filter((e)=>!e.parentId||e.installment===1)
+    .slice()
+    .sort((a,b)=>new Date(b.purchaseDate||b.date)-new Date(a.purchaseDate||a.date));
+}
+function renderHomeRecent(){
+  const target=$('#recentMovements'); if(!target)return;
+  const all=chronologicalPurchases(), visible=all.slice(0,recentHomeLimit);
+  target.innerHTML=visible.length?visible.map((e)=>{
+    const when=new Date(e.purchaseDate||e.date);
+    const category=[e.category,e.subcategory].filter(Boolean).join(' · ')||'Sin categoría';
+    return `<article class="recent-movement"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${when.toLocaleDateString('es-AR')} · ${escape(category)}</small></div><strong class="recent-amount">${money(purchaseAmount(e),e.currency)}</strong></article>`;
+  }).join(''):'<div class="recent-empty">Todavía no registraste movimientos.</div>';
+  const more=$('#recentMore');
+  if(more){
+    const remaining=Math.max(0,all.length-recentHomeLimit);
+    more.classList.toggle('hidden',remaining===0);
+    more.textContent=remaining>0?`＋ Ver más (${remaining})`:'';
+  }
+  $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>(window.innerHeight<760?3:4));
+}
+function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function subcategoriesFor(category){
   const values=state.subcategories?.[category];
   return Array.isArray(values)?values:[];
+}
+function fillRecurringCategoryOptions(selected=''){
+  const select=$('#recurringCategory'); if(!select)return;
+  const current=selected||select.value||'';
+  select.innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  if(current&&state.categories.includes(current))select.value=current;
+}
+function fillStockCategoryOptions(selected=''){
+  const select=$('#stockCategory'); if(!select)return;
+  const current=selected||select.value||'';
+  select.innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  if(current&&state.categories.includes(current))select.value=current;
+}
+function reclassifyUncategorizedExpenses(){
+  const pairs=[]; let changed=false;
+  Object.entries(state.subcategories||{}).forEach(([category,subs])=>(subs||[]).forEach((sub)=>pairs.push({category,sub})));
+  for(const e of state.expenses){
+    if(e.category)continue;
+    const text=String(e.concept||'').toLowerCase();
+    const pair=pairs.find(({sub})=>text.includes(String(sub).toLowerCase()));
+    if(pair){e.category=pair.category;e.subcategory=pair.sub;changed=true;continue;}
+    const category=state.categories.find((c)=>text.includes(String(c).toLowerCase()));
+    if(category){e.category=category;changed=true;}
+  }
+  return changed;
+}
+function syncCategoryConsumers(){
+  if(reclassifyUncategorizedExpenses())save();
+  fillSubcategories();
+  fillRecurringCategoryOptions();
+  fillStockCategoryOptions();
+  renderConsultationFilters();
+  renderReport();
+}
+function renameCategoryEverywhere(oldName,newName){
+  const clean=String(newName||'').trim();
+  if(!oldName||!clean||oldName===clean)return false;
+  if(state.categories.some((c)=>c!==oldName&&c.toLowerCase()===clean.toLowerCase()))return false;
+  const index=state.categories.indexOf(oldName); if(index<0)return false;
+  state.categories[index]=clean;
+  state.subcategories[clean]=state.subcategories[oldName]||[];
+  delete state.subcategories[oldName];
+  state.expenses.forEach((e)=>{if(e.category===oldName)e.category=clean;});
+  state.recurring.forEach((e)=>{if(e.category===oldName)e.category=clean;});
+  state.stock.forEach((e)=>{if(e.category===oldName)e.category=clean;});
+  pending.forEach((e)=>{if(e.category===oldName)e.category=clean;});
+  if(activeSettingsCategory===oldName)activeSettingsCategory=clean;
+  save();syncCategoryConsumers();return true;
+}
+function deleteCategoryEverywhere(category){
+  const index=state.categories.indexOf(category); if(index<0)return;
+  state.categories.splice(index,1);delete state.subcategories[category];
+  state.expenses.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
+  state.recurring.forEach((e)=>{if(e.category===category)e.category='';});
+  state.stock.forEach((e)=>{if(e.category===category)e.category='';});
+  pending.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
+  save();syncCategoryConsumers();
+}
+function renameSubcategoryEverywhere(category,oldName,newName){
+  const clean=String(newName||'').trim(), list=[...subcategoriesFor(category)];
+  const index=list.indexOf(oldName);
+  if(index<0||!clean||list.some((s)=>s!==oldName&&s.toLowerCase()===clean.toLowerCase()))return false;
+  list[index]=clean;state.subcategories[category]=list;
+  state.expenses.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
+  pending.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
+  save();syncCategoryConsumers();return true;
 }
 function fillSubcategories(selected=''){
   const select=$('#subcategory'); if(!select)return;
@@ -118,17 +206,82 @@ function fillCategories() {
   const selected=$('#category')?.value||'';
   $('#category').innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(c)}</option>`).join('');
   if(selected&&state.categories.includes(selected))$('#category').value=selected;
-  $('#categoryList').innerHTML=state.categories.length?state.categories.map((c,i)=>{
-    const subs=subcategoriesFor(c);
-    return `<article class="settings-item reorderable" data-category-index="${i}" data-reorder-index="${i}"><div class="reorder-row"><span class="drag-grip">↕</span><div class="reorder-content"><strong>${escape(c)}</strong><div class="chips" data-subcategory-parent="${escape(c)}">${subs.length?subs.map((s,si)=>`<span class="chip subcategory-chip reorderable" data-reorder-index="${si}"><span class="drag-grip mini">↕</span><span>${escape(s)}</span><button type="button" class="chip-delete" data-delete-subcategory="${si}" data-category-name="${escape(c)}" aria-label="Eliminar ${escape(s)}">×</button></span>`).join(''):'<small class="muted">Sin subcategorías.</small>'}</div></div></div><div class="mini-actions"><button type="button" data-add-subcategory="${i}">＋ Subcategoría</button><button type="button" data-delete-category="${i}">Eliminar</button></div></article>`;
-  }).join(''):'<p class="muted">Creá categorías como quieras; cada una puede tener subcategorías.</p>';
-  document.querySelectorAll('[data-add-subcategory]').forEach((b)=>{b.onclick=()=>{const category=state.categories[Number(b.dataset.addSubcategory)];if(!category)return;const value=prompt(`Nueva subcategoría dentro de ${category}:`)?.trim();if(!value)return;const list=subcategoriesFor(category);if(list.some((s)=>s.toLowerCase()===value.toLowerCase()))return showToast('Esa subcategoría ya existe');state.subcategories[category]=[...list,value];save();fillCategories();};});
-  document.querySelectorAll('[data-delete-subcategory]').forEach((b)=>{b.onclick=()=>{const category=b.dataset.categoryName;const list=subcategoriesFor(category);const index=Number(b.dataset.deleteSubcategory);if(index<0||index>=list.length)return;state.subcategories[category]=list.filter((_,i)=>i!==index);save();fillCategories();};});
-  document.querySelectorAll('[data-delete-category]').forEach((b)=>{b.onclick=()=>{const index=Number(b.dataset.deleteCategory);const category=state.categories[index];if(!category)return;state.categories.splice(index,1);delete state.subcategories[category];save();fillCategories();};});
-  installPointerReorder($('#categoryList'),':scope > .settings-item',(from,to)=>{const [item]=state.categories.splice(from,1);state.categories.splice(to,0,item);save();fillCategories();},'button,.subcategory-chip,input,select');
-  document.querySelectorAll('.chips[data-subcategory-parent]').forEach((container)=>{
-    installPointerReorder(container,'.subcategory-chip',(from,to)=>{const category=container.dataset.subcategoryParent;const list=[...subcategoriesFor(category)];const [item]=list.splice(from,1);list.splice(to,0,item);state.subcategories[category]=list;save();fillCategories();},'button');
-  });
+
+  const list=$('#categoryList');
+  if(!list)return;
+  const active=activeSettingsCategory&&state.categories.includes(activeSettingsCategory)?activeSettingsCategory:'';
+  activeSettingsCategory=active;
+  $('#categoryForm')?.classList.toggle('hidden',!!active);
+  $('#categorySettingsIntro')?.classList.toggle('hidden',!!active);
+  if($('#categorySettingsTitle')) $('#categorySettingsTitle').textContent=active?active:'Categorías y subcategorías';
+
+  if(active){
+    const subs=subcategoriesFor(active);
+    list.innerHTML=`<div class="category-folder-head"><button type="button" id="categoryFolderBack" class="screen-back">← Categorías</button><small>SUBCATEGORÍAS DE</small><div class="category-folder-title"><strong>${escape(active)}</strong><button type="button" id="renameActiveCategory">Editar</button></div></div>
+      <form id="subcategoryInlineForm" class="inline-form"><input id="newInlineSubcategory" maxlength="40" placeholder="Nueva subcategoría" required><button class="primary">Agregar</button></form>
+      <div id="subcategoryFolderList" class="subcategory-folder-list">${subs.length?subs.map((s,si)=>`<article class="subcategory-folder-item reorderable" data-reorder-index="${si}"><span class="drag-grip">↕</span><strong>${escape(s)}</strong><div class="category-row-actions"><button type="button" class="mini-edit" data-edit-subcategory="${si}">Editar</button><button type="button" class="chip-delete" data-delete-subcategory="${si}" aria-label="Eliminar ${escape(s)}">×</button></div></article>`).join(''):'<div class="empty">Todavía no agregaste subcategorías dentro de esta categoría.</div>'}</div>`;
+    $('#categoryFolderBack').onclick=()=>{activeSettingsCategory='';fillCategories();};
+    $('#renameActiveCategory').onclick=()=>{
+      const value=prompt('Nuevo nombre de la categoría:',active)?.trim();
+      if(!value)return;
+      if(!renameCategoryEverywhere(active,value))return showToast('No pude cambiar el nombre. Revisá que no esté repetido.');
+      fillCategories();render();
+    };
+    $('#subcategoryInlineForm').onsubmit=(event)=>{
+      event.preventDefault();
+      const value=$('#newInlineSubcategory').value.trim();
+      if(!value)return;
+      const current=subcategoriesFor(active);
+      if(current.some((s)=>s.toLowerCase()===value.toLowerCase()))return showToast('Esa subcategoría ya existe');
+      state.subcategories[active]=[...current,value];
+      $('#newInlineSubcategory').value='';
+      save();syncCategoryConsumers();fillCategories();render();
+    };
+    document.querySelectorAll('#subcategoryFolderList [data-edit-subcategory]').forEach((button)=>{
+      button.onclick=()=>{
+        const index=Number(button.dataset.editSubcategory), oldName=subcategoriesFor(active)[index];
+        const value=prompt('Nuevo nombre de la subcategoría:',oldName)?.trim();
+        if(!value)return;
+        if(!renameSubcategoryEverywhere(active,oldName,value))return showToast('No pude cambiar el nombre. Revisá que no esté repetido.');
+        fillCategories();render();
+      };
+    });
+    document.querySelectorAll('#subcategoryFolderList [data-delete-subcategory]').forEach((button)=>{
+      button.onclick=()=>{
+        const index=Number(button.dataset.deleteSubcategory), current=[...subcategoriesFor(active)];
+        if(index<0||index>=current.length)return;
+        const removed=current[index];
+        if(!confirm(`¿Eliminar la subcategoría ${removed}?`))return;
+        state.subcategories[active]=current.filter((_,i)=>i!==index);
+        state.expenses.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
+        pending.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
+        save();syncCategoryConsumers();fillCategories();render();
+      };
+    });
+    installPointerReorder($('#subcategoryFolderList'),'.subcategory-folder-item',(from,to)=>{
+      const current=[...subcategoriesFor(active)], [item]=current.splice(from,1);
+      current.splice(to,0,item);state.subcategories[active]=current;save();syncCategoryConsumers();fillCategories();
+    },'button');
+  } else {
+    list.innerHTML=state.categories.length?state.categories.map((c,i)=>{
+      const count=subcategoriesFor(c).length;
+      return `<article class="category-folder-row reorderable" data-reorder-index="${i}"><span class="drag-grip">↕</span><button type="button" class="category-folder-open" data-open-category="${i}"><span><strong>${escape(c)}</strong><small>${count?count+' subcategoría'+(count===1?'':'s'):'Sin subcategorías'}</small></span><b>›</b></button><button type="button" class="category-folder-delete" data-delete-category="${i}" aria-label="Eliminar ${escape(c)}">×</button></article>`;
+    }).join(''):'<p class="muted">Creá categorías como quieras; cada una puede tener subcategorías.</p>';
+    document.querySelectorAll('[data-open-category]').forEach((button)=>{
+      button.onclick=()=>{activeSettingsCategory=state.categories[Number(button.dataset.openCategory)]||'';fillCategories();};
+    });
+    document.querySelectorAll('[data-delete-category]').forEach((button)=>{
+      button.onclick=()=>{
+        const category=state.categories[Number(button.dataset.deleteCategory)];
+        if(!category)return;
+        if(!confirm(`¿Eliminar la categoría ${category}? Los gastos que la usaban quedarán sin categoría.`))return;
+        deleteCategoryEverywhere(category);fillCategories();render();
+      };
+    });
+    installPointerReorder(list,'.category-folder-row',(from,to)=>{
+      const [item]=state.categories.splice(from,1);state.categories.splice(to,0,item);save();syncCategoryConsumers();fillCategories();renderReport();
+    },'button');
+  }
   fillSubcategories();
 }
 function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
@@ -179,6 +332,20 @@ function renderReportChart(rows){
   const top=rows.slice(0,6), max=Math.max(...top.map((r)=>r.arsEquivalent),1);
   target.innerHTML=top.length?top.map((r)=>`<div class="report-chart-row"><span>${escape(r.key)}</span><div><i style="width:${Math.max(2,r.arsEquivalent/max*100)}%"></i></div><strong>${money(r.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin datos para graficar.</div>';
 }
+function configuredCategoryRows(items){
+  const grouped=groupExpenses(items,e=>e.category || 'Sin categoría');
+  const map=new Map(grouped.map((row)=>[row.key,row]));
+  const configured=state.categories.map((category)=>map.get(category)||{key:category,ars:0,usd:0,arsEquivalent:0,count:0});
+  const extras=grouped.filter((row)=>!state.categories.includes(row.key));
+  return [...configured,...extras];
+}
+function configuredCardRows(items,method){
+  const grouped=groupExpenses(items.filter((e)=>e.method===method),e=>e.card || 'Sin tarjeta');
+  const map=new Map(grouped.map((row)=>[row.key,row]));
+  const configured=state.cards.filter((card)=>card.type===method).map((card)=>map.get(card.name)||{key:card.name,ars:0,usd:0,arsEquivalent:0,count:0});
+  const extras=grouped.filter((row)=>!state.cards.some((card)=>card.type===method&&card.name===row.key));
+  return [...configured,...extras];
+}
 function renderReport() {
   if (!$('#reportCategories')) return;
   const [from,to] = boundsForRange(reportRange,new Date(),$('#fromDate').value,$('#toDate').value);
@@ -194,8 +361,8 @@ function renderReport() {
   $('#reportCombinedArs').textContent = money(combined,'ARS');
   const diff = prevCombined ? ((combined-prevCombined)/prevCombined)*100 : null;
   $('#reportComparison').textContent = diff == null ? 'Sin período previo' : `${diff >= 0 ? '+' : ''}${diff.toLocaleString('es-AR',{maximumFractionDigits:1})}%`;
-  const categoryRows=groupExpenses(items,e=>e.category || 'Sin categoría');
-  renderReportChart(categoryRows);
+  const categoryRows=configuredCategoryRows(items);
+  renderReportChart(categoryRows.filter((r)=>r.arsEquivalent>0));
   renderReportRows($('#reportCategories'),categoryRows,'category');
   renderReportRows($('#reportMethods'),groupExpenses(items,e=>e.method || 'Sin definir'),'method');
   const top = items.slice().sort((a,b)=>expenseArsEquivalent(b)-expenseArsEquivalent(a)).slice(0,8);
@@ -203,8 +370,24 @@ function renderReport() {
   $('#reportDrilldown').classList.add('hidden');
   document.querySelectorAll('[data-report-kind]').forEach((b) => b.onclick = () => {
     const kind=b.dataset.reportKind, key=b.dataset.reportKey;
-    const filtered=items.filter((e)=> (kind==='category' ? (e.category || 'Sin categoría') : (e.method || 'Sin definir')) === key);
-    $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">Cerrar</button></div>${filtered.map((e)=>expenseHTML(e,true)).join('')}`;
+    if(kind==='category'){
+      const filtered=items.filter((e)=>(e.category||'Sin categoría')===key);
+      const configuredSubs=subcategoriesFor(key);
+      const groupedSubs=groupExpenses(filtered,e=>e.subcategory || 'Sin subcategoría');
+      const subMap=new Map(groupedSubs.map((row)=>[row.key,row]));
+      const rows=[
+        ...configuredSubs.map((sub)=>subMap.get(sub)||{key:sub,ars:0,usd:0,arsEquivalent:0,count:0}),
+        ...groupedSubs.filter((row)=>!configuredSubs.includes(row.key))
+      ];
+      $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">← Atrás</button></div><p class="muted">Subcategorías</p><div class="report-list">${rows.length?rows.map((row)=>`<div class="report-row static"><span><strong>${escape(row.key)}</strong><small>${row.count} movimiento${row.count===1?'':'s'}</small></span><strong>${money(row.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin subcategorías.</div>'}</div>${filtered.length?filtered.map((e)=>expenseHTML(e,true)).join(''):'<div class="empty">Todavía no hay gastos en esta categoría.</div>'}`;
+    } else if(kind==='method'&&['Débito','Crédito'].includes(key)){
+      const filtered=items.filter((e)=>e.method===key);
+      const rows=configuredCardRows(items,key);
+      $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">← Atrás</button></div><p class="muted">${key==='Débito'?'Tarjetas y cuentas de débito':'Tarjetas de crédito'}</p><div class="report-list">${rows.map((row)=>`<div class="report-row static"><span><strong>${escape(row.key)}</strong><small>${row.count} movimiento${row.count===1?'':'s'}</small></span><strong>${money(row.arsEquivalent,'ARS')}</strong></div>`).join('')}</div>${filtered.length?filtered.map((e)=>expenseHTML(e,true)).join(''):'<div class="empty">Todavía no hay gastos con este medio de pago.</div>'}`;
+    } else {
+      const filtered=items.filter((e)=>(e.method||'Sin definir')===key);
+      $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">← Atrás</button></div>${filtered.length?filtered.map((e)=>expenseHTML(e,true)).join(''):'<div class="empty">Sin movimientos.</div>'}`;
+    }
     $('#reportDrilldown').classList.remove('hidden');
     $('#closeReportDetail').onclick=()=>$('#reportDrilldown').classList.add('hidden');
   });
@@ -640,7 +823,7 @@ document.addEventListener('click',(e)=>{const b=e.target.closest?.('[data-delete
 
 function recurringCardOptions(method,selected=''){const cards=state.cards.filter((c)=>c.type===method);return '<option value="">Elegí una tarjeta</option>'+cards.map((c)=>`<option value="${escape(c.name)}" ${c.name===selected?'selected':''}>${escape(c.name)}</option>`).join('');}
 function updateRecurringCardField(){const method=$('#recurringMethod').value;$('#recurringCardWrap').classList.toggle('hidden',method==='Efectivo');$('#recurringCard').innerHTML=recurringCardOptions(method,$('#recurringCard').value);}
-function openRecurringDialog(item=null){editingRecurringId=item?.id||null;$('#recurringForm').reset();$('#recurringTitle').textContent=item?'Editar recurrente':'Nuevo recurrente';$('#recurringConcept').value=item?.concept||'';$('#recurringAmount').value=item?.amount||'';$('#recurringCurrency').value=item?.currency||'ARS';$('#recurringCategory').value=item?.category||'';$('#recurringMethod').value=item?.method||'Efectivo';$('#recurringDay').value=item?.day||1;updateRecurringCardField();$('#recurringCard').value=item?.card||'';$('#recurringDialog').showModal();}
+function openRecurringDialog(item=null){editingRecurringId=item?.id||null;$('#recurringForm').reset();$('#recurringTitle').textContent=item?'Editar recurrente':'Nuevo recurrente';$('#recurringConcept').value=item?.concept||'';$('#recurringAmount').value=item?.amount||'';$('#recurringCurrency').value=item?.currency||'ARS';fillRecurringCategoryOptions(item?.category||'');$('#recurringMethod').value=item?.method||'Efectivo';$('#recurringDay').value=item?.day||1;updateRecurringCardField();$('#recurringCard').value=item?.card||'';$('#recurringDialog').showModal();}
 function renderRecurringSettings(){if(!$('#recurringList'))return;$('#recurringList').innerHTML=state.recurring.length?state.recurring.map((r)=>`<article class="settings-item" data-recurring-id="${escape(r.id)}"><div><strong>${escape(r.concept)}</strong><small>${money(r.amount,r.currency)} · día ${r.day} · ${escape(r.method)}${r.card?' · '+escape(r.card):''}</small></div><div class="mini-actions"><button class="edit-recurring" type="button">Editar</button><button class="toggle-recurring" type="button">${r.active===false?'Activar':'Desactivar'}</button></div></article>`).join(''):'<div class="empty">No configuraste gastos recurrentes.</div>';document.querySelectorAll('[data-recurring-id]').forEach((row)=>{const r=state.recurring.find((x)=>x.id===row.dataset.recurringId);if(!r)return;row.querySelector('.edit-recurring').onclick=()=>openRecurringDialog(r);row.querySelector('.toggle-recurring').onclick=()=>{r.active=r.active===false?true:false;save();renderRecurringSettings();};});}
 function prepareRecurringDue(){const now=new Date(),key=monthKey(now),due=[];for(const r of state.recurring){if(r.active===false||Number(r.day||1)>now.getDate()||r.lastPromptedMonth===key)continue;due.push({id:uid(),amount:Number(r.amount),currency:r.currency,concept:r.concept,category:r.category||'',method:r.method,card:r.card||'',installments:1,date:now.toISOString(),purchaseDate:now.toISOString(),source:'recurring',recurringId:r.id});r.lastPromptedMonth=key;}if(due.length){pending.push(...due);save();showPending();}}
 
@@ -879,7 +1062,7 @@ async function confirmPending(index, card) {
 }
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
-$('#manualBtn').onclick = () => openExpense(); $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
+$('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit+=4;renderHomeRecent();}; $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
 $('#nextStep').onclick = () => { if (manualStep === 1 && !$('#amount').value) return $('#amount').reportValidity(); setManualStep(manualStep + 1); }; $('#prevStep').onclick = () => setManualStep(manualStep - 1);
 $('#method').onchange = updatePaymentFields; $('#category').onchange = () => fillSubcategories(); $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = updateInstallmentPreview; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
 $('#expenseForm').onsubmit = async (event) => {
@@ -918,13 +1101,43 @@ $('#usdFromDate').onchange=renderUsd; $('#usdToDate').onchange=renderUsd;
 $('#usdRateType').onchange=async()=>{ state.settings.usdRateType=$('#usdRateType').value; save(); renderUsd(); await ensureUsdRate(true); renderUsd(); };
 $('#refreshUsdRate').onclick=async()=>{ $('#usdRateMeta').textContent='Actualizando…'; await ensureUsdRate(true); renderUsd(); };
 document.querySelectorAll('[data-history]').forEach((button) => { button.onclick = () => { historyRange = button.dataset.history; document.querySelectorAll('[data-history]').forEach((b) => b.classList.remove('selected')); button.classList.add('selected'); $('#historyDate').classList.toggle('hidden', historyRange !== 'day'); $('#historyMonth').classList.toggle('hidden', historyRange !== 'month'); $('#historyYear').classList.toggle('hidden', historyRange !== 'year'); $('#historyCustom').classList.toggle('hidden', historyRange !== 'custom'); renderHistory(); }; }); ['historyDate', 'historyMonth', 'historyYear', 'historyFrom', 'historyTo'].forEach((id) => { $(`#${id}`).onchange = renderHistory; });
-function addCategory() { const value = $('#newCategory').value.trim(); if (!value || state.categories.some((c) => c.toLowerCase() === value.toLowerCase())) return; state.categories.push(value); state.subcategories[value] ||= []; $('#newCategory').value = ''; save(); fillCategories(); }
-function addSubcategory(category,value){ const clean=String(value||'').trim(); if(!category||!clean)return false; const list=subcategoriesFor(category); if(list.some((s)=>s.toLowerCase()===clean.toLowerCase()))return false; state.subcategories[category]=[...list,clean]; save(); return true; }
+function addCategory() { const value = $('#newCategory').value.trim(); if (!value || state.categories.some((c) => c.toLowerCase() === value.toLowerCase())) return; state.categories.push(value); state.subcategories[value] ||= []; $('#newCategory').value = ''; save(); syncCategoryConsumers(); fillCategories(); render(); }
+function addSubcategory(category,value){ const clean=String(value||'').trim(); if(!category||!clean)return false; const list=subcategoriesFor(category); if(list.some((s)=>s.toLowerCase()===clean.toLowerCase()))return false; state.subcategories[category]=[...list,clean]; save(); syncCategoryConsumers(); return true; }
 $('#categoryForm').onsubmit = (event) => { event.preventDefault(); addCategory(); };
 $('#quickCategory').onclick = () => { const value = prompt('Nombre de la nueva categoría:')?.trim(); if (!value) return; $('#newCategory').value = value; addCategory(); $('#category').value = value; fillSubcategories(); };
 $('#quickSubcategory').onclick = () => { const category=$('#category').value; if(!category)return showToast('Elegí primero una categoría'); const value=prompt(`Nueva subcategoría dentro de ${category}:`)?.trim(); if(!value)return; if(!addSubcategory(category,value))return showToast('Esa subcategoría ya existe'); fillSubcategories(value); };
 function renderReminderSettings() { const labels = { 3: '3 días antes', 2: '2 días antes', 1: '1 día antes' }; $('#reminderSettings').innerHTML = [3, 2, 1].map((d) => `<label><input type="checkbox" value="${d}" ${state.settings.reminderDays.includes(d) ? 'checked' : ''}>${labels[d]}</label>`).join(''); $('#reminderSettings').onchange = () => { state.settings.reminderDays = [...$('#reminderSettings').querySelectorAll(':checked')].map((i) => Number(i.value)); save(); renderPaymentReminders(); }; }
-$('#settingsBtn').onclick = () => { renderReminderSettings(); fillCategories(); renderRecurringSettings(); renderTrash(); renderSecurityStatus(); $('#settingsDialog').showModal(); }; $('#biometricBtn').onclick = openSecuritySetup;
+function cloneState(){return typeof structuredClone==='function'?structuredClone(state):JSON.parse(JSON.stringify(state));}
+function restoreState(snapshot){
+  Object.keys(state).forEach((key)=>delete state[key]);
+  Object.assign(state,cloneState.call(null,snapshot));
+}
+function settingsHasChanges(){return settingsSnapshot&&JSON.stringify(state)!==JSON.stringify(settingsSnapshot);}
+function closeSettingsKeepingChanges(){
+  save();settingsSnapshot=null;activeSettingsCategory='';$('#settingsDialog').close();render();
+}
+function closeSettingsDiscardingChanges(){
+  if(settingsSnapshot){restoreState(settingsSnapshot);save();}
+  settingsSnapshot=null;activeSettingsCategory='';$('#settingsSaveDialog')?.close();$('#settingsDialog').close();render();
+}
+$('#settingsBtn').onclick = () => {
+  settingsSnapshot=cloneState();activeSettingsCategory='';
+  renderReminderSettings();fillCategories();renderRecurringSettings();renderTrash();renderSecurityStatus();
+  $('#settingsDialog').showModal();
+};
+$('#settingsBack').onclick=()=>{
+  if(activeSettingsCategory){activeSettingsCategory='';fillCategories();return;}
+  closeSettingsKeepingChanges();
+};
+$('#settingsClose').onclick=()=>{
+  if(!settingsHasChanges()){settingsSnapshot=null;activeSettingsCategory='';$('#settingsDialog').close();return;}
+  $('#settingsSaveDialog').showModal();
+};
+$('#settingsKeep').onclick=()=>{ $('#settingsSaveDialog').close(); closeSettingsKeepingChanges(); };
+$('#settingsDiscard').onclick=()=>closeSettingsDiscardingChanges();
+$('#settingsCancelClose').onclick=()=>$('#settingsSaveDialog').close();
+$('#settingsDialog').addEventListener('cancel',(event)=>{event.preventDefault();$('#settingsClose').click();});
+$('#biometricBtn').onclick = openSecuritySetup;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let activeRecognition = null;
 let voiceTranscript = '';
@@ -998,14 +1211,15 @@ function stopExpenseVoice() {
 }
 const micBtn=$('#micBtn');
 const voiceTrash=$('#voiceTrash');
-function updateVoiceCancelGesture(clientY){
+function updateVoiceCancelGesture(clientX,clientY){
   if(voiceGestureStartY==null)return;
-  const armed=(voiceGestureStartY-clientY)>=70;
+  const rect=voiceTrash?.getBoundingClientRect?.();
+  const armed=!!rect && clientX>=rect.left-18 && clientX<=rect.right+18 && clientY>=rect.top-18 && clientY<=rect.bottom+18;
   if(armed===voiceCancelArmed)return;
   voiceCancelArmed=armed;
   $('#voiceZone')?.classList.toggle('cancel-ready',armed);
   voiceTrash?.classList.toggle('armed',armed);
-  $('#voiceHint').textContent=armed?'Soltá para cancelar':'Deslizá hacia el tacho para cancelar';
+  $('#voiceHint').textContent=armed?'Soltá sobre el tacho para eliminar':'Arrastrá el dedo hasta el tacho para borrar';
 }
 function cancelExpenseVoice(){
   if(!activeRecognition&&!voiceHoldActive)return;
@@ -1016,12 +1230,12 @@ function cancelExpenseVoice(){
 }
 if ('ontouchstart' in window) {
   micBtn.addEventListener('touchstart',(e)=>{e.preventDefault();voiceGestureStartY=e.touches[0]?.clientY??null;startExpenseVoice();},{passive:false});
-  micBtn.addEventListener('touchmove',(e)=>{e.preventDefault();if(e.touches[0])updateVoiceCancelGesture(e.touches[0].clientY);},{passive:false});
+  micBtn.addEventListener('touchmove',(e)=>{e.preventDefault();if(e.touches[0])updateVoiceCancelGesture(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
   micBtn.addEventListener('touchend',(e)=>{e.preventDefault();const cancel=voiceCancelArmed;voiceGestureStartY=null;if(cancel)cancelExpenseVoice();else stopExpenseVoice();},{passive:false});
   micBtn.addEventListener('touchcancel',(e)=>{e.preventDefault();cancelExpenseVoice();},{passive:false});
 } else {
   micBtn.onpointerdown=(e)=>{e.preventDefault();voiceGestureStartY=e.clientY;micBtn.setPointerCapture?.(e.pointerId);startExpenseVoice();};
-  micBtn.onpointermove=(e)=>{if(activeRecognition)updateVoiceCancelGesture(e.clientY);};
+  micBtn.onpointermove=(e)=>{if(activeRecognition)updateVoiceCancelGesture(e.clientX,e.clientY);};
   micBtn.onpointerup=(e)=>{e.preventDefault();const cancel=voiceCancelArmed;voiceGestureStartY=null;if(cancel)cancelExpenseVoice();else stopExpenseVoice();};
   micBtn.onpointercancel=cancelExpenseVoice;
 }
@@ -1057,7 +1271,7 @@ $('#recurringForm').onsubmit=(e)=>{e.preventDefault();const data={concept:$('#re
 $('#consultExportExcel').onclick=exportConsultExcel;
 $('#consultExportPdf').onclick=exportConsultPdf;
 
-$('#addStock').onclick=()=>{ $('#stockForm').reset(); $('#stockQty').value=1; $('#stockMonths').value=1; $('#stockPaidDate').value=new Date().toISOString().slice(0,10); $('#stockDialog').showModal(); };
+$('#addStock').onclick=()=>{ $('#stockForm').reset(); fillStockCategoryOptions(); $('#stockQty').value=1; $('#stockMonths').value=1; $('#stockPaidDate').value=new Date().toISOString().slice(0,10); $('#stockDialog').showModal(); };
 $('#stockForm').onsubmit=async(e)=>{e.preventDefault();await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),quantity:Number($('#stockQty').value),months:Number($('#stockMonths').value),totalAmount:Number($('#stockAmount').value),currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});$('#stockDialog').close();renderStock();renderBudget();renderSavings();showToast('Compra de stock guardada');};
 $('#stockVoiceBtn').onclick=startStockVoice;
 
