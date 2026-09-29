@@ -251,13 +251,13 @@ function renderResale() {
   $('#resaleRecovered').textContent = money(total.recovered, 'ARS');
   $('#resaleSales').textContent = money(total.sales, 'ARS');
   $('#resaleNet').textContent = money(total.netGain, 'ARS');
-  $('#resaleGainPercent').textContent = pct(total.gainPercent);
+  $('#resaleGainPercent').textContent = `${pct(total.gainPercent)} global de ganancias`;
   $('#resaleOwner').textContent = money(total.totalForOwner, 'ARS');
   $('#resaleSeller').textContent = money(total.sellerGain, 'ARS');
   $('#resaleSplitLabel').textContent = `${split.ownerPercent}% Mauro · ${split.sellerPercent}% vendedor`;
   $('#resaleStock').textContent = `${total.available} disponibles · ${total.sold} vendidas · ${total.personal} uso personal`;
-  if ($('#resaleOwnerHead')) $('#resaleOwnerHead').textContent = `Mauro (${split.ownerPercent}%)`;
-  if ($('#resaleSellerHead')) $('#resaleSellerHead').textContent = `Vendedor (${split.sellerPercent}%)`;
+  if ($('#resaleOwnerHead')) $('#resaleOwnerHead').textContent = `Ganancia Mauro (${split.ownerPercent}%)`;
+  if ($('#resaleSellerHead')) $('#resaleSellerHead').textContent = `Total vendedor (${split.sellerPercent}%)`;
   if ($('#resaleBalanceBody')) {
     $('#resaleBalanceBody').innerHTML = state.resale.parties.map((party) => {
       const m = partyMetrics(party, split);
