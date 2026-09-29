@@ -39,3 +39,19 @@ export function groupExpenses(items, keyFn) {
   }
   return [...map.values()].sort((a,b) => b.arsEquivalent - a.arsEquivalent);
 }
+
+export function recentPurchases(items = []) {
+  const chosen = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    if (!item) continue;
+    const installment = Number(item.installment || 1);
+    const parentKey = item.parentId || item.id || crypto?.randomUUID?.() || Math.random().toString(36);
+    if (item.parentId && installment !== 1 && chosen.has(parentKey)) continue;
+    if (!item.parentId || installment === 1 || !chosen.has(parentKey)) chosen.set(parentKey,item);
+  }
+  return [...chosen.values()].sort((a,b) => {
+    const bd = new Date(b.purchaseDate || b.date || b.dueDate || 0).getTime();
+    const ad = new Date(a.purchaseDate || a.date || a.dueDate || 0).getTime();
+    return (Number.isFinite(bd)?bd:0) - (Number.isFinite(ad)?ad:0);
+  });
+}
