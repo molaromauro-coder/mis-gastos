@@ -77,8 +77,8 @@ export function parseExpense(text, cards = [], categories = []) {
   const amount = parseAmount(lower);
   const currency = /(?:usd|u\$s|dolar)/.test(lower) ? 'USD' : 'ARS';
   const installments = parseInstallments(lower);
-  const method = /credito|cuotas?/.test(lower) ? 'Crédito' : /debito/.test(lower) ? 'Débito' : /efectivo/.test(lower) ? 'Efectivo' : 'Sin definir';
-  const card = cards.find((item) => item?.name && lower.includes(normalized(item.name)))?.name || '';
+  const method = /credito|cuotas?/.test(lower) ? 'Crédito' : /debito/.test(lower) ? 'Débito' : 'Efectivo';
+  const card = cards.find((item) => item?.name && (!item.type || item.type === method) && lower.includes(normalized(item.name)))?.name || '';
   const category = categoryFor(raw, categories);
   let concept = raw.replace(/\b(pagu[eé]|gast[eé]|compr[eé]|en|con|del?|la|el|efectivo|d[eé]bito|cr[eé]dito|pesos?|d[oó]lares?|usd|u\$s|cuotas?|mill[oó]n(?:es)?)\b/gi, ' ')
     .replace(/[\d$.,]+/g, ' ');
