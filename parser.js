@@ -314,7 +314,7 @@ function splitRepeatedExpenseVerbs(transcript){
   const raw=String(transcript||'').trim();
   if(!raw)return [];
   const verbMatches=[];
-  const verbRe=/(^|[^a-záéíóúñ0-9_])(gast[eé]|compr[eé]|pagu[eé])(?=\\s)/gi;
+  const verbRe=/(^|[^a-záéíóúñ0-9_])(gast[eé]|compr[eé]|pagu[eé])(?=\s)/gi;
   let verbMatch;
   while((verbMatch=verbRe.exec(raw))){
     verbMatches.push({index:verbMatch.index+verbMatch[1].length,verb:verbMatch[2]});
@@ -335,7 +335,7 @@ function splitRepeatedExpenseVerbs(transcript){
     if(starts.length){
       const previousIndex=starts.at(-1);
       const between=raw.slice(previousIndex,current.index);
-      if(/\\b(?:no+|perd[oó]n|quise decir|mejor)\\b/i.test(between))continue;
+      if(/\b(?:no+|perd[oó]n|quise decir|mejor)\b/i.test(between))continue;
     }
     starts.push(current.index);
   }
@@ -345,7 +345,7 @@ function splitRepeatedExpenseVerbs(transcript){
   for(let i=0;i<starts.length;i++){
     const from=i===0?0:starts[i];
     const to=starts[i+1]??raw.length;
-    const part=raw.slice(from,to).trim().replace(/^[,;\\s]+|[,;\\s]+$/g,'');
+    const part=raw.slice(from,to).trim().replace(/^[,;\s]+|[,;\s]+$/g,'');
     if(part)parts.push(part);
   }
   return parts.length>1?parts:[raw];
@@ -361,7 +361,7 @@ export function parseExpenses(transcript,cards=[],categories=[],options={}){
     .map((part)=>parseExpense(part,cards,categories,options));
 
   const lower=normalized(raw);
-  const sharedPayment=/\\b(?:pague|pago)\\s+(?:todo|todos|todas)\\b|\\b(?:todo|todos|todas)\\s+(?:con|en)\\b|\\b(?:los|las)\\s+(?:dos|tres|cuatro)\\s+(?:con|en)\\b/.test(lower);
+  const sharedPayment=/\b(?:pague|pago)\s+(?:todo|todos|todas)\b|\b(?:todo|todos|todas)\s+(?:con|en)\b|\b(?:los|las)\s+(?:dos|tres|cuatro)\s+(?:con|en)\b/.test(lower);
   if(items.length>1&&sharedPayment){
     const shared=parseExpense(raw,cards,categories,options);
     items.forEach((item)=>{
