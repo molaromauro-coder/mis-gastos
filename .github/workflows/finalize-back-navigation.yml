@@ -1,0 +1,36 @@
+name: Finalize back navigation
+on:
+  push:
+    paths:
+      - '.github/scripts/finalize-back-navigation.py'
+      - '.github/workflows/finalize-back-navigation.yml'
+permissions:
+  contents: write
+jobs:
+  patch-test-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply patch
+        run: python .github/scripts/finalize-back-navigation.py
+      - name: Check JavaScript syntax
+        run: node --check app.js
+      - name: Run all tests
+        run: npm test
+      - name: Verify navigation rules
+        run: |
+          grep -q "previousViewId" app.js
+          grep -q "destination==='cards'" app.js
+          grep -q "view-back" styles.css
+      - name: Commit tested result and remove one-time helpers
+        run: |
+          rm .github/scripts/finalize-back-navigation.py
+          rm .github/workflows/finalize-back-navigation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Finalize back navigation across views"
+          git push
