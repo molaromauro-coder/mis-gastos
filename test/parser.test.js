@@ -13,6 +13,12 @@ test('interpreta importes y cuotas escritos con palabras',()=>{
   assert.equal(parseAmount('un millón doscientos mil pesos'),1200000);
   assert.equal(parseExpense('gasté un millón en una heladera con crédito Mi Visa en doce cuotas',[{name:'Mi Visa'}]).installments,12);
 });
+test('interpreta separadores de miles usados por el reconocimiento de voz de iPhone',()=>{
+  assert.equal(parseAmount('50.000 pesos'),50000);
+  assert.equal(parseAmount('50,000 pesos'),50000);
+  assert.equal(parseAmount('1.200.000 pesos'),1200000);
+  assert.equal(parseAmount('1,200,000 pesos'),1200000);
+});
 test('separa múltiples gastos aunque el segundo no repita el verbo', () => {
   const items = parseExpenses('Gasté 10 mil en kiosco y 20 mil en supermercado');
   assert.equal(items.length, 2); assert.deepEqual(items.map((x) => x.amount), [10000, 20000]);
@@ -20,6 +26,10 @@ test('separa múltiples gastos aunque el segundo no repita el verbo', () => {
 test('separa múltiples gastos con importes escritos en palabras',()=>{
   const items=parseExpenses('Gasté cincuenta mil en kiosco y treinta mil en supermercado');
   assert.equal(items.length,2); assert.deepEqual(items.map((x)=>x.amount),[50000,30000]);
+});
+test('separa dos gastos cuando iPhone transcribe miles con coma',()=>{
+  const items=parseExpenses('Gasté 50,000 pesos en kiosco y 50,000 pesos en supermercado');
+  assert.equal(items.length,2); assert.deepEqual(items.map((x)=>x.amount),[50000,50000]);
 });
 test('entiende millones y categorías configuradas', () => {
   assert.equal(parseAmount('un millón de pesos'), 1000000);
