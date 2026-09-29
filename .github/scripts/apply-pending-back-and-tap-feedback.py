@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 def replace_once(text, old, new, label):
@@ -59,5 +60,11 @@ app_path.write_text(app, encoding='utf-8')
 
 sw_path = Path('sw.js')
 sw = sw_path.read_text(encoding='utf-8')
-sw = replace_once(sw, "const CACHE = 'mis-gastos-v22';", "const CACHE = 'mis-gastos-v23';", 'service worker cache bump')
+m = re.search(r"const CACHE = 'mis-gastos-v(\d+)';", sw)
+if not m:
+    raise SystemExit('service worker cache: version not found')
+current = int(m.group(1))
+next_version = current + 1
+sw = sw[:m.start()] + f"const CACHE = 'mis-gastos-v{next_version}';" + sw[m.end():]
 sw_path.write_text(sw, encoding='utf-8')
+print(f'cache bumped v{current} -> v{next_version}')
