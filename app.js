@@ -317,23 +317,36 @@ function pendingPaymentPrompt(e,i){
   }
   return '';
 }
+function paymentVoiceAlias(name){
+  return normVoiceChoice(name)
+    .replace(/\b(?:cuenta|tarjeta|debito|credito)\b/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
 function applyPendingPaymentVoice(index,phrase){
   const item=pending[index]; if(!item)return;
   const spoken=normVoiceChoice(phrase);
   const namedAll=state.cards
-    .filter((c)=>c?.name&&spoken.includes(normVoiceChoice(c.name)))
-    .map((c)=>({c,index:spoken.lastIndexOf(normVoiceChoice(c.name))}))
+    .filter((c)=>{
+      if(!c?.name)return false;
+      const full=normVoiceChoice(c.name),alias=paymentVoiceAlias(c.name);
+      return spoken.includes(full)||(alias&&spoken.includes(alias));
+    })
+    .map((c)=>{
+      const full=normVoiceChoice(c.name),alias=paymentVoiceAlias(c.name);
+      return {c,index:Math.max(spoken.lastIndexOf(full),alias?spoken.lastIndexOf(alias):-1)};
+    })
     .sort((a,b)=>b.index-a.index);
   const explicit=[...spoken.matchAll(/\b(efectivo|debito|credito)\b/g)];
-  let method=explicit.length?({efectivo:'Efectivo',debito:'Débito',credito:'Crédito'}[explicit.at(-1)[1]]):item.method;
-  if(!explicit.length&&namedAll.length){
-    if(namedAll.some(({c})=>normVoiceChoice(c.name)==='mercado pago')) method='Débito';
-    else {
-      const types=[...new Set(namedAll.map(({c})=>c.type).filter(Boolean))];
-      if(types.length===1) method=types[0];
-    }
-  }
-  if(method==='Sin definir'){showToast('Decí efectivo, débito o crédito, o nombrá una tarjeta configurada');return;}
+  const explicitMethod=explicit.length?({efectivo:'Efectivo',debito:'Débito',credito:'Crédito'}[explicit.at(-1)[1]]):'';
+  const mentionsPayment=namedAll.length>0 || explicit.length>0 || /\bcuotas?\b/.test(spoken);
+  let method=item.method;
+  if(explicitMethod) method=explicitMethod;
+  else if(/\bcuotas?\b/.test(spoken)) method='Crédito';
+  else if(namedAll.length) method='Débito';
+  else if(method==='Sin definir'&&mentionsPayment) method='Débito';
+
+  if(method==='Sin definir'){showToast('Decí efectivo, débito o crédito, o nombrá una tarjeta o cuenta');return;}
   const methodChanged=item.method!==method;
   item.method=method;
   if(method==='Efectivo'){item.card='';item.installments=1;item.installmentsSpecified=true;showPending();return;}
@@ -350,13 +363,16 @@ function applyPendingPaymentVoice(index,phrase){
     else if(item.installmentsSpecified!==true)item.installmentsSpecified=false;
   }
   const cards=state.cards.filter((c)=>c.type===method);
-  const named=namedAll.find(({c})=>c.type===method)?.c || cards.find((c)=>spoken.includes(normVoiceChoice(c.name)));
+  const named=namedAll.find(({c})=>c.type===method)?.c;
   if(named)item.card=named.name;
-  else if(methodChanged)item.card='';
+  else if(methodChanged||namedAll.length)item.card='';
   showPending();
-  if(!item.card) showToast(cards.length?'Decí o elegí qué tarjeta o cuenta usaste':'Primero agregá una tarjeta o cuenta de este tipo');
+  if(['Débito','Crédito'].includes(method)&&!item.card){
+    showToast(cards.length?'Decí o elegí qué tarjeta o cuenta usaste':'Primero agregá una tarjeta o cuenta de este tipo');
+  }
 }
 let pendingVoiceRecognition=null;
+let pendingVoiceSession=null;
 function pendingVoiceStartCue(){
   navigator.vibrate?.(25);
   try{
@@ -366,22 +382,84 @@ function pendingVoiceStartCue(){
     osc.frequency.value=620; gain.gain.value=.02; osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+.06);
   }catch{}
 }
-function startPendingPaymentVoice(index){
+function restorePendingVoiceButton(button){
+  if(!button)return;
+  button.classList.remove('listening');
+  button.textContent='🎙 Responder por voz';
+}
+function finishPendingPaymentVoice(){
+  const session=pendingVoiceSession;
+  if(!session)return;
+  const phrase=[session.transcript,session.cycle].filter(Boolean).join(' ').trim();
+  const button=session.button;
+  pendingVoiceSession=null;
+  pendingVoiceRecognition=null;
+  restorePendingVoiceButton(button);
+  if(phrase) applyPendingPaymentVoice(session.index,phrase);
+  else showToast('No escuché una respuesta. Mantené presionado y hablá');
+}
+function launchPendingPaymentVoiceCycle(){
+  const session=pendingVoiceSession;
+  if(!session||!session.pressed||pendingVoiceRecognition)return;
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  const process=(phrase)=>applyPendingPaymentVoice(index,phrase);
-  const button=document.querySelector(`[data-pending-pay-voice="${index}"]`);
-  const restore=()=>{if(button){button.disabled=false;button.classList.remove('listening');button.textContent='🎙 Responder por voz';}};
-  if(pendingVoiceRecognition){showToast('Ya estoy escuchando');return;}
-  if(!SR){const phrase=prompt('Decí o escribí el medio, la tarjeta o la cantidad de cuotas.');if(phrase)process(phrase);return;}
-  const rec=new SR();pendingVoiceRecognition=rec;rec.lang='es-AR';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
-  let phrase='';
-  if(button){button.classList.add('listening');button.textContent='🎙 Escuchando…';}
+  if(!SR)return;
+  const rec=new SR();
+  pendingVoiceRecognition=rec;
+  session.cycle='';
+  rec.lang='es-AR';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
+  rec.onstart=()=>{
+    session.button?.classList.add('listening');
+    if(session.button)session.button.textContent='🎙 Escuchando… soltá para terminar';
+  };
+  rec.onresult=(event)=>{
+    let text='';
+    for(let i=0;i<event.results.length;i++)text+=' '+(event.results[i][0]?.transcript||'');
+    session.cycle=text.trim();
+  };
+  rec.onerror=(event)=>{
+    if(event.error==='not-allowed')showToast('Activá el permiso del micrófono');
+    else if(!['aborted','no-speech'].includes(event.error))showToast('No pude escuchar la respuesta');
+  };
+  rec.onend=()=>{
+    const current=pendingVoiceSession;
+    pendingVoiceRecognition=null;
+    if(!current)return;
+    if(current.cycle){
+      current.transcript=[current.transcript,current.cycle].filter(Boolean).join(' ').trim();
+      current.cycle='';
+    }
+    if(current.pressed){setTimeout(launchPendingPaymentVoiceCycle,100);return;}
+    finishPendingPaymentVoice();
+  };
+  try{rec.start();}catch{
+    pendingVoiceRecognition=null;
+    if(session.pressed)setTimeout(launchPendingPaymentVoiceCycle,150);
+    else finishPendingPaymentVoice();
+  }
+}
+function startPendingPaymentVoice(index,button){
+  if(pendingVoiceSession)return;
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){
+    const phrase=prompt('Decí o escribí el medio, la tarjeta o la cantidad de cuotas.');
+    if(phrase)applyPendingPaymentVoice(index,phrase);
+    return;
+  }
+  pendingVoiceSession={index,button,pressed:true,transcript:'',cycle:''};
+  if(button){
+    button.classList.add('listening');
+    button.textContent='🎙 Escuchando… soltá para terminar';
+  }
   pendingVoiceStartCue();
-  rec.onstart=()=>{if(button){button.disabled=true;button.classList.add('listening');button.textContent='🎙 Escuchando…';}showToast('🎙 Escuchando…');};
-  rec.onresult=(event)=>{let text='';for(let i=0;i<event.results.length;i++)text+=' '+(event.results[i][0]?.transcript||'');phrase=text.trim();};
-  rec.onerror=(event)=>{if(event.error!=='aborted')showToast(event.error==='not-allowed'?'Activá el permiso del micrófono':'No pude escuchar la respuesta');};
-  rec.onend=()=>{pendingVoiceRecognition=null;restore();if(phrase)process(phrase);else showToast('No escuché una respuesta. Probá de nuevo o elegí manualmente');};
-  try{rec.start();}catch{pendingVoiceRecognition=null;restore();showToast('No pude iniciar el micrófono');}
+  launchPendingPaymentVoiceCycle();
+}
+function stopPendingPaymentVoice(){
+  const session=pendingVoiceSession;
+  if(!session)return;
+  session.pressed=false;
+  if(pendingVoiceRecognition){
+    try{pendingVoiceRecognition.stop();}catch{pendingVoiceRecognition=null;finishPendingPaymentVoice();}
+  }else finishPendingPaymentVoice();
 }
 function showPending() {
   if (!pending.length) { if ($('#confirmDialog').open) $('#confirmDialog').close(); return; }
@@ -431,7 +509,19 @@ function showPending() {
       item.date=choice.date;item.purchaseDate=choice.date;item.dateSpecified=true;item.dateAmbiguous=false;showPending();
     };
   });
-  document.querySelectorAll('[data-pending-pay-voice]').forEach((button)=>{button.onclick=()=>startPendingPaymentVoice(Number(button.dataset.pendingPayVoice));});
+  document.querySelectorAll('[data-pending-pay-voice]').forEach((button)=>{
+    const index=Number(button.dataset.pendingPayVoice);
+    button.onclick=(event)=>event.preventDefault();
+    button.oncontextmenu=(event)=>event.preventDefault();
+    button.onpointerdown=(event)=>{
+      event.preventDefault();
+      button.setPointerCapture?.(event.pointerId);
+      startPendingPaymentVoice(index,button);
+    };
+    button.onpointerup=(event)=>{event.preventDefault();stopPendingPaymentVoice();};
+    button.onpointercancel=(event)=>{event.preventDefault();stopPendingPaymentVoice();};
+    button.onpointerleave=(event)=>{if(event.buttons===0)stopPendingPaymentVoice();};
+  });
   document.querySelectorAll('.pending').forEach((card) => {
     const index = Number(card.dataset.index);
     card.querySelector('.confirm').onclick = () => confirmPending(index, card);
