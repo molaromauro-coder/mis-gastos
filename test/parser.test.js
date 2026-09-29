@@ -38,8 +38,11 @@ test('entiende millones y categorías configuradas', () => {
 });
 test('no asigna una tarjeta desconocida', () => assert.equal(parseExpense('pagué 200 con débito del Francés', []).card, ''));
 
-test('si no se menciona medio de pago usa efectivo',()=>{
-  assert.equal(parseExpense('gasté cincuenta mil pesos en kiosco').method,'Efectivo');
+test('si no se menciona medio de pago queda pendiente de definición',()=>{
+  assert.equal(parseExpense('gasté cincuenta mil pesos en kiosco').method,'Sin definir');
+});
+test('si se dice efectivo por voz lo conserva',()=>{
+  assert.equal(parseExpense('gasté cincuenta mil pesos en kiosco en efectivo').method,'Efectivo');
 });
 test('la voz no asigna una tarjeta de tipo incorrecto',()=>{
   const e=parseExpense('pagué 200 con débito Visa',[{name:'Visa',type:'Crédito'}]);
