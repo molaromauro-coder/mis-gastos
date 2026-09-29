@@ -13,6 +13,22 @@ const STORAGE_KEY = sharedMode ? 'mis-gastos-shared-v1' : 'mis-gastos-v1';
 const defaults = { expenses: [], cards: [], categories: [], stock: [], recoveries: [], budgets: {}, recurring: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 4 };
 function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], stock: old.stock || [], recoveries: old.recoveries || [], budgets: old.budgets || {}, recurring: old.recurring || [], trash: old.trash || [], security: { ...defaults.security, ...(old.security || {}) }, settings: { ...defaults.settings, ...(old.settings || {}), usdRateCache: old.settings?.usdRateCache || {} }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 4 }; } catch { return structuredClone(defaults); } }
 const state = loadState();
+function demoCardId(){return crypto.randomUUID?.() || ('demo-' + Date.now() + '-' + Math.random().toString(16).slice(2));}
+function seedDemoCardsOnce(){
+  if(sharedMode || state.settings?.demoCardsSeeded) return;
+  if(!Array.isArray(state.cards)) state.cards=[];
+  if(state.cards.length===0){
+    state.cards.push(
+      {id:demoCardId(),name:'Banco Macro',type:'Débito',closingDay:0,dueDay:0,demo:true},
+      {id:demoCardId(),name:'Mercado Pago',type:'Débito',closingDay:0,dueDay:0,demo:true},
+      {id:demoCardId(),name:'Banco Francés',type:'Crédito',closingDay:25,dueDay:10,demo:true},
+      {id:demoCardId(),name:'Banco Macro',type:'Crédito',closingDay:25,dueDay:10,demo:true}
+    );
+  }
+  state.settings={...state.settings,demoCardsSeeded:true};
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+}
+seedDemoCardsOnce();
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
 let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null;
 const $ = (s) => document.querySelector(s);
@@ -26,7 +42,7 @@ function renderHomeClock() {
   if($('#homeDate')) $('#homeDate').textContent=now.toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'long'});
   if($('#homeTime')) $('#homeTime').textContent=now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
 }
-function installmentExpenses(expense) { if (expense.method !== 'Crédito') return [expense]; const card = state.cards.find((c) => c.name === expense.card); if (!card) return [expense]; const first = firstDueDateForCard(card, new Date(expense.purchaseDate || expense.date)); const count = Math.max(1, Number(expense.installments || 1)); if (count === 1) return [{ ...expense, dueDate: first.toISOString(), installment: 1, installments: 1 }]; return Array.from({ length: count }, (_, i) => ({ ...expense, id: crypto.randomUUID(), parentId: expense.id, dueDate: dateWithCardDay(first.getFullYear(), first.getMonth() + i, card.dueDay).toISOString(), amount: expense.amount / count, installment: i + 1, installments: count })); }
+function installmentExpenses(expense) { if (expense.method !== 'Crédito') return [expense]; const card = state.cards.find((c) => c.name === expense.card && c.type === 'Crédito'); if (!card) return [expense]; const first = firstDueDateForCard(card, new Date(expense.purchaseDate || expense.date)); const count = Math.max(1, Number(expense.installments || 1)); if (count === 1) return [{ ...expense, dueDate: first.toISOString(), installment: 1, installments: 1 }]; return Array.from({ length: count }, (_, i) => ({ ...expense, id: crypto.randomUUID(), parentId: expense.id, dueDate: dateWithCardDay(first.getFullYear(), first.getMonth() + i, card.dueDay).toISOString(), amount: expense.amount / count, installment: i + 1, installments: count })); }
 function totals(items) { return ['ARS', 'USD'].map((currency) => items.filter((e) => e.currency === currency).reduce((sum, e) => sum + Number(e.amount), 0)); }
 function totalsHTML(items) { const [ars, usd] = totals(items); return `${money(ars, 'ARS')}${usd ? ` · ${money(usd, 'USD')}` : ''}`; }
 function purchaseRows(date) { const day = state.expenses.filter((e) => sameDay(e.purchaseDate || e.date, date)); return day.filter((e) => !e.parentId || e.installment === 1); }
@@ -40,12 +56,12 @@ function render() { renderHomeClock(); const rows = purchaseRows(selectedDate); 
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function fillCategories() { $('#category').innerHTML = '<option value="">Sin categoría</option>' + state.categories.map((c) => `<option>${escape(c)}</option>`).join(''); $('#categoryList').innerHTML = state.categories.length ? state.categories.map((c, i) => `<button class="chip" data-category-index="${i}">${escape(c)} <span>×</span></button>`).join('') : '<p class="muted">Creá categorías como quieras; no hay una lista cerrada.</p>'; document.querySelectorAll('[data-category-index]').forEach((b) => { b.onclick = () => { state.categories.splice(Number(b.dataset.categoryIndex), 1); save(); fillCategories(); }; }); }
 function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
-function monthlyCardTotal(card, date) { return state.expenses.filter((e) => e.card === card.name && effectiveDate(e).getFullYear() === date.getFullYear() && effectiveDate(e).getMonth() === date.getMonth()); }
+function monthlyCardTotal(card, date) { return state.expenses.filter((e) => e.card === card.name && e.method === card.type && effectiveDate(e).getFullYear() === date.getFullYear() && effectiveDate(e).getMonth() === date.getMonth()); }
 function nextDue(card, now = new Date()) { const base=dateWithCardDay(now.getFullYear(),now.getMonth(),now.getDate()); let due = dateWithCardDay(base.getFullYear(), base.getMonth(), card.dueDay); if (due < base) due = dateWithCardDay(base.getFullYear(), base.getMonth() + 1, card.dueDay); return due; }
 function renderCards() {
   const now = new Date();
   $('#cardList').innerHTML = state.cards.length ? state.cards.map((card, i) => {
-    const all = state.expenses.filter((e) => e.card === card.name);
+    const all = state.expenses.filter((e) => e.card === card.name && e.method === card.type);
     const current = monthlyCardTotal(card, now);
     const accumulated = totalsHTML(all);
     const monthTotal = totalsHTML(current);
@@ -79,12 +95,12 @@ function renderCards() {
   document.querySelectorAll('.delete-card').forEach((b) => {
     b.onclick = () => {
       const card=state.cards[Number(b.dataset.cardIndex)];
-      const linked=(state.recurring||[]).filter((r)=>r.card===card?.name);
+      const linked=(state.recurring||[]).filter((r)=>r.card===card?.name&&r.method===card?.type);
       const message=linked.length
         ? `¿Eliminar ${card.name}? Los gastos guardados no se borrarán. ${linked.length} gasto(s) recurrente(s) quedarán desactivados.`
         : '¿Eliminar esta tarjeta? Los gastos guardados no se borrarán.';
       if (!confirm(message)) return;
-      if(card) state.recurring.forEach((r)=>{if(r.card===card.name){r.card='';r.active=false;}});
+      if(card) state.recurring.forEach((r)=>{if(r.card===card.name&&r.method===card.type){r.card='';r.active=false;}});
       state.cards.splice(Number(b.dataset.cardIndex), 1);
       save(); render();
     };
@@ -217,10 +233,10 @@ function feedback(ok) { navigator.vibrate?.(ok ? 50 : [120, 50, 120]); try { con
 function setManualStep(step) { manualStep = step; document.querySelectorAll('.step').forEach((e) => e.classList.toggle('active', Number(e.dataset.step) === step)); $('#stepLabel').textContent = `PASO ${step} DE 3`; $('#expenseDialogTitle').textContent = ['¿Cuánto gastaste?', 'Elegí una categoría', '¿Cómo pagaste?'][step - 1]; $('#prevStep').classList.toggle('hidden', step === 1); $('#nextStep').classList.toggle('hidden', step === 3); $('#saveExpense').classList.toggle('hidden', step !== 3); }
 function openExpense(data = {}) { $('#expenseForm').reset(); $('#amount').value = data.amount || ''; $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; const voiceNeedsMethod=data.source==='voice'&&data.method==='Sin definir'; $('#method').value = voiceNeedsMethod ? '' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; setManualStep(voiceNeedsMethod ? 3 : 1); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
 function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', !method || method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
-function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value), count = Number($('#installments').value || 1), amount = Number($('#amount').value || 0); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${count} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${card.dueDay} de cada mes.</span>`; }
+function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value && c.type === $('#method').value), count = Number($('#installments').value || 1), amount = Number($('#amount').value || 0); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${count} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${card.dueDay} de cada mes.</span>`; }
 function pendingCreditDetail(e){
   if(e.method!=='Crédito'||!e.card||!e.amount||e.installmentsSpecified===false)return '';
-  const card=state.cards.find((c)=>c.name===e.card); if(!card)return '';
+  const card=state.cards.find((c)=>c.name===e.card&&c.type==='Crédito'); if(!card)return '';
   const count=Math.max(1,Number(e.installments||1));
   const due=firstDueDateForCard(card,new Date(e.purchaseDate||e.date));
   return `<div class="pending-credit-detail"><span>${count} cuota${count===1?'':'s'} de <strong>${money(Number(e.amount)/count,e.currency)}</strong></span><span>Primera cuota: <strong>${due.toLocaleDateString('es-AR')}</strong></span></div>`;
@@ -691,9 +707,10 @@ $('#expenseForm').onsubmit = async (event) => {
 $('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textContent = 'Nueva tarjeta'; $('#cardForm').reset(); $('#creditCardDates').classList.remove('hidden'); $('#cardDialog').showModal(); }; $('#cardType').onchange = () => $('#creditCardDates').classList.toggle('hidden', $('#cardType').value !== 'Crédito'); $('#cardForm').onsubmit = (event) => {
   event.preventDefault();
   const name = $('#cardName').value.trim();
-  const duplicate = state.cards.some((c) => c.id !== editingCardId && c.name.toLowerCase() === name.toLowerCase());
+  const selectedType = $('#cardType').value;
+  const duplicate = state.cards.some((c) => c.id !== editingCardId && c.name.toLowerCase() === name.toLowerCase() && c.type === selectedType);
   if (duplicate) return showToast('Ya existe una tarjeta con ese nombre');
-  const data = { name, type: $('#cardType').value, closingDay: Number($('#closingDay').value), dueDay: Number($('#dueDay').value) };
+  const data = { name, type: selectedType, closingDay: Number($('#closingDay').value), dueDay: Number($('#dueDay').value) };
   if (editingCardId) {
     const card = state.cards.find((c) => c.id === editingCardId);
     if (card) {
