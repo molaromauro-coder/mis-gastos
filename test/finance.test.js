@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { monthKey, budgetOutcome, stockMetrics, recoveryMonthMetrics } from '../finance.js';
+import { monthKey, budgetOutcome, stockMetrics, recoveryMonthMetrics, firstDueDateForCard } from '../finance.js';
 
 test('presupuesto mensual usa cuotas por vencimiento',()=>{
   const expenses=[{currency:'ARS',amount:100,dueDate:'2026-10-10T12:00:00'}];
@@ -21,4 +21,16 @@ test('recupero queda en el mes cobrado y no borra gasto',()=>{
   const rec=[{currency:'ARS',amount:300,date:'2026-09-15T12:00:00'}];
   const r=recoveryMonthMetrics(rec,expenses,'2026-09');
   assert.equal(r.gross,500); assert.equal(r.recovered,300); assert.equal(r.net,200);
+});
+
+test('vencimiento se calcula desde el cierre del resumen',()=>{
+  const card={closingDay:25,dueDay:10};
+  assert.equal(firstDueDateForCard(card,new Date('2026-09-05T12:00:00')).toISOString().slice(0,10),'2026-10-10');
+  assert.equal(firstDueDateForCard(card,new Date('2026-09-25T12:00:00')).toISOString().slice(0,10),'2026-10-10');
+  assert.equal(firstDueDateForCard(card,new Date('2026-09-26T12:00:00')).toISOString().slice(0,10),'2026-11-10');
+});
+test('vencimiento soporta tarjetas cuyo vencimiento cae después del cierre en el mismo mes',()=>{
+  const card={closingDay:5,dueDay:20};
+  assert.equal(firstDueDateForCard(card,new Date('2026-09-01T12:00:00')).toISOString().slice(0,10),'2026-09-20');
+  assert.equal(firstDueDateForCard(card,new Date('2026-09-06T12:00:00')).toISOString().slice(0,10),'2026-10-20');
 });
