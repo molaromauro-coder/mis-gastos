@@ -68,6 +68,15 @@ function cleanNumericText(text){
 
 export function parseAmount(text) {
   const clean=cleanNumericText(text);
+  const paloYMedio=clean.match(/\b(?:(\d+(?:\.\d{1,2})?)|(un|uno|una))\s*palos?\s+y\s+medio\b/i);
+  if(paloYMedio) return (paloYMedio[1]?Number(paloYMedio[1]):1)*1_000_000+500_000;
+  let palos=clean.match(/\b(\d+(?:\.\d{1,2})?)\s*palos?\b/i);
+  if(palos) return Number(palos[1])*1_000_000;
+  const paloPos=clean.search(/\bpalos?\b/i);
+  if(paloPos>=0){
+    const value=lastWordNumber(clean.slice(0,paloPos));
+    if(value!=null) return value*1_000_000;
+  }
   let lucas=clean.match(/\b(\d+(?:\.\d{1,2})?)\s*(millones?|millon|mil)?\s*lucas?\b/i);
   if(lucas) return Number(lucas[1])*multiplier(lucas[2])*1000;
   const lucasPos=clean.search(/\blucas?\b/i);
@@ -222,7 +231,7 @@ export function parseTemporal(text,referenceDate=new Date()){
 function cleanConcept(raw){
   return raw
     .replace(/\b(?:hoy|ayer|anteayer|hace|anterior|pasado|otro|domingo|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|horas?|hs|ma[nñ]ana|tarde|noche|mediod[ií]a)\b/gi,' ')
-    .replace(/\b(?:pagu[eé]|gast[eé]|compr[eé]|sali[oó]|cost[oó]|en|con|del?|la|el|a|las?|tarjeta|banco|efectivo|d[eé]bito|cr[eé]dito|pesos?|lucas?|d[oó]lares?|usd|u\$s|cuotas?|mill[oó]n(?:es)?)\b/gi,' ')
+    .replace(/\b(?:pagu[eé]|gast[eé]|compr[eé]|sali[oó]|cost[oó]|en|con|del?|la|el|a|las?|tarjeta|banco|efectivo|d[eé]bito|cr[eé]dito|pesos?|lucas?|palos?|d[oó]lares?|usd|u\$s|cuotas?|mill[oó]n(?:es)?)\b/gi,' ')
     .replace(/[\d$.,:]+/g,' ');
 }
 

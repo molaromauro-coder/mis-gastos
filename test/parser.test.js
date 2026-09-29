@@ -185,3 +185,33 @@ test('Mercado Pago con credito explicito conserva credito y exige cuotas si no s
   assert.equal(e.card,'Mercado Pago');
   assert.equal(e.installmentsSpecified,false);
 });
+
+
+test('palo y palos equivalen a millones de pesos',()=>{
+  assert.equal(parseAmount('un palo'),1000000);
+  assert.equal(parseAmount('un palo y medio'),1500000);
+  assert.equal(parseAmount('1,5 palos'),1500000);
+  assert.equal(parseAmount('10 palos'),10000000);
+  assert.equal(parseAmount('diez palos'),10000000);
+});
+
+test('formato argentino con punto reconoce 5.000 y 100.000 pesos',()=>{
+  assert.equal(parseAmount('5.000 pesos'),5000);
+  assert.equal(parseAmount('100.000 pesos'),100000);
+});
+
+test('barre 100 importes de 6 cifras con puntos de miles',()=>{
+  const dotted=(n)=>String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  for(let i=0;i<100;i++){
+    const value=100000+((i*7919+12345)%900000);
+    assert.equal(parseAmount(`${dotted(value)} pesos`),value,`${dotted(value)} pesos`);
+  }
+});
+
+test('barre 100 importes de 8 cifras con puntos de miles',()=>{
+  const dotted=(n)=>String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  for(let i=0;i<100;i++){
+    const value=10000000+((i*104729+7654321)%90000000);
+    assert.equal(parseAmount(`${dotted(value)} pesos`),value,`${dotted(value)} pesos`);
+  }
+});
