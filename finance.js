@@ -1,5 +1,19 @@
 import { expenseArsEquivalent } from './reporting.js';
 
+export function dateWithCardDay(year,month,day){
+  return new Date(year,month,Math.min(Number(day||1),new Date(year,month+1,0).getDate()),12);
+}
+export function firstDueDateForCard(card,purchase=new Date()){
+  const bought=purchase instanceof Date?purchase:new Date(purchase);
+  const closingDay=Number(card?.closingDay||card?.dueDay||1);
+  const dueDay=Number(card?.dueDay||1);
+  let closing=dateWithCardDay(bought.getFullYear(),bought.getMonth(),closingDay);
+  if(bought.getTime()>closing.getTime()) closing=dateWithCardDay(bought.getFullYear(),bought.getMonth()+1,closingDay);
+  let due=dateWithCardDay(closing.getFullYear(),closing.getMonth(),dueDay);
+  if(due.getTime()<=closing.getTime()) due=dateWithCardDay(closing.getFullYear(),closing.getMonth()+1,dueDay);
+  return due;
+}
+
 export function accountingDate(item) {
   return new Date(item?.dueDate || item?.paidDate || item?.purchaseDate || item?.date);
 }
