@@ -1,0 +1,38 @@
+name: Add number regressions once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/add-number-regressions-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply patch
+        run: python3 .github/scripts/add-number-regressions.py
+      - name: Check JavaScript syntax
+        run: node --check parser.js && node --check app.js
+      - name: Run all tests
+        run: npm test
+      - name: Verify new cases
+        run: |
+          grep -q "palo y palos equivalen a millones de pesos" test/parser.test.js
+          grep -q "barre 100 importes de 6 cifras" test/parser.test.js
+          grep -q "barre 100 importes de 8 cifras" test/parser.test.js
+          grep -q "mis-gastos-v23" sw.js
+      - name: Commit tested result and remove one-time helpers
+        run: |
+          rm .github/scripts/add-number-regressions.py .github/workflows/add-number-regressions-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Expand amount parsing regressions and support palos"
+          git push
