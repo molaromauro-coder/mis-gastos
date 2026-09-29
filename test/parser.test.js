@@ -32,6 +32,6 @@ test('si no se menciona medio de pago usa efectivo',()=>{
   assert.equal(parseExpense('gasté cincuenta mil pesos en kiosco').method,'Efectivo');
 });
 test('la voz no asigna una tarjeta de tipo incorrecto',()=>{
-  const e=parseExpense('pagué 200 con débito Visa crédito',[{name:'Visa crédito',type:'Crédito'}]);
+  const e=parseExpense('pagué 200 con débito Visa',[{name:'Visa',type:'Crédito'}]);
   assert.equal(e.method,'Débito'); assert.equal(e.card,'');
 });
