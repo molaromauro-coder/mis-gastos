@@ -310,6 +310,43 @@ export function parseExpense(text,cards=[],categories=[],options={}){
 const NUMBER_START='(?:\\d|un(?:a|o)?|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieci\\w+|veinti\\w+|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos|mil|millon)';
 const SPLIT_RE=new RegExp('\\s*(?:;|\\n|,?\\s+y\\s+)(?=(?:(?:pagu[eé]|gast[eé]|compr[eé])\\s+)?'+NUMBER_START+')','i');
 
+function splitRepeatedExpenseVerbs(transcript){
+  const raw=String(transcript||'').trim();
+  if(!raw)return [];
+  const matches=[...raw.matchAll(/\\b(?:gast[eé]|compr[eé]|pagu[eé])\\b/gi)];
+  if(matches.length<2)return [raw];
+
+  const starts=[];
+  for(let i=0;i<matches.length;i++){
+    const current=matches[i];
+    const next=matches[i+1];
+    const chunk=raw.slice(current.index,next?.index??raw.length);
+    if(parseAmount(chunk)==null)continue;
+
+    if(starts.length){
+      const previousIndex=starts.at(-1);
+      const between=raw.slice(previousIndex,current.index);
+      if(/\\b(?:no+|perd[oó]n|quise decir|mejor)\\b/i.test(between))continue;
+    }
+    starts.push(current.index);
+  }
+  if(starts.length<2)return [raw];
+
+  const parts=[];
+  for(let i=0;i<starts.length;i++){
+    const from=i===0?0:starts[i];
+    const to=starts[i+1]??raw.length;
+    const part=raw.slice(from,to).trim().replace(/^[,;\\s]+|[,;\\s]+$/g,'');
+    if(part)parts.push(part);
+  }
+  return parts.length>1?parts:[raw];
+}
+
 export function parseExpenses(transcript,cards=[],categories=[],options={}){
-  return String(transcript||'').split(SPLIT_RE).map((x)=>x.trim()).filter(Boolean).map((part)=>parseExpense(part,cards,categories,options));
+  const chunks=splitRepeatedExpenseVerbs(transcript);
+  return chunks
+    .flatMap((chunk)=>chunk.split(SPLIT_RE))
+    .map((x)=>x.trim())
+    .filter(Boolean)
+    .map((part)=>parseExpense(part,cards,categories,options));
 }
