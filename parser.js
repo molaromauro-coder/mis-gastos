@@ -255,22 +255,28 @@ export function parseExpense(text,cards=[],categories=[],options={}){
   }
 
   const paymentMentions=[...lower.matchAll(/\b(efectivo|debito|credito)\b/g)];
-  let method=paymentMentions.length
+  const explicitMethod=paymentMentions.length
     ? ({efectivo:'Efectivo',debito:'Débito',credito:'Crédito'}[paymentMentions.at(-1)[1]])
-    : (/\bcuotas?\b/.test(lower)?'Crédito':'Sin definir');
-
+    : '';
+  const paymentAlias=(name)=>normalized(name)
+    .replace(/\b(?:cuenta|tarjeta|debito|credito)\b/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
   const namedCandidates=cards
-    .filter((item)=>item?.name&&lower.includes(normalized(item.name)))
-    .map((item)=>({item,index:lower.lastIndexOf(normalized(item.name))}))
+    .filter((item)=>{
+      if(!item?.name)return false;
+      const full=normalized(item.name),alias=paymentAlias(item.name);
+      return lower.includes(full)||(alias&&lower.includes(alias));
+    })
+    .map((item)=>{
+      const full=normalized(item.name),alias=paymentAlias(item.name);
+      return {item,index:Math.max(lower.lastIndexOf(full),alias?lower.lastIndexOf(alias):-1)};
+    })
     .sort((a,b)=>b.index-a.index);
 
-  if(method==='Sin definir'){
-    if(/\bmercado\s+pago\b/.test(lower)) method='Débito';
-    else {
-      const types=[...new Set(namedCandidates.map(({item})=>item.type).filter(Boolean))];
-      if(types.length===1) method=types[0];
-    }
-  }
+  // Regla de uso: una tarjeta/cuenta nombrada sin decir "crédito" se interpreta como débito.
+  // Crédito solo se activa cuando el usuario dice explícitamente "crédito" (o "cuotas").
+  let method=explicitMethod || (/\bcuotas?\b/.test(lower)?'Crédito':(namedCandidates.length?'Débito':'Sin definir'));
 
   let card=namedCandidates.find(({item})=>!item.type||item.type===method)?.item?.name||'';
   if(method==='Efectivo') card='';
