@@ -1,0 +1,40 @@
+name: Pending back and tap feedback once
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-and-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply patch
+        run: python .github/scripts/apply-pending-back-and-tap-feedback.py
+      - name: Check JavaScript syntax
+        run: |
+          node --check app.js
+          node --check parser.js
+      - name: Run all tests
+        run: npm test
+      - name: Verify new interaction paths
+        run: |
+          grep -q 'data-pending-back="method"' app.js
+          grep -q 'data-pending-back="card"' app.js
+          grep -q 'function softTapFeedback' app.js
+          grep -q "mis-gastos-v23" sw.js
+      - name: Commit tested result and remove one-time helpers
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js sw.js
+          git rm .github/scripts/apply-pending-back-and-tap-feedback.py .github/workflows/pending-back-and-tap-feedback-once.yml
+          git commit -m 'Keep pending expense navigation and add tap feedback'
+          git push
