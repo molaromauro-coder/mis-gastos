@@ -39,3 +39,48 @@ nav{display:none!important}.menu-dialog{background:#f5f9fc;border-radius:28px 28
 #home,#home *{-webkit-touch-callout:none}
 #micBtn,.voice-zone{-webkit-user-select:none;user-select:none;touch-action:none}
 #micBtn{-webkit-tap-highlight-color:transparent}
+
+
+/* Correcciones de estabilidad móvil y módulos */
+@media(max-width:699px){
+  body{overflow:hidden}
+  .app{height:100dvh;min-height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+  .home-header{flex:0 0 auto;margin-bottom:12px}
+  main{flex:1;min-height:0;overflow:hidden}
+  #home.active{height:100%;min-height:0;overflow:hidden}
+  .view.active:not(#home){height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+}
+#home{-webkit-user-select:none;user-select:none}
+#home .voice-zone{padding:16px 0 8px}
+#micBtn.mic{width:116px;height:116px}
+.home-menu-btn{margin-bottom:2px}
+
+.debit-detail{margin-top:12px;border-top:1px solid #ffffff2b;padding-top:10px}
+.debit-detail summary{cursor:pointer;color:#d7e5e0;font-size:12px;font-weight:800}
+.debit-detail .due-line{border-top-color:#ffffff22;padding:7px 0}
+.debit-detail .due-line span{color:#d7e5e0}
+
+.pending-credit-detail{display:grid;gap:4px;margin:10px 0 2px;padding:10px 12px;border-radius:11px;background:#edf5fb;color:#47677f;font-size:12px}
+.pending-credit-detail strong{color:#203c56}
+
+.report-chart{display:grid;gap:9px;background:#fff;border-radius:16px;padding:14px;box-shadow:0 3px 12px #172f2a0a}
+.report-chart-row{display:grid;grid-template-columns:minmax(75px,1fr) 2fr auto;gap:9px;align-items:center;font-size:11px}
+.report-chart-row>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-weight:700}
+.report-chart-row>div{height:11px;background:#edf1ee;border-radius:8px;overflow:hidden}
+.report-chart-row i{display:block;height:100%;background:#79a99d;border-radius:8px}
+.report-chart-row>strong{font-size:11px;text-align:right}
+
+.resale-summary{grid-template-columns:1fr 1fr}
+.resale-summary .resale-net-card{grid-column:1/-1;background:#eef7ff;color:#18352f}
+.resale-summary .resale-net-card span{color:var(--muted)}
+.resale-summary .resale-net-card small{display:block;margin-top:5px;color:#62809a;letter-spacing:0}
+.resale-summary article:nth-last-child(-n+2){background:var(--green);color:#fff}
+.resale-summary article:nth-last-child(-n+2) span{color:#bdd1ca}
+.resale-party summary{padding:16px}
+.resale-party summary>strong{font-size:15px}
+.resale-party summary>span{font-size:24px;color:#8ca0ae;transition:transform .2s}
+.resale-party[open] summary>span{transform:rotate(90deg)}
+.resale-party-meta{padding:0 15px 11px;color:var(--muted);font-size:11px}
+.resale-metrics{grid-template-columns:1fr 1fr}
+.resale-metrics .metric-wide{grid-column:1/-1}
+.resale-metrics em{display:block;margin-top:3px;color:#6b8190;font-size:10px;font-style:normal}
