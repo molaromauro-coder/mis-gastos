@@ -1189,7 +1189,7 @@ function launchExpenseRecognitionCycle(){
     $('#micBtn').classList.add('listening');
     $('#voiceZone')?.classList.add('recording');
     $('#voiceTitle').textContent='Escuchando…';
-    $('#voiceHint').textContent='Seguí hablando; soltá cuando termines';
+    $('#voiceHint').textContent='Seguí hablando · arrastrá al tacho para anular';
   };
   recognition.onresult=(event)=>{let text='';for(let i=0;i<event.results.length;i++)text+=' '+(event.results[i][0]?.transcript||'');voiceCycleText=text.trim();};
   recognition.onerror=(event)=>{voiceError=event.error||'error';if(!['aborted','no-speech'].includes(voiceError))showToast('No pude escuchar. Revisá el permiso del micrófono');};
@@ -1211,6 +1211,9 @@ function startExpenseVoice() {
     return;
   }
   voiceTranscript='';voiceCycleText='';voiceError='';voiceCancelled=false;voiceCancelArmed=false;voiceStopRequested=false;voiceHoldActive=true;
+  $('#voiceZone')?.classList.add('recording');
+  $('#voiceTitle').textContent='Escuchando…';
+  $('#voiceHint').textContent='Arrastrá el dedo al tacho para anular';
   launchExpenseRecognitionCycle();
 }
 function stopExpenseVoice() {
