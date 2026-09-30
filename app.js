@@ -5,6 +5,7 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
+import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 const resaleApi = sharedMode ? null : await import('./resale.js?v=59');
 const normalizeSplit = resaleApi?.normalizeSplit;
@@ -1280,6 +1281,71 @@ function addResaleBatch({ name, date, type, qty, cost }) {
   const sameType = party.tickets.filter((t) => t.type.toLowerCase() === type.toLowerCase()).length;
   for (let i = 1; i <= qty; i++) party.tickets.push({ id: uid(), type, number: sameType + i, cost, salePrice: 0, status: 'Disponible' });
 }
+let pendingResaleImport=null;
+async function ensureExcelReader(){
+  if(window.XLSX)return window.XLSX;
+  const sources=[
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
+  ];
+  for(const source of sources){
+    try {
+      await new Promise((resolve,reject)=>{
+        const script=document.createElement('script');
+        script.src=source;script.onload=resolve;script.onerror=()=>{script.remove();reject(new Error('Sin conexión al lector Excel'));};
+        document.head.append(script);
+      });
+      if(window.XLSX)return window.XLSX;
+    }catch{}
+  }
+  throw new Error('No se pudo cargar el lector de Excel. Revisá la conexión a Internet.');
+}
+function resaleImportTicketLabel(row){
+  if(!row)return 'No figura';
+  return `${row.partyName?row.partyName+' · ':''}${row.type} #${row.number} · Costo ${money(row.cost,'ARS')} · Venta ${money(row.salePrice,'ARS')} · ${row.status}`;
+}
+function showResaleImportReview(fileName,parsed,comparison){
+  pendingResaleImport={fileName,parsed,comparison};
+  $('#resaleImportSummary').textContent=`${integerText(parsed.rows.length)} entradas leídas · ${integerText(comparison.matched)} coinciden · ${integerText(comparison.issues.length)} diferencias para revisar.`;
+  $('#resaleImportWarnings').innerHTML=parsed.warnings.length?
+    `<strong>Advertencias del archivo</strong>${parsed.warnings.map((warning)=>`<p>${escape(warning)}</p>`).join('')}`:'';
+  $('#resaleImportDifferences').innerHTML=comparison.issues.length?
+    comparison.issues.map((issue)=>{
+      const source=issue.imported;
+      const current=issue.current?{...issue.current,partyName:issue.current.partyName||source?.partyName||''}:null;
+      const label=issue.kind==='new'?'Entrada nueva en Excel':issue.kind==='onlyApp'?'Sólo existe en la app':'Datos diferentes';
+      const selected=issue.kind==='new'?'excel':'app';
+      const choices=issue.kind==='onlyApp'?
+        '<option value="app">Mantener en la app</option><option value="remove">Eliminar de la app</option>':
+        issue.kind==='new'?
+        '<option value="excel">Agregar desde Excel</option><option value="app">No importar esta entrada</option>':
+        '<option value="app">Conservar datos de la app</option><option value="excel">Usar datos del Excel</option>';
+      return `<article class="resale-import-row"><strong>${escape(source?.partyName||current?.partyName||'')} · ${escape(source?.type||current?.type||'')} #${integerText(source?.number||current?.number||0)}</strong>
+        <small>${label}${issue.fields.length?' · Cambian: '+escape(issue.fields.join(', ')):''}</small>
+        <div>App: ${escape(resaleImportTicketLabel(current))}</div>
+        <div>Excel: ${escape(resaleImportTicketLabel(source))}</div>
+        <select class="resale-import-decision" data-import-id="${escape(issue.id)}" aria-label="Resolver diferencia" value="${selected}">${choices}</select>
+      </article>`;
+    }).join(''):'<div class="empty">No hay diferencias con lo que ya está cargado en la app.</div>';
+  $('#resaleImportReview').showModal();
+}
+async function readResaleExcelFile(file){
+  if(!file)return;
+  try{
+    $('#importResaleExcel').disabled=true;
+    const XLSX=await ensureExcelReader();
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
+    const sheetName=wb.SheetNames.find((name)=>/ventas?/i.test(name))||wb.SheetNames[0];
+    if(!sheetName)throw new Error('El archivo no contiene hojas.');
+    const matrix=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:true});
+    const parsed=parseResaleTable(matrix,state.resale.parties);
+    if(!parsed.rows.length)throw new Error(parsed.warnings.join(' ')||'No pude encontrar entradas en la planilla.');
+    const comparison=compareResaleImport(parsed.rows,state.resale.parties);
+    showResaleImportReview(file.name,parsed,comparison);
+  }catch(error){showToast(error.message||'No pude leer el archivo.');}
+  finally{$('#importResaleExcel').disabled=false;$('#resaleImportFile').value='';}
+}
+
 function exportResaleCsv() {
   const split = resaleSplit();
   const rows = [['Fiesta','Fecha','Tipo','N°','Costo compra','Precio venta','Estado','Costo recuperado','Ganancia neta','% ganancia','Ganancia Mauro','Ganancia vendedor']];
@@ -2365,6 +2431,20 @@ $('#resaleSplitForm').onsubmit = (event) => {
   save(); $('#resaleSplitDialog').close(); renderResale(); showToast('Reparto actualizado en toda Reventa');
 };
 $('#exportResale').onclick = exportResaleCsv;
+$('#importResaleExcel').onclick=()=>$('#resaleImportFile').click();
+$('#resaleImportFile').onchange=(event)=>readResaleExcelFile(event.target.files?.[0]);
+$('#applyResaleImport').onclick=()=>{
+  if(!pendingResaleImport)return;
+  const decisions=Object.fromEntries([...$('#resaleImportDifferences').querySelectorAll('.resale-import-decision')].map((select)=>[select.dataset.importId,select.value]));
+  const applied=pendingResaleImport.comparison.issues.filter((issue)=>{
+    const decision=decisions[issue.id]||(issue.kind==='new'?'excel':'app');
+    return decision==='excel'||decision==='remove';
+  }).length;
+  state.resale.parties=applyResaleImport(state.resale.parties,pendingResaleImport.comparison.issues,decisions,uid);
+  save();renderResale();$('#resaleImportReview').close();pendingResaleImport=null;
+  showToast(`Reventa actualizada: ${integerText(applied)} diferencias resueltas`);
+};
+$('#cancelResaleImport').onclick=()=>{pendingResaleImport=null;$('#resaleImportReview').close();};
 }
 
 
