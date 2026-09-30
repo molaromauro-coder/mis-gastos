@@ -51,3 +51,11 @@ test('el respaldo de seguridad usa PIN de 6 dígitos y permanece opcional',()=>{
   assert.ok(app.includes('\\d{6}'));
   assert.ok(app.includes('\\d{4}'));
 });
+
+test('v69 mantiene Menú principal completamente visible en iPhone',()=>{
+  assert.match(html,/id="homeMenuBtn"[^>]*>[\s\S]*Menú principal/);
+  const css=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+  assert.match(css,/\.home-menu-btn\{[\s\S]*position:fixed[\s\S]*bottom:calc\(12px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.match(css,/width:min\(calc\(100% - 40px\),390px\)/);
+  assert.match(css,/height:58px/);
+});
