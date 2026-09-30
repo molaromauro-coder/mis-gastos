@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot } from '../expense-reset.js';
+import { recentPurchases, groupExpenses } from '../reporting.js';
 
 const now=new Date('2026-09-30T12:00:00-03:00');
 const sampleState=()=>({
@@ -59,4 +60,37 @@ test('el snapshot de Configuración no puede restaurar gastos borrados',()=>{
   assert.deepEqual(snapshot.expenses,state.expenses);
   assert.deepEqual(snapshot.trash,state.trash);
   assert.equal(snapshot.cards.length,1);
+});
+
+
+test('mes actual desaparece de Últimos movimientos e Informes al borrarlo',()=>{
+  const state=sampleState();
+  moveCurrentMonthExpensesToTrash(state,now);
+  const recent=recentPurchases(state.expenses);
+  assert.deepEqual(recent.map((e)=>e.id),['aug-a','jul-a']);
+  const grouped=groupExpenses(state.expenses,(e)=>e.concept);
+  assert.equal(grouped.some((row)=>row.key==='Super'),false);
+  assert.equal(grouped.some((row)=>row.key==='Nafta'),false);
+});
+
+test('borrado histórico desaparece de Historial/Informes/Papelera y deja mes actual',()=>{
+  const state=sampleState();
+  permanentlyDeletePreviousMonths(state,now);
+  const recent=recentPurchases(state.expenses);
+  assert.deepEqual(recent.map((e)=>e.id),['sep-b','sep-a']);
+  const grouped=groupExpenses(state.expenses,(e)=>e.concept);
+  assert.equal(grouped.some((row)=>row.key==='Luz agosto'),false);
+  assert.equal(grouped.some((row)=>row.key==='Alquiler julio'),false);
+  assert.equal(state.trash.flatMap((r)=>r.items).some((e)=>e.id==='old-trash-item'),false);
+});
+
+test('ambos borrados conservan medios de pago, categorías, subcategorías y configuración',()=>{
+  const state={...sampleState(),subcategories:{Servicios:['Luz']},settings:{hideAmounts:true}};
+  const cards=structuredClone(state.cards),categories=structuredClone(state.categories),subs=structuredClone(state.subcategories),settings=structuredClone(state.settings);
+  moveCurrentMonthExpensesToTrash(state,now);
+  permanentlyDeletePreviousMonths(state,now);
+  assert.deepEqual(state.cards,cards);
+  assert.deepEqual(state.categories,categories);
+  assert.deepEqual(state.subcategories,subs);
+  assert.deepEqual(state.settings,settings);
 });
