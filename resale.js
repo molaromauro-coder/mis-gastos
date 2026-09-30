@@ -1,5 +1,5 @@
 const RESALE_STORAGE_KEY = 'mis-gastos-v1';
-const RESALE_WORKBOOK_VERSION = 2;
+const RESALE_WORKBOOK_VERSION = 3;
 
 function seedTicketBatch(partyId, type, cost, count, sales = [], status = 'Disponible') {
   const slug = String(type).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -73,22 +73,37 @@ function seedInitialResaleData() {
 
     let existing = Array.isArray(resale.parties) ? resale.parties : [];
     const canonicalNacho = INITIAL_RESALE_PARTIES.find((p) => p.name === 'NACHO SCOPPA');
-    if (canonicalNacho && Number(resale.initialWorkbookVersion || 0) < 2) {
+    if (canonicalNacho && Number(resale.initialWorkbookVersion || 0) < RESALE_WORKBOOK_VERSION) {
       const index = existing.findIndex((p) => String(p?.name || '').trim().toLowerCase() === 'nacho scoppa');
       if (index >= 0) {
         const current = existing[index] || {};
+        const currentTickets = Array.isArray(current.tickets) ? current.tickets : [];
         const partyId = current.id || canonicalNacho.id;
-        existing = existing.slice();
-        existing[index] = {
-          ...current,
-          id: partyId,
-          name: canonicalNacho.name,
-          date: canonicalNacho.date,
-          tickets: [
-            ...seedTicketBatch(partyId, 'GRAL 1', 26450, 4, [40000, 45000, 45000, 45000]),
-            ...seedTicketBatch(partyId, 'GRAL 2', 28750, 4, [42500, 42500, 45000, 45000])
-          ]
-        };
+        const sameShape = currentTickets.length === canonicalNacho.tickets.length &&
+          currentTickets.every((ticket, i) => {
+            const canonical = canonicalNacho.tickets[i];
+            return String(ticket?.type || '').trim().toLowerCase() === String(canonical.type).trim().toLowerCase() &&
+              Number(ticket?.cost || 0) === Number(canonical.cost || 0);
+          });
+        const allMarkedSold = currentTickets.length > 0 &&
+          currentTickets.every((ticket) => ticket?.status === 'Vendida');
+        const allPricesMissing = currentTickets.length > 0 &&
+          currentTickets.every((ticket) => Number(ticket?.salePrice || 0) === 0);
+
+        if (Number(resale.initialWorkbookVersion || 0) < 2 || (sameShape && allMarkedSold && allPricesMissing)) {
+          existing = existing.slice();
+          existing[index] = {
+            ...current,
+            id: partyId,
+            name: canonicalNacho.name,
+            date: canonicalNacho.date,
+            tickets: canonicalNacho.tickets.map((canonical, i) => ({
+              ...(currentTickets[i] || {}),
+              ...canonical,
+              id: currentTickets[i]?.id || canonical.id
+            }))
+          };
+        }
       }
     }
     const existingNames = new Set(existing.map((p) => String(p?.name || '').trim().toLowerCase()).filter(Boolean));
@@ -127,12 +142,13 @@ export function ticketMetrics(ticket, split = { ownerPercent: 70, sellerPercent:
   const salePrice = Number(ticket?.salePrice || 0);
   const status = ticket?.status || 'Disponible';
   const sold = status === 'Vendida';
-  const recovered = sold ? cost : 0;
-  const netGain = sold ? salePrice - cost : 0;
-  const gainPercent = sold && cost ? (netGain / cost) * 100 : 0;
-  const ownerGain = sold ? netGain * ownerPercent / 100 : 0;
-  const sellerGain = sold ? netGain * sellerPercent / 100 : 0;
-  return { cost, salePrice: sold ? salePrice : 0, recovered, netGain, gainPercent, ownerGain, sellerGain, status };
+  const completedSale = sold && salePrice > 0;
+  const recovered = completedSale ? cost : 0;
+  const netGain = completedSale ? salePrice - cost : 0;
+  const gainPercent = completedSale && cost ? (netGain / cost) * 100 : 0;
+  const ownerGain = completedSale ? netGain * ownerPercent / 100 : 0;
+  const sellerGain = completedSale ? netGain * sellerPercent / 100 : 0;
+  return { cost, salePrice: completedSale ? salePrice : 0, recovered, netGain, gainPercent, ownerGain, sellerGain, status };
 }
 
 export function partyMetrics(party, split) {
