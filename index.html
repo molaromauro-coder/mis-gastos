@@ -99,7 +99,7 @@
 <label>Fiesta<input id="resalePartyName" required placeholder="Ej. MAX STYLER"></label>
 <label>Fecha de la fiesta<input id="resalePartyDate" type="date"></label>
 <label>Tipo de entrada<input id="resaleTicketType" required placeholder="Ej. GRAL 1, VIP, EARLY"></label>
-<div class="form-row"><label>Cantidad<input id="resaleQty" type="number" min="1" max="200" required value="1"></label><label>Costo por entrada<input id="resaleCost" type="text" inputmode="decimal" data-local-number="2" required></label></div>
+<div class="form-row"><label>Cantidad<input id="resaleQty" type="number" min="1" max="200" required value="1"></label><label>Costo por entrada<span class="resale-money-input"><b>$</b><input id="resaleCost" type="text" inputmode="decimal" data-local-number="2" required></span></label></div>
 <button class="primary">Agregar compra</button></form></dialog>
 <dialog id="resaleSplitDialog"><form id="resaleSplitForm"><div class="dialog-head"><div><small>CONFIGURACIÓN ÚNICA</small><h2>Reparto de ganancia</h2></div><button type="button" class="close">×</button></div>
 <p class="muted">Al cambiar estos porcentajes se recalculan automáticamente todas las ventas, fiestas y el balance general.</p>
@@ -121,4 +121,4 @@
 <dialog id="recoveryDialog"><form id="recoveryForm"><div class="dialog-head"><div><small>NUEVO RECUPERO</small><h2>Registrar dinero recuperado</h2></div><button type="button" class="close">×</button></div>
 <div class="form-row"><label>Importe<input id="recoveryAmount" type="text" inputmode="decimal" data-local-number="2" required></label><label>Moneda<select id="recoveryCurrency"><option>ARS</option><option>USD</option></select></label></div>
 <label>Concepto / nota<input id="recoveryConcept" placeholder="Ej. Comida con Juan"></label><label>Fecha<input id="recoveryDate" type="date" required></label><button class="primary">Guardar recupero</button></form></dialog>
-<div id="toast" class="toast" role="status"></div><script type="module" src="app.js?v=58"></script></body></html>
+<div id="toast" class="toast" role="status"></div><script type="module" src="app.js?v=59"></script></body></html>
