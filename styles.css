@@ -115,3 +115,13 @@ dialog{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:to
 /* Tacho real para descartar una grabación */
 #home .voice-zone{position:relative!important;padding-top:17px}.voice-trash{position:absolute;left:50%;top:-46px;width:56px;height:56px;min-height:56px;margin:0;border-radius:18px;background:#eef1f2;border:1px solid #d8dfe2;display:grid;place-items:center;opacity:0;transform:translateX(-50%) scale(.78);transition:.16s;pointer-events:none;box-shadow:0 7px 20px #314b5b1a}.voice-trash span{font-size:27px}.voice-zone.recording .voice-trash{opacity:.86;transform:translateX(-50%) scale(1)}.voice-zone.cancel-ready .voice-trash,.voice-trash.armed{opacity:1;background:#fee9e6;border-color:#e9a39c;transform:translateX(-50%) scale(1.1);box-shadow:0 0 0 8px #f5b7b02e}.voice-zone.cancel-ready .mic{background:#ef8178}
 .category-folder-title{display:flex;align-items:center;justify-content:space-between;gap:10px}.category-folder-title>button,.mini-edit{border:0;border-radius:9px;background:#e8f2ef;color:#28695d;padding:7px 9px;font-weight:800;font-size:10px}.category-row-actions{display:flex;align-items:center;gap:5px}.subcategory-folder-item{grid-template-columns:34px 1fr auto}
+
+
+/* Voz: destino de cancelación visible y estable en iPhone */
+#home .voice-zone{position:relative!important}
+#home .voice-trash{position:relative;left:auto;top:auto;width:104px;height:58px;min-height:58px;margin:0 auto 14px;border-radius:18px;background:#eef1f2;border:1px solid #d8dfe2;display:none;align-items:center;justify-content:center;gap:7px;opacity:1;transform:none;pointer-events:none;box-shadow:0 7px 20px #314b5b1a;z-index:6}
+#home .voice-zone.recording .voice-trash{display:flex;opacity:1;transform:none}
+#home .voice-trash span{font-size:26px;line-height:1}
+#home .voice-trash small{display:block;margin:0;color:#526979;font-size:11px;font-weight:800;letter-spacing:.02em}
+#home .voice-zone.cancel-ready .voice-trash,#home .voice-trash.armed{display:flex;background:#fee9e6;border-color:#e36f64;box-shadow:0 0 0 8px #f5b7b02e}
+#home .voice-zone.cancel-ready .voice-trash small,#home .voice-trash.armed small{color:#b33b35}
