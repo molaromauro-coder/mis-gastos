@@ -1000,8 +1000,18 @@ function renderResale() {
     const party = state.resale.parties.find((p) => p.id === row.dataset.partyId);
     const ticket = party?.tickets.find((t) => t.id === row.dataset.ticketId);
     if (!ticket) return;
-    row.querySelector('.resale-status').onchange = (e) => { ticket.status = e.target.value; save(); renderResale(); };
-    row.querySelector('.resale-price').onchange = (e) => { ticket.salePrice = parseLocalizedNumber(e.target.value); save(); renderResale(); };
+    const refreshKeepingPartyOpen = (update) => {
+      const partyId = row.dataset.partyId;
+      const scrollTop = document.scrollingElement?.scrollTop ?? window.scrollY;
+      update();
+      save();
+      renderResale();
+      const updatedParty = [...document.querySelectorAll('.resale-party')].find((card) => card.dataset.partyId === partyId);
+      if (updatedParty) updatedParty.open = true;
+      requestAnimationFrame(() => window.scrollTo({ top: scrollTop, left: 0, behavior: 'instant' }));
+    };
+    row.querySelector('.resale-status').onchange = (e) => refreshKeepingPartyOpen(() => { ticket.status = e.target.value; });
+    row.querySelector('.resale-price').onchange = (e) => refreshKeepingPartyOpen(() => { ticket.salePrice = parseLocalizedNumber(e.target.value); });
   });
   document.querySelectorAll('.resale-party').forEach((card) => {
     card.querySelector('.delete-party').onclick = () => {
