@@ -6,7 +6,7 @@ import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, fo
 import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=59');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -1005,7 +1005,7 @@ function renderResale() {
         <div class="resale-ticket-head"><div><strong>${escape(ticket.type)} · #${integerText(ticket.number)}</strong><small>Costo ${money(ticket.cost, 'ARS')}</small></div><select class="resale-status">
           ${['Disponible','Vendida','Uso personal'].map((s) => `<option ${ticket.status === s ? 'selected' : ''}>${s}</option>`).join('')}
         </select></div>
-        <div class="resale-ticket-sale"><label>Precio de venta<input class="resale-price" type="text" inputmode="decimal" data-local-number="2" value="${formatNumericInputValue(ticket.salePrice||0,{maximumFractionDigits:2})}"></label>
+        <div class="resale-ticket-sale"><label>Precio de venta<span class="resale-money-input"><b>$</b><input class="resale-price" type="text" inputmode="decimal" data-local-number="2" value="${formatNumericInputValue(ticket.salePrice||0,{maximumFractionDigits:2})}"></span></label>
         <div class="resale-ticket-result"><span>Recuperado <strong>${money(tm.recovered, 'ARS')}</strong></span><span>Ganancia <strong>${money(tm.netGain, 'ARS')}</strong></span><span>% <strong>${sold ? pct(tm.gainPercent) : '—'}</strong></span><span>Mauro <strong>${money(tm.ownerGain, 'ARS')}</strong></span><span>Vendedor <strong>${money(tm.sellerGain, 'ARS')}</strong></span></div></div>
       </div>`;
     }).join('');
@@ -1019,17 +1019,31 @@ function renderResale() {
     const party = state.resale.parties.find((p) => p.id === row.dataset.partyId);
     const ticket = party?.tickets.find((t) => t.id === row.dataset.ticketId);
     if (!ticket) return;
-    const refreshKeepingPartyOpen = (update) => {
+    const refreshKeepingPartyOpen = (update, { focusPrice = false } = {}) => {
       const partyId = row.dataset.partyId;
+      const ticketId = row.dataset.ticketId;
       const scrollTop = document.scrollingElement?.scrollTop ?? window.scrollY;
       update();
       save();
       renderResale();
       const updatedParty = [...document.querySelectorAll('.resale-party')].find((card) => card.dataset.partyId === partyId);
       if (updatedParty) updatedParty.open = true;
-      requestAnimationFrame(() => window.scrollTo({ top: scrollTop, left: 0, behavior: 'instant' }));
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollTop, left: 0, behavior: 'instant' });
+        if (focusPrice) {
+          const updatedRow = [...document.querySelectorAll('.resale-ticket')].find((item) => item.dataset.ticketId === ticketId);
+          const priceInput = updatedRow?.querySelector('.resale-price');
+          priceInput?.focus();
+          priceInput?.select();
+          showToast('Ingresá el precio de venta');
+        }
+      });
     };
-    row.querySelector('.resale-status').onchange = (e) => refreshKeepingPartyOpen(() => { ticket.status = e.target.value; });
+    row.querySelector('.resale-status').onchange = (e) => {
+      const nextStatus = e.target.value;
+      const needsPrice = nextStatus === 'Vendida' && Number(ticket.salePrice || 0) <= 0;
+      refreshKeepingPartyOpen(() => { ticket.status = nextStatus; }, { focusPrice: needsPrice });
+    };
     row.querySelector('.resale-price').onchange = (e) => refreshKeepingPartyOpen(() => { ticket.salePrice = parseLocalizedNumber(e.target.value); });
   });
   document.querySelectorAll('.resale-party').forEach((card) => {

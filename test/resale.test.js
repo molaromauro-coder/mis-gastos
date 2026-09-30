@@ -16,6 +16,17 @@ test('entrada vendida recupera costo, calcula ganancia y reparto', () => {
   assert.ok(Math.abs(m.gainPercent - 164.65028355387523) < 1e-9);
 });
 
+
+test('entrada marcada vendida sin precio no genera recupero ni pérdida ficticia', () => {
+  const m = ticketMetrics({ cost: 26450, salePrice: 0, status: 'Vendida' }, { ownerPercent: 70, sellerPercent: 30 });
+  assert.equal(m.salePrice, 0);
+  assert.equal(m.recovered, 0);
+  assert.equal(m.netGain, 0);
+  assert.equal(m.ownerGain, 0);
+  assert.equal(m.sellerGain, 0);
+  assert.equal(m.gainPercent, 0);
+});
+
 test('disponible y uso personal no generan recupero ni ganancia', () => {
   for (const status of ['Disponible', 'Uso personal']) {
     const m = ticketMetrics({ cost: 80500, salePrice: 100000, status }, { ownerPercent: 70, sellerPercent: 30 });
@@ -65,7 +76,7 @@ test('balance total suma todas las fiestas', () => {
   assert.equal(m.sales, 160);
   assert.equal(m.netGain, 60);
   assert.equal(m.available, 1);
-  assert.ok(Math.abs(m.gainPercent - ((160 - 300) / 300 * 100)) < 1e-9);
+  assert.ok(Math.abs(m.gainPercent - 60) < 1e-9);
 });
 
 
@@ -96,4 +107,17 @@ test('datos iniciales coinciden con la planilla final corregida',()=>{
   assert.equal(m.available,55);
   assert.equal(m.sold,12);
   assert.equal(m.personal,1);
+});
+
+
+test('porcentaje global usa sólo costo recuperado de ventas realizadas', () => {
+  const parties = [
+    { tickets: [{ cost: 100, salePrice: 160, status: 'Vendida' }] },
+    { tickets: [{ cost: 900, salePrice: 0, status: 'Disponible' }] }
+  ];
+  const m = withPortfolioPercent(portfolioMetrics(parties, { ownerPercent: 70, sellerPercent: 30 }));
+  assert.equal(m.investment, 1000);
+  assert.equal(m.recovered, 100);
+  assert.equal(m.netGain, 60);
+  assert.equal(m.gainPercent, 60);
 });
