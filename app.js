@@ -1742,9 +1742,9 @@ function consultationRows() {
   const cat=$('#consultCategory').value, sub=$('#consultSubcategory')?.value||'', method=$('#consultMethod').value, currency=$('#consultCurrency').value, card=$('#consultCard').value;
   const min=localizedInputNumber('#consultMin'), exact=localizedInputNumber('#consultAmount');
   const query=String($('#consultQuery').value||'').toLowerCase().trim();
-  const normalizeSearch=(value)=>String(value||'').toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+  const normalizeSearch=(value)=>String(value||'').toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const stopWords=new Set(['cuanto','gaste','gasto','gastos','pague','pago','pagos','compra','compras','recupero','recuperos','busca','buscar','buscame','mostra','mostrar','mostrame','dame','de','del','la','las','el','los','en','por','con','que','cual','cuando','este','esta','mes','pasado','hoy','ayer','entre','desde','hasta','mis','mi','un','una','al','para','ars','usd','pesos','peso','dolares','dolar','tarjeta','efectivo','debito','credito','categoria','subcategoria']);
-  const tokens=normalizeSearch(query).replace(/[^a-z0-9 ]/g,' ').split(/\\s+/).filter((token)=>token.length>2&&!stopWords.has(token));
+  const tokens=normalizeSearch(query).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter((token)=>token.length>2&&!stopWords.has(token));
   return globalSearchRows().filter((row)=>{
     if(!(row.date>=from&&row.date<=to))return false;
     if(cat){
