@@ -3,7 +3,7 @@ import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, re
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
 import { learnCategoryRule, applyLearnedCategory } from './category-learning.js';
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
-import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
+import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
@@ -2117,14 +2117,14 @@ $('#resetCurrentMonthConfirm').onclick=()=>{
   showToast(result.removed?`✓ ${integerText(result.removed)} movimiento${result.removed===1?'':'s'} enviado${result.removed===1?'':'s'} a Papelera`:'No había movimientos para borrar');
 };
 $('#resetPreviousMonthsBtn').onclick=()=>{
-  const count=previousMonthExpenseCount(state,new Date());
-  const trashOld=(state.trash||[]).reduce((sum,record)=>sum+(record.items||[]).filter((item)=>{
-    const d=new Date(item.purchaseDate||item.date||0);
-    const start=new Date(new Date().getFullYear(),new Date().getMonth(),1);
-    return Number.isFinite(d.getTime())&&d<start;
-  }).length,0);
-  $('#resetPreviousMonthsSummary').textContent=`Se eliminarán definitivamente ${integerText(count)} movimiento${count===1?'':'s'} activo${count===1?'':'s'} de meses anteriores${trashOld?` y ${integerText(trashOld)} movimiento${trashOld===1?'':'s'} que ya está${trashOld===1?'':'n'} en Papelera`:''}.`;
-  $('#resetPreviousMonthsFirstConfirm').disabled=(count+trashOld)===0;
+  const now=new Date();
+  const count=previousMonthExpenseCount(state,now);
+  const trashOld=previousMonthTrashItemCount(state,now);
+  const total=previousMonthDeletableCount(state,now);
+  $('#resetPreviousMonthsSummary').textContent=total
+    ? `Se eliminarán definitivamente ${integerText(count)} movimiento${count===1?'':'s'} activo${count===1?'':'s'} de meses anteriores${trashOld?` y ${integerText(trashOld)} movimiento${trashOld===1?'':'s'} que ya está${trashOld===1?'':'n'} en Papelera`:''}.`
+    : 'No hay gastos anteriores al mes actual para eliminar.';
+  $('#resetPreviousMonthsFirstConfirm').disabled=total===0;
   $('#resetPreviousMonthsDialog').showModal();
 };
 $('#resetPreviousMonthsCancel').onclick=()=>closeDialogById('#resetPreviousMonthsDialog');
