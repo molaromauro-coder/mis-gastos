@@ -111,7 +111,7 @@ function seedDemoCategoriesOnce(){
 seedDemoCategoriesOnce();
 
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
-let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
+let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
 const $ = (s) => document.querySelector(s);
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
 const numberText=(n,maximumFractionDigits=2)=>formatLocalizedNumber(n,{maximumFractionDigits});
@@ -1239,7 +1239,105 @@ function recurringCardOptions(method,selected=''){const cards=state.cards.filter
 function updateRecurringCardField(){const method=$('#recurringMethod').value;$('#recurringCardWrap').classList.toggle('hidden',method==='Efectivo');$('#recurringCard').innerHTML=recurringCardOptions(method,$('#recurringCard').value);}
 function openRecurringDialog(item=null){editingRecurringId=item?.id||null;$('#recurringForm').reset();$('#recurringTitle').textContent=item?'Editar recurrente':'Nuevo recurrente';$('#recurringConcept').value=item?.concept||'';setLocalizedInput('#recurringAmount',item?.amount||'',2);$('#recurringCurrency').value=item?.currency||'ARS';fillRecurringCategoryOptions(item?.category||'');$('#recurringMethod').value=item?.method||'Efectivo';$('#recurringDay').value=item?.day||1;updateRecurringCardField();$('#recurringCard').value=item?.card||'';$('#recurringDialog').showModal();}
 function renderRecurringSettings(){if(!$('#recurringList'))return;$('#recurringList').innerHTML=state.recurring.length?state.recurring.map((r)=>`<article class="settings-item" data-recurring-id="${escape(r.id)}"><div><strong>${escape(r.concept)}</strong><small>${money(r.amount,r.currency)} · día ${integerText(r.day)} · ${escape(r.method)}${r.card?' · '+escape(r.card):''}</small></div><div class="mini-actions"><button class="edit-recurring" type="button">Editar</button><button class="toggle-recurring" type="button">${r.active===false?'Activar':'Desactivar'}</button></div></article>`).join(''):'<div class="empty">No configuraste gastos recurrentes.</div>';document.querySelectorAll('[data-recurring-id]').forEach((row)=>{const r=state.recurring.find((x)=>x.id===row.dataset.recurringId);if(!r)return;row.querySelector('.edit-recurring').onclick=()=>openRecurringDialog(r);row.querySelector('.toggle-recurring').onclick=()=>{r.active=r.active===false?true:false;save();renderRecurringSettings();};});}
-function prepareRecurringDue(){const now=new Date(),key=monthKey(now),due=[];for(const r of state.recurring){if(r.active===false||Number(r.day||1)>now.getDate()||r.lastPromptedMonth===key)continue;due.push({id:uid(),amount:Number(r.amount),currency:r.currency,concept:r.concept,category:r.category||'',method:r.method,card:r.card||'',installments:1,date:now.toISOString(),purchaseDate:now.toISOString(),source:'recurring',recurringId:r.id});r.lastPromptedMonth=key;}if(due.length){pending.push(...due);save();showPending();}}
+function prepareRecurringDue(){ /* legado: los gastos fijos variables reemplazan el alta automática de recurrentes */ }
+
+function previousMonthKey(key){
+  const match=String(key||'').match(/^(\d{4})-(\d{2})$/);
+  const date=match?new Date(Number(match[1]),Number(match[2])-2,1):new Date(new Date().getFullYear(),new Date().getMonth()-1,1);
+  return monthKey(date);
+}
+function fixedExpensePayments(item,key){
+  return state.expenses.filter((e)=>e.fixedExpenseId===item.id&&e.fixedExpenseMonth===key);
+}
+function fixedExpenseAmountForMonth(item,key){
+  return fixedExpensePayments(item,key).reduce((sum,e)=>sum+Number(e.amount||0),0);
+}
+function fixedExpensePreviousAmount(item,key){
+  const amount=fixedExpenseAmountForMonth(item,previousMonthKey(key));
+  return amount || Number(item.legacyAmount||0);
+}
+function fixedExpenseIsPaid(item,key){
+  return fixedExpensePayments(item,key).length>0;
+}
+function fixedExpensePendingForMonth(key){
+  return state.fixedExpenses.filter((item)=>item.active!==false&&!fixedExpenseIsPaid(item,key));
+}
+function fixedExpenseCardOptions(method,selected=''){
+  const cards=state.cards.filter((c)=>c.type===method);
+  return '<option value="">Elegí una tarjeta</option>'+cards.map((c)=>`<option value="${escape(c.name)}" ${c.name===selected?'selected':''}>${escape(c.name)}</option>`).join('');
+}
+function updateFixedExpenseCardField(selected=''){
+  const method=$('#fixedExpenseMethod')?.value||'Efectivo';
+  $('#fixedExpenseCardWrap')?.classList.toggle('hidden',method==='Efectivo');
+  if($('#fixedExpenseCard'))$('#fixedExpenseCard').innerHTML=fixedExpenseCardOptions(method,selected||$('#fixedExpenseCard').value);
+}
+function openFixedExpenseDialog(item=null){
+  editingFixedExpenseId=item?.id||null;
+  $('#fixedExpenseForm').reset();
+  $('#fixedExpenseDialogTitle').textContent=item?'Editar gasto fijo':'Nuevo gasto fijo';
+  $('#fixedExpenseConcept').value=item?.concept||'';
+  $('#fixedExpenseCurrency').value=item?.currency||'ARS';
+  $('#fixedExpenseDay').value=item?.day||10;
+  fillFixedExpenseCategoryOptions(item?.category||'');
+  if(item?.category){
+    $('#fixedExpenseCategory').value=item.category;
+    fillScopedSubcategories('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap',item?.subcategory||'');
+  }
+  $('#fixedExpenseMethod').value=item?.method||'Efectivo';
+  updateFixedExpenseCardField(item?.card||'');
+  if(item?.card)$('#fixedExpenseCard').value=item.card;
+  $('#fixedExpenseDialog').showModal();
+}
+function openFixedExpensePayment(item,key){
+  const current=fixedExpensePayments(item,key)[0]||null;
+  editingFixedPaymentExpenseId=current?.id||null;
+  $('#fixedExpensePaymentForm').reset();
+  $('#fixedExpensePaymentTitle').textContent=`${current?'Editar':'Registrar'} pago · ${item.concept}`;
+  const previous=fixedExpensePreviousAmount(item,key);
+  const ref=$('#fixedExpensePreviousReference');
+  const use=$('#usePreviousFixedAmount');
+  if(previous>0){
+    ref.classList.remove('hidden');
+    ref.textContent=`El mes anterior pagaste ${money(previous,item.currency)}. Puede coincidir o podés ingresar otro importe.`;
+    use.classList.remove('hidden');
+    use.textContent=`Usar ${money(previous,item.currency)}`;
+    use.onclick=()=>setLocalizedInput('#fixedExpensePaymentAmount',previous,2);
+  }else{
+    ref.classList.add('hidden');use.classList.add('hidden');
+  }
+  if(current)setLocalizedInput('#fixedExpensePaymentAmount',current.amount,2);
+  $('#fixedExpensePaymentDate').value=current?.purchaseDate?.slice?.(0,10)||new Date().toISOString().slice(0,10);
+  $('#fixedExpensePaymentForm').dataset.fixedExpenseId=item.id;
+  $('#fixedExpensePaymentForm').dataset.month=key;
+  $('#fixedExpensePaymentDialog').showModal();
+}
+function renderFixedExpenses(){
+  if(!$('#fixedExpenseList'))return;
+  const key=$('#fixedExpenseMonth')?.value||monthKey(new Date());
+  const active=state.fixedExpenses.filter((item)=>item.active!==false);
+  const paidCount=active.filter((item)=>fixedExpenseIsPaid(item,key)).length;
+  const pendingCount=active.length-paidCount;
+  $('#fixedExpenseSummary').textContent=active.length
+    ? `${integerText(paidCount)} pagado${paidCount===1?'':'s'} · ${integerText(pendingCount)} pendiente${pendingCount===1?'':'s'} en ${key}`
+    : 'Todavía no configuraste gastos fijos.';
+  $('#fixedExpenseList').innerHTML=state.fixedExpenses.length?state.fixedExpenses.map((item)=>{
+    const paid=fixedExpenseIsPaid(item,key);
+    const current=fixedExpenseAmountForMonth(item,key);
+    const previous=fixedExpensePreviousAmount(item,key);
+    const category=[item.category,item.subcategory].filter(Boolean).join(' · ')||'Sin categoría';
+    return `<article class="fixed-expense-card ${item.active===false?'disabled':''}" data-fixed-expense-id="${escape(item.id)}">
+      <div class="fixed-expense-head"><div><strong>${escape(item.concept)}</strong><small>${escape(category)} · día ${integerText(item.day||1)} · ${escape(item.method||'Efectivo')}${item.card?' · '+escape(item.card):''}</small></div><span class="${paid?'paid':'pending'}">${item.active===false?'Inactivo':paid?'Pagado':'Pendiente'}</span></div>
+      <div class="fixed-expense-values"><span>Este mes <strong>${paid?money(current,item.currency):'—'}</strong></span><span>Mes anterior <strong>${previous?money(previous,item.currency):'Sin dato'}</strong></span></div>
+      <div class="fixed-expense-actions"><button type="button" class="fixed-pay">${paid?'Editar pago':'Registrar pago'}</button><button type="button" class="fixed-edit">Editar</button><button type="button" class="fixed-toggle">${item.active===false?'Activar':'Desactivar'}</button></div>
+    </article>`;
+  }).join(''):'<div class="empty">Agregá tus gastos fijos para controlar cada mes cuánto pagaste.</div>';
+  document.querySelectorAll('[data-fixed-expense-id]').forEach((row)=>{
+    const item=state.fixedExpenses.find((x)=>x.id===row.dataset.fixedExpenseId);if(!item)return;
+    row.querySelector('.fixed-pay').onclick=()=>openFixedExpensePayment(item,key);
+    row.querySelector('.fixed-edit').onclick=()=>openFixedExpenseDialog(item);
+    row.querySelector('.fixed-toggle').onclick=()=>{item.active=item.active===false?true:false;save();renderFixedExpenses();};
+  });
+}
 
 function exportRowsForConsultation(){return consultationItems().map((e)=>({Fecha:new Date(e.purchaseDate||e.date).toLocaleString('es-AR'),Concepto:e.concept||'',Categoría:e.category||'',Medio:e.method||'',Tarjeta:e.card||'',Moneda:e.currency,Importe:Number(e.amount||0),Cotización:e.fxRate||'',EquivalenteARS:expenseArsEquivalent(e)}));}
 function exportConsultExcel(){
