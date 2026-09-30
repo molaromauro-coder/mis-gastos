@@ -954,6 +954,7 @@ function renderResale() {
   state.resale.ownerPercent = split.ownerPercent;
   state.resale.sellerPercent = split.sellerPercent;
   const total = withPortfolioPercent(portfolioMetrics(state.resale.parties, split));
+  $('#resaleInvestment').textContent = money(total.investment, 'ARS');
   $('#resaleRecovered').textContent = money(total.recovered, 'ARS');
   $('#resaleSales').textContent = money(total.sales, 'ARS');
   $('#resaleNet').textContent = money(total.netGain, 'ARS');
@@ -962,6 +963,24 @@ function renderResale() {
   $('#resaleSeller').textContent = money(total.sellerGain, 'ARS');
   $('#resaleSplitLabel').textContent = `${numberText(split.ownerPercent,1)}% Mauro · ${numberText(split.sellerPercent,1)}% vendedor`;
   $('#resaleStock').textContent = `${integerText(total.available)} disponibles · ${integerText(total.sold)} vendidas · ${integerText(total.personal)} uso personal`;
+  if ($('#resaleMonthlyBody')) {
+    const monthly = new Map();
+    state.resale.parties.forEach((party) => {
+      const key = /^\d{4}-\d{2}/.test(String(party.date || '')) ? String(party.date).slice(0,7) : 'sin-fecha';
+      if (!monthly.has(key)) monthly.set(key, []);
+      monthly.get(key).push(party);
+    });
+    $('#resaleMonthlyBody').innerHTML = [...monthly.entries()]
+      .sort(([a],[b]) => b.localeCompare(a))
+      .map(([key, parties]) => {
+        const m = withPortfolioPercent(portfolioMetrics(parties, split));
+        const label = key === 'sin-fecha'
+          ? 'Sin fecha'
+          : new Date(key + '-01T12:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+        const displayLabel = label.charAt(0).toUpperCase() + label.slice(1);
+        return `<tr><td><strong>${escape(displayLabel)}</strong></td><td>${money(m.investment,'ARS')}</td><td>${money(m.recovered,'ARS')}</td><td>${money(m.sales,'ARS')}</td><td>${money(m.netGain,'ARS')}</td><td>${pct(m.gainPercent)}</td></tr>`;
+      }).join('');
+  }
   if ($('#resaleOwnerHead')) $('#resaleOwnerHead').textContent = `Ganancia Mauro (${numberText(split.ownerPercent,1)}%)`;
   if ($('#resaleSellerHead')) $('#resaleSellerHead').textContent = `Total vendedor (${numberText(split.sellerPercent,1)}%)`;
   if ($('#resaleBalanceBody')) {
