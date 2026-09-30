@@ -102,8 +102,8 @@ test('auditoría funcional: versión PWA coherente y cacheada',()=>{
   const jsV=html.match(/app\.js\?v=(\d+)/)?.[1];
   const cssV=html.match(/styles\.css\?v=(\d+)/)?.[1];
   const swV=sw.match(/mis-gastos-v(\d+)/)?.[1];
-  assert.equal(jsV,'68');
-  assert.equal(cssV,'68');
-  assert.equal(swV,'68');
+  assert.equal(jsV,'69');
+  assert.equal(cssV,'69');
+  assert.equal(swV,'69');
   assert.match(sw,/resale-import\.js/);
 });
