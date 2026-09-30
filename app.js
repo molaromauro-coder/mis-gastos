@@ -109,8 +109,38 @@ function seedUserCategoryBaseOnce(){
 }
 seedUserCategoryBaseOnce();
 
+const USER_FIXED_EXPENSES_BASE_VERSION=1;
+function seedUserFixedExpensesOnce(){
+  if(sharedMode || Number(state.settings?.userFixedExpensesBaseVersion||0)>=USER_FIXED_EXPENSES_BASE_VERSION)return;
+  if(!Array.isArray(state.fixedExpenses))state.fixedExpenses=[];
+  const category=state.categories.find((value)=>normalizedCategoryName(value)===normalizedCategoryName('GASTOS FIJOS'))||'GASTOS FIJOS';
+  const subcategories=Array.isArray(state.subcategories?.[category])?state.subcategories[category]:[];
+  const existing=(concept,subcategory)=>state.fixedExpenses.some((item)=>
+    normalizedCategoryName(item.concept)===normalizedCategoryName(concept) ||
+    (normalizedCategoryName(item.category)===normalizedCategoryName(category)&&normalizedCategoryName(item.subcategory)===normalizedCategoryName(subcategory))
+  );
+  subcategories.forEach((subcategory,index)=>{
+    if(existing(subcategory,subcategory))return;
+    state.fixedExpenses.push({
+      id:demoCardId(),
+      concept:subcategory,
+      currency:'ARS',
+      category,
+      subcategory,
+      method:'Efectivo',
+      card:'',
+      day:10,
+      active:true,
+      order:Number(state.fixedExpenses.length+index)
+    });
+  });
+  state.settings={...state.settings,userFixedExpensesBaseVersion:USER_FIXED_EXPENSES_BASE_VERSION};
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+}
+seedUserFixedExpensesOnce();
+
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
-let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
+let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, selectedFixedExpenseOrderId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
 const $ = (s) => document.querySelector(s);
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
 const numberText=(n,maximumFractionDigits=2)=>formatLocalizedNumber(n,{maximumFractionDigits});
@@ -1510,6 +1540,25 @@ function openFixedExpensePayment(item,key){
   $('#fixedExpensePaymentForm').dataset.month=key;
   $('#fixedExpensePaymentDialog').showModal();
 }
+function moveFixedExpenseInList(direction){
+  if(!selectedFixedExpenseOrderId)return;
+  const index=state.fixedExpenses.findIndex((item)=>item.id===selectedFixedExpenseOrderId);
+  if(index<0)return;
+  const target=index+direction;
+  if(target<0||target>=state.fixedExpenses.length)return;
+  [state.fixedExpenses[index],state.fixedExpenses[target]]=[state.fixedExpenses[target],state.fixedExpenses[index]];
+  save();renderFixedExpenses();
+}
+function updateFixedExpenseOrderTools(){
+  const tools=$('#fixedExpenseOrderTools'),up=$('#fixedMoveUp'),down=$('#fixedMoveDown');
+  if(!tools||!up||!down)return;
+  tools.classList.toggle('hidden',state.fixedExpenses.length<2);
+  const index=state.fixedExpenses.findIndex((item)=>item.id===selectedFixedExpenseOrderId);
+  up.disabled=index<=0;
+  down.disabled=index<0||index>=state.fixedExpenses.length-1;
+  const label=$('#fixedExpenseOrderSelected');
+  if(label)label.textContent=index>=0?`Seleccionado: ${state.fixedExpenses[index].concept}`:'Seleccioná un gasto para moverlo';
+}
 function renderFixedExpenses(){
   if(!$('#fixedExpenseList'))return;
   const key=$('#fixedExpenseMonth')?.value||monthKey(new Date());
@@ -1519,12 +1568,17 @@ function renderFixedExpenses(){
   $('#fixedExpenseSummary').textContent=active.length
     ? `${integerText(paidCount)} pagado${paidCount===1?'':'s'} · ${integerText(pendingCount)} pendiente${pendingCount===1?'':'s'} en ${key}`
     : 'Todavía no configuraste gastos fijos.';
-  $('#fixedExpenseList').innerHTML=state.fixedExpenses.length?state.fixedExpenses.map((item)=>{
+  $('#fixedExpenseList').innerHTML=state.fixedExpenses.length?state.fixedExpenses.map((item,index)=>{
     const paid=fixedExpenseIsPaid(item,key);
     const current=fixedExpenseAmountForMonth(item,key);
     const previous=fixedExpensePreviousAmount(item,key);
     const category=[item.category,item.subcategory].filter(Boolean).join(' · ')||'Sin categoría';
-    return `<article class="fixed-expense-card ${item.active===false?'disabled':''}" data-fixed-expense-id="${escape(item.id)}">
+    const selected=item.id===selectedFixedExpenseOrderId;
+    return `<article class="fixed-expense-card ${item.active===false?'disabled':''} ${selected?'order-selected':''}" data-fixed-expense-id="${escape(item.id)}">
+      <div class="fixed-expense-order-row">
+        <label class="fixed-order-picker"><input type="radio" name="fixedExpenseOrder" value="${escape(item.id)}" ${selected?'checked':''}><span>Seleccionar</span></label>
+        <small>Posición ${integerText(index+1)} de ${integerText(state.fixedExpenses.length)}</small>
+      </div>
       <div class="fixed-expense-head"><div><strong>${escape(item.concept)}</strong><small>${escape(category)} · día ${integerText(item.day||1)} · ${escape(item.method||'Efectivo')}${item.card?' · '+escape(item.card):''}</small></div><span class="${paid?'paid':'pending'}">${item.active===false?'Inactivo':paid?'Pagado':'Pendiente'}</span></div>
       <div class="fixed-expense-values"><span>Este mes <strong>${paid?money(current,item.currency):'—'}</strong></span><span>Mes anterior <strong>${previous?money(previous,item.currency):'Sin dato'}</strong></span></div>
       <div class="fixed-expense-actions"><button type="button" class="fixed-pay">${paid?'Editar pago':'Registrar pago'}</button><button type="button" class="fixed-edit">Editar</button><button type="button" class="fixed-toggle">${item.active===false?'Activar':'Desactivar'}</button></div>
@@ -1532,10 +1586,12 @@ function renderFixedExpenses(){
   }).join(''):'<div class="empty">Agregá tus gastos fijos para controlar cada mes cuánto pagaste.</div>';
   document.querySelectorAll('[data-fixed-expense-id]').forEach((row)=>{
     const item=state.fixedExpenses.find((x)=>x.id===row.dataset.fixedExpenseId);if(!item)return;
+    row.querySelector('.fixed-order-picker input').onchange=()=>{selectedFixedExpenseOrderId=item.id;renderFixedExpenses();};
     row.querySelector('.fixed-pay').onclick=()=>openFixedExpensePayment(item,key);
     row.querySelector('.fixed-edit').onclick=()=>openFixedExpenseDialog(item);
     row.querySelector('.fixed-toggle').onclick=()=>{item.active=item.active===false?true:false;save();renderFixedExpenses();};
   });
+  updateFixedExpenseOrderTools();
 }
 
 function exportRowsForConsultation(){return consultationRows().map((row)=>({Tipo:row.type,Fecha:row.date.toLocaleString('es-AR'),Concepto:row.concept||'',Categoría:row.category||'',Subcategoría:row.subcategory||'',Medio:row.method||'',Tarjeta:row.card||'',Moneda:row.currency,Importe:Number(row.amount||0),EquivalenteARS:Number(row.arsEquivalent||0)}));}
@@ -2365,6 +2421,8 @@ $('#globalSearchBtn').onclick=()=>{goView('consultations');setTimeout(()=>$('#co
 $('#homeCategoriesBtn').onclick=()=>openCategoryManager();
 $('#functionsMenuBtn').onclick=()=>{if($('#menuDialog')?.open)$('#menuDialog').close();$('#functionsDialog').showModal();};
 $('#addFixedExpense').onclick=()=>openFixedExpenseDialog();
+$('#fixedMoveUp').onclick=()=>moveFixedExpenseInList(-1);
+$('#fixedMoveDown').onclick=()=>moveFixedExpenseInList(1);
 $('#fixedExpenseMonth').onchange=renderFixedExpenses;
 $('#fixedExpenseMethod').onchange=()=>updateFixedExpenseCardField();
 $('#fixedExpenseCategory').onchange=()=>fillScopedSubcategories('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');
