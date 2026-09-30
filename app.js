@@ -290,7 +290,7 @@ function renderHomeRecent(){
   }
   $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>4);
 }
-function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
+function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock();renderMonthlyNetSummary(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function subcategoriesFor(category){
   const values=state.subcategories?.[category];
@@ -1556,7 +1556,22 @@ async function showAppLock(){
 }
 function currentMonthKey() { return monthKey(new Date()); }
 function budgetFor(key) { return state.budgets[key] || { amount: 0, reason: '', history: [] }; }
-function budgetMetrics(key) { return budgetOutcome(budgetFor(key).amount, state.expenses, state.stock, key); }
+function recoveredForCurrentMonth(key){
+  if(key!==currentMonthKey())return 0;
+  return recoveryMonthMetrics(state.recoveries,state.expenses,key).recovered;
+}
+function budgetMetrics(key) {
+  const base=budgetOutcome(budgetFor(key).amount,state.expenses,state.stock,key);
+  const spent=Math.max(0,base.spent-recoveredForCurrentMonth(key));
+  return {...base,spent,available:Math.max(base.budget-spent,0),saving:base.budget>0?Math.max(base.budget-spent,0):0,excess:base.budget>0?Math.max(spent-base.budget,0):0,percent:base.budget>0?spent/base.budget*100:0};
+}
+function renderMonthlyNetSummary(){
+  if(!$('#homeMonthlyNet'))return;
+  const m=recoveryMonthMetrics(state.recoveries,state.expenses,currentMonthKey());
+  $('#homeMonthlyGross').textContent=money(m.gross,'ARS');
+  $('#homeMonthlyRecovered').textContent=money(m.recovered,'ARS');
+  $('#homeMonthlyNet').textContent=money(m.net,'ARS');
+}
 
 function renderBudgetHomeAlert() {
   if (!$('#budgetAlert')) return;
@@ -1605,7 +1620,12 @@ function renderRecoveries() {
   const m=recoveryMonthMetrics(state.recoveries,state.expenses,key);
   $('#recoveryGross').textContent=money(m.gross,'ARS');
   $('#recoveryTotal').textContent=money(m.recovered,'ARS');
-  $('#recoveryNet').textContent=money(m.net,'ARS');
+  const isCurrent=key===currentMonthKey();
+  $('#recoveryNet').textContent=money(isCurrent?m.net:m.gross,'ARS');
+  $('#recoveryNetLabel').textContent=isCurrent?'Gasto neto':'Gasto histórico sin descontar';
+  $('#recoveryMonthNote').textContent=isCurrent
+    ?'Los recuperos del mes en curso se descuentan del gasto neto mensual y del presupuesto. El gasto original queda registrado.'
+    :`Recuperos correspondientes a ${new Date(key+'-01T12:00:00').toLocaleDateString('es-AR',{month:'long',year:'numeric'})}: quedan en el historial sin modificar el gasto de ese mes.`;
   const rows=state.recoveries.filter((r)=>monthKey(new Date(r.date+'T12:00:00'))===key).sort((a,b)=>b.date.localeCompare(a.date));
   $('#recoveryList').innerHTML=rows.length ? rows.map((r)=>`<article class="recovery-card"><div><strong>${escape(r.concept || 'Recupero')}</strong><span>${new Date(r.date+'T12:00:00').toLocaleDateString('es-AR')}</span><small>${r.currency==='USD' && r.fxRate ? `Cotización ${money(r.fxRate,'ARS')}` : ''}</small></div><strong>${money(r.amount,r.currency)}</strong></article>`).join('') : '<div class="empty">No hay recuperos en este mes.</div>';
 }
@@ -2382,7 +2402,7 @@ bindHoldToTalk($('#stockVoiceBtn'),{
 });
 
 $('#addRecovery').onclick=()=>{ $('#recoveryForm').reset(); $('#recoveryDate').value=new Date().toISOString().slice(0,10); $('#recoveryDialog').showModal(); };
-$('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:localizedInputNumber('#recoveryAmount'),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value};if(!Number.isFinite(item.amount)||item.amount<=0)return showToast('Ingresá un importe válido');if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();renderRecoveries();showToast('Recupero guardado');};
+$('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:localizedInputNumber('#recoveryAmount'),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value};if(!Number.isFinite(item.amount)||item.amount<=0)return showToast('Ingresá un importe válido');if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();render();showToast('Recupero guardado');};
 $('#recoveryMonth').onchange=renderRecoveries;
 
 $('#budgetMonth').onchange=renderBudget;
