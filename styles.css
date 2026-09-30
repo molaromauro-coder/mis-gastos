@@ -478,3 +478,15 @@ img,svg,canvas,video{
   }
   .app>main{width:100%!important;max-width:100%!important}
 }
+
+.fixed-expense-order-tools{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#eaf3ef;border:1px solid #cfddd7;border-radius:14px;padding:10px 12px;margin:10px 0}
+.fixed-expense-order-tools strong,.fixed-expense-order-tools small{display:block}
+.fixed-expense-order-tools small{margin-top:3px;color:var(--muted);letter-spacing:0}
+.fixed-expense-order-tools>div:last-child{display:flex;gap:7px}
+.fixed-expense-order-tools button{border:0;background:#fff;border-radius:10px;padding:9px 11px;font-weight:800;color:#176143}
+.fixed-expense-order-tools button:disabled{opacity:.35}
+.fixed-expense-order-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #edf1ef}
+.fixed-order-picker{display:flex;align-items:center;gap:7px;margin:0;font-size:11px;font-weight:800;color:#176143}
+.fixed-order-picker input{width:auto;margin:0}
+.fixed-expense-order-row small{font-size:10px;color:var(--muted);letter-spacing:0}
+.fixed-expense-card.order-selected{outline:2px solid #58a18d;box-shadow:0 0 0 4px #58a18d18}

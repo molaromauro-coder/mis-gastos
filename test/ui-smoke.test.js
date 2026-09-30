@@ -85,3 +85,19 @@ test('en escritorio la app conserva ancho móvil centrado',()=>{
   assert.match(css,/@media\(min-width:700px\)[\s\S]*?\.app\{[\s\S]*?max-width:430px!important/);
   assert.match(css,/width:min\(430px,calc\(100vw - 40px\)\)!important/);
 });
+
+test('Gastos fijos se cargan desde las subcategorías de GASTOS FIJOS una sola vez',()=>{
+  assert.match(app,/USER_FIXED_EXPENSES_BASE_VERSION=1/);
+  assert.match(app,/seedUserFixedExpensesOnce\(\)/);
+  for(const fixed of ['LUZ','GAS','EXPENSAS','SEGURO AUTO','SEGURO MOTO','SEGURO BICI','SEGURO HOGAR','IMPUESTOS VARIOS','COMIDA FRODO']){
+    assert.ok(app.includes(`'${fixed}'`) || app.includes('subcategories.forEach'),fixed);
+  }
+});
+
+test('Gastos fijos permiten seleccionar un elemento y moverlo arriba o abajo',()=>{
+  assert.ok(html.includes('id="fixedExpenseOrderTools"'));
+  assert.ok(html.includes('id="fixedMoveUp"'));
+  assert.ok(html.includes('id="fixedMoveDown"'));
+  assert.match(app,/moveFixedExpenseInList/);
+  assert.match(app,/fixed-order-picker/);
+});
