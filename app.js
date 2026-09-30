@@ -38,7 +38,7 @@ function seedDemoCardsOnce(){
 }
 seedDemoCardsOnce();
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
-let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
+let selectedDate = new Date(), reportRange = 'month', reportChartMode = 'bar', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
 const $ = (s) => document.querySelector(s);
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
 const numberText=(n,maximumFractionDigits=2)=>formatLocalizedNumber(n,{maximumFractionDigits});
@@ -435,10 +435,47 @@ function reportLabel(range, from, to) {
 function renderReportRows(target, rows, kind) {
   target.innerHTML = rows.length ? rows.map((r) => `<button class="report-row" data-report-kind="${kind}" data-report-key="${escape(r.key)}"><span><strong>${escape(r.key)}</strong><small>${integerText(r.count)} movimiento${r.count === 1 ? '' : 's'}${r.usd ? ` · ${money(r.usd,'USD')}` : ''}</small></span><strong>${money(r.arsEquivalent,'ARS')}</strong></button>`).join('') : '<div class="empty">Sin movimientos.</div>';
 }
+function reportChartRows(rows){
+  const sorted=rows.filter((r)=>r.arsEquivalent>0).slice().sort((a,b)=>b.arsEquivalent-a.arsEquivalent);
+  if(sorted.length<=6)return sorted;
+  const top=sorted.slice(0,5);
+  const others=sorted.slice(5).reduce((acc,row)=>({
+    key:'Otros',
+    ars:acc.ars+Number(row.ars||0),
+    usd:acc.usd+Number(row.usd||0),
+    arsEquivalent:acc.arsEquivalent+Number(row.arsEquivalent||0),
+    count:acc.count+Number(row.count||0)
+  }),{key:'Otros',ars:0,usd:0,arsEquivalent:0,count:0});
+  return [...top,others];
+}
 function renderReportChart(rows){
   const target=$('#reportChart'); if(!target)return;
-  const top=rows.slice(0,6), max=Math.max(...top.map((r)=>r.arsEquivalent),1);
-  target.innerHTML=top.length?top.map((r)=>`<div class="report-chart-row"><span>${escape(r.key)}</span><div><i style="width:${Math.max(2,r.arsEquivalent/max*100)}%"></i></div><strong>${money(r.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin datos para graficar.</div>';
+  const chartRows=reportChartRows(rows);
+  document.querySelectorAll('[data-report-chart]').forEach((button)=>button.classList.toggle('selected',button.dataset.reportChart===reportChartMode));
+  if(!chartRows.length){
+    target.className='report-chart';
+    target.innerHTML='<div class="empty">Sin datos para graficar.</div>';
+    return;
+  }
+  if(reportChartMode==='pie'){
+    const total=chartRows.reduce((sum,row)=>sum+Number(row.arsEquivalent||0),0)||1;
+    const palette=['#356f9f','#5e9c83','#e1a94c','#8a6bb8','#d56b6b','#6d8caa'];
+    let cursor=0;
+    const stops=chartRows.map((row,index)=>{
+      const start=cursor;
+      cursor+=(Number(row.arsEquivalent||0)/total)*100;
+      return `${palette[index%palette.length]} ${start.toFixed(3)}% ${cursor.toFixed(3)}%`;
+    }).join(',');
+    target.className='report-chart report-chart-pie';
+    target.innerHTML=`<div class="report-pie" style="background:conic-gradient(${stops})" aria-label="Distribución por categoría"></div><div class="report-pie-legend">${chartRows.map((row,index)=>{
+      const pct=Number(row.arsEquivalent||0)/total*100;
+      return `<div><span><i style="background:${palette[index%palette.length]}"></i><strong>${escape(row.key)}</strong></span><span>${pct.toLocaleString('es-AR',{maximumFractionDigits:1})}% · ${money(row.arsEquivalent,'ARS')}</span></div>`;
+    }).join('')}</div>`;
+    return;
+  }
+  target.className='report-chart';
+  const max=Math.max(...chartRows.map((r)=>r.arsEquivalent),1);
+  target.innerHTML=chartRows.map((r)=>`<div class="report-chart-row"><span>${escape(r.key)}</span><div><i style="width:${Math.max(2,r.arsEquivalent/max*100)}%"></i></div><strong>${money(r.arsEquivalent,'ARS')}</strong></div>`).join('');
 }
 function configuredCategoryRows(items){
   const grouped=groupExpenses(items,e=>e.category || 'Sin categoría');
@@ -1427,6 +1464,7 @@ $('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textCo
   editingCardId = null;
   save(); event.target.reset(); $('#cardDialog').close(); activeCardType=selectedType; showToast('Medio de pago guardado'); render();
 };
+document.querySelectorAll('[data-report-chart]').forEach((button)=>{button.onclick=()=>{reportChartMode=button.dataset.reportChart==='pie'?'pie':'bar';renderReport();};});
 document.querySelectorAll('[data-range]').forEach((button) => { button.onclick=()=>{ reportRange=button.dataset.range; document.querySelectorAll('[data-range]').forEach((b)=>b.classList.remove('selected')); button.classList.add('selected'); $('#customRange').classList.toggle('hidden',reportRange!=='custom'); renderReport(); }; });
 $('#fromDate').onchange=renderReport; $('#toDate').onchange=renderReport;
 document.querySelectorAll('[data-usd-range]').forEach((button)=>{ button.onclick=()=>{ usdRange=button.dataset.usdRange; document.querySelectorAll('[data-usd-range]').forEach((b)=>b.classList.remove('selected')); button.classList.add('selected'); $('#usdCustomRange').classList.toggle('hidden',usdRange!=='custom'); renderUsd(); }; });
