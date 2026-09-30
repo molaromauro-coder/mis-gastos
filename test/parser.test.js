@@ -322,3 +322,68 @@ test('separa tres gastos con medios de pago distintos en un mismo audio',()=>{
   assert.match(items[1].concept,/supermercado/i);
   assert.match(items[2].concept,/combustible/i);
 });
+
+
+test('frase exacta pilcha 475 mil con debito Banco Macro',()=>{
+  const cards=[
+    {name:'Cuenta Banco Macro',type:'Débito'},
+    {name:'Banco Macro',type:'Crédito'}
+  ];
+  const items=parseExpenses('Compré pilcha, gasté 475 mil pesos y pagué con débito Banco Macro',cards);
+  assert.equal(items.length,1);
+  assert.equal(items[0].amount,475000);
+  assert.equal(items[0].method,'Débito');
+  assert.equal(items[0].card,'Cuenta Banco Macro');
+  assert.match(items[0].concept,/pilcha/i);
+});
+
+
+test('reconoce la misma compra sin importar el orden de monto concepto y pago',()=>{
+  const cards=[
+    {name:'Cuenta Banco Macro',type:'Débito'},
+    {name:'Banco Macro',type:'Crédito'}
+  ];
+  const phrases=[
+    'Compré pilcha, gasté 475 mil pesos y pagué con débito Banco Macro',
+    'Pagué con débito Banco Macro 475 mil pesos por pilcha',
+    '475 mil pesos en pilcha, con Banco Macro débito',
+    'Pilcha, débito Banco Macro, gasté 475 mil pesos',
+    'Con Banco Macro débito pagué pilcha, 475 mil pesos',
+    'Gasté 475 mil pesos, Banco Macro débito, en pilcha'
+  ];
+  for(const phrase of phrases){
+    const items=parseExpenses(phrase,cards);
+    assert.equal(items.length,1,phrase);
+    const item=items[0];
+    assert.equal(item.amount,475000,phrase);
+    assert.equal(item.method,'Débito',phrase);
+    assert.equal(item.card,'Cuenta Banco Macro',phrase);
+    assert.match(item.concept,/pilcha/i,phrase);
+  }
+});
+
+test('reconoce crédito y cuotas aunque se digan antes del monto o del producto',()=>{
+  const cards=[{name:'Banco Francés',type:'Crédito'}];
+  const phrases=[
+    'Con crédito Banco Francés en 3 cuotas compré zapatillas por 120 mil pesos',
+    'Zapatillas 120 mil pesos, Banco Francés crédito, 3 cuotas',
+    '120 mil pesos en 3 cuotas con crédito Banco Francés por zapatillas'
+  ];
+  for(const phrase of phrases){
+    const item=parseExpenses(phrase,cards)[0];
+    assert.equal(item.amount,120000,phrase);
+    assert.equal(item.method,'Crédito',phrase);
+    assert.equal(item.card,'Banco Francés',phrase);
+    assert.equal(item.installments,3,phrase);
+    assert.equal(item.installmentsSpecified,true,phrase);
+    assert.match(item.concept,/zapatillas/i,phrase);
+  }
+});
+
+test('reconoce efectivo aunque se diga antes del monto',()=>{
+  const item=parseExpenses('En efectivo pagué caramelos, gasté 5 mil pesos')[0];
+  assert.equal(item.amount,5000);
+  assert.equal(item.method,'Efectivo');
+  assert.equal(item.card,'');
+  assert.match(item.concept,/caramelos/i);
+});

@@ -1158,6 +1158,8 @@ let voiceHoldActive = false;
 let voiceStopRequested = false;
 let voiceGestureStartY = null;
 let voiceCancelArmed = false;
+let voiceFinishTimer = null;
+let voiceSessionFinished = true;
 function resetExpenseVoiceUI() {
   $('#micBtn').classList.remove('listening');
   $('#voiceZone')?.classList.remove('recording','cancel-ready');
@@ -1166,9 +1168,12 @@ function resetExpenseVoiceUI() {
   $('#voiceHint').textContent='para hablar';
 }
 function finishExpenseVoice() {
+  if(voiceSessionFinished)return;
+  voiceSessionFinished=true;
+  if(voiceFinishTimer){clearTimeout(voiceFinishTimer);voiceFinishTimer=null;}
   voiceHoldActive=false; voiceStopRequested=false;
   if(voiceCancelled){voiceTranscript='';voiceCycleText='';voiceError='';voiceCancelled=false;voiceGestureStartY=null;voiceCancelArmed=false;resetExpenseVoiceUI();return;}
-  const phrase=voiceTranscript.trim();
+  const phrase=[voiceTranscript,voiceCycleText].filter(Boolean).join(' ').trim();
   const err=voiceError;
   voiceTranscript=''; voiceCycleText=''; voiceError='';
   resetExpenseVoiceUI();
@@ -1194,6 +1199,7 @@ function launchExpenseRecognitionCycle(){
   recognition.onresult=(event)=>{let text='';for(let i=0;i<event.results.length;i++)text+=' '+(event.results[i][0]?.transcript||'');voiceCycleText=text.trim();};
   recognition.onerror=(event)=>{voiceError=event.error||'error';if(!['aborted','no-speech'].includes(voiceError))showToast('No pude escuchar. Revisá el permiso del micrófono');};
   recognition.onend=()=>{
+    if(voiceSessionFinished){activeRecognition=null;voiceCycleText='';return;}
     if(voiceCycleText){voiceTranscript=[voiceTranscript,voiceCycleText].filter(Boolean).join(' ').trim();}
     activeRecognition=null; voiceCycleText='';
     if(voiceCancelled){finishExpenseVoice();return;}
@@ -1210,7 +1216,8 @@ function startExpenseVoice() {
     if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories, {subcategories:state.subcategories}); showPending(); }
     return;
   }
-  voiceTranscript='';voiceCycleText='';voiceError='';voiceCancelled=false;voiceCancelArmed=false;voiceStopRequested=false;voiceHoldActive=true;
+  voiceTranscript='';voiceCycleText='';voiceError='';voiceCancelled=false;voiceCancelArmed=false;voiceStopRequested=false;voiceHoldActive=true;voiceSessionFinished=false;
+  if(voiceFinishTimer){clearTimeout(voiceFinishTimer);voiceFinishTimer=null;}
   $('#voiceZone')?.classList.add('recording');
   $('#voiceTitle').textContent='Escuchando…';
   $('#voiceHint').textContent='Arrastrá el dedo al tacho para anular';
@@ -1219,8 +1226,14 @@ function startExpenseVoice() {
 function stopExpenseVoice() {
   if(!voiceHoldActive&&!activeRecognition)return;
   voiceHoldActive=false;voiceStopRequested=true;
-  if(activeRecognition){try{activeRecognition.stop();}catch{activeRecognition=null;finishExpenseVoice();}}
-  else finishExpenseVoice();
+  if(activeRecognition){
+    try{activeRecognition.stop();}catch{activeRecognition=null;finishExpenseVoice();return;}
+    voiceFinishTimer=setTimeout(()=>{
+      if(voiceSessionFinished)return;
+      if(activeRecognition){try{activeRecognition.abort();}catch{}activeRecognition=null;}
+      finishExpenseVoice();
+    },900);
+  } else finishExpenseVoice();
 }
 const micBtn=$('#micBtn');
 const voiceTrash=$('#voiceTrash');
@@ -1238,8 +1251,8 @@ function cancelExpenseVoice(){
   if(!activeRecognition&&!voiceHoldActive)return;
   voiceCancelled=true;voiceHoldActive=false;voiceStopRequested=true;voiceCancelArmed=false;voiceGestureStartY=null;
   feedback(false);showToast('Grabación descartada');
-  if(activeRecognition){try{activeRecognition.abort();}catch{activeRecognition=null;finishExpenseVoice();}}
-  else finishExpenseVoice();
+  if(activeRecognition){try{activeRecognition.abort();}catch{}activeRecognition=null;}
+  finishExpenseVoice();
 }
 if ('ontouchstart' in window) {
   micBtn.addEventListener('touchstart',(e)=>{e.preventDefault();voiceGestureStartY=e.touches[0]?.clientY??null;startExpenseVoice();},{passive:false});
