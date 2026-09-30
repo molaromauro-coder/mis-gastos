@@ -1554,7 +1554,7 @@ function openSecuritySetup(){
 }
 async function unlockWithPin(){
   const pin=$('#unlockPin').value.trim();
-  if(!/^\d{6}$/.test(pin)){ $('#lockMessage').textContent='Ingresá los 6 dígitos.'; return false; }
+  if(!/^(?:\d{4}|\d{6})$/.test(pin)){ $('#lockMessage').textContent='Ingresá tu PIN de 6 dígitos (o el PIN anterior de 4).'; return false; }
   const hash=await hashPin(pin,state.security.pinSalt);
   if(hash!==state.security.pinHash){ $('#lockMessage').textContent='PIN incorrecto.'; $('#unlockPin').value=''; return false; }
   $('#lockDialog').close(); $('#unlockPin').value=''; $('#lockMessage').textContent=''; setTimeout(prepareRecurringDue,100); return true;
