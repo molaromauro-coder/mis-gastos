@@ -48,6 +48,6 @@ test('el respaldo de seguridad usa PIN de 6 dígitos y permanece opcional',()=>{
   assert.match(html,/PIN de 6 dígitos/);
   assert.match(html,/id="securityPin"[^>]*pattern="\[0-9\]\{6\}"[^>]*maxlength="6"/);
   assert.match(html,/id="unlockPin"[^>]*maxlength="6"/);
-  assert.match(app,/\\d\\{6\\}/);
-  assert.match(app,/\\d\\{4\\}/);
+  assert.ok(app.includes('\\d{6}'));
+  assert.ok(app.includes('\\d{4}'));
 });
