@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from '../expense-reset.js';
+import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from '../expense-reset.js';
 import { recentPurchases, groupExpenses } from '../reporting.js';
 
 const now=new Date('2026-09-30T12:00:00-03:00');
@@ -128,4 +128,21 @@ test('el diálogo puede contar gastos históricos en Papelera aunque sólo tenga
   assert.equal(result.totalRemoved,1);
   assert.equal(state.trash.flatMap(x=>x.items).some(x=>x.id==='legacy-old'),false);
   assert.equal(state.trash.flatMap(x=>x.items).some(x=>x.id==='legacy-current'),true);
+});
+
+test('Papelera permite eliminar varios registros seleccionados sin tocar los demás',()=>{
+  const state=sampleState();
+  const result=permanentlyDeleteTrashRecords(state,['trash-old']);
+  assert.equal(result.removedRecords,1);
+  assert.equal(result.removedItems,1);
+  assert.deepEqual(state.trash.map((r)=>r.id),['trash-current']);
+});
+
+test('Papelera permite eliminar todos los registros de una sola vez',()=>{
+  const state=sampleState();
+  const ids=state.trash.map((r)=>r.id);
+  const result=permanentlyDeleteTrashRecords(state,ids);
+  assert.equal(result.removedRecords,2);
+  assert.equal(result.removedItems,2);
+  assert.equal(state.trash.length,0);
 });
