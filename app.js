@@ -311,7 +311,7 @@ function fillCategories() {
   activeSettingsCategory=active;
   $('#categoryForm')?.classList.toggle('hidden',!!active);
   $('#categorySettingsIntro')?.classList.toggle('hidden',!!active);
-  if($('#categorySettingsTitle')) $('#categorySettingsTitle').textContent=active?active:'Categorías y subcategorías';
+  if($('#categorySettingsTitle')) $('#categorySettingsTitle').textContent=active?active:'Categorías';
 
   if(active){
     const subs=subcategoriesFor(active);
@@ -600,13 +600,12 @@ function pendingCategoryPrompt(e,i){
   const needsCategory=!e.category;
   if(!needsCategory)return '';
   const options=state.categories.map((category)=>`<option value="${escape(category)}">${escape(category)}</option>`).join('');
-  return `<div class="pending-payment-question pending-category-question"><strong>No estoy seguro de la categoría</strong>${state.categories.length?`<select class="pending-category-select" data-index="${i}"><option value="">Clasificar ahora (opcional)</option>${options}</select>`:'<small class="muted">Todavía no tenés categorías creadas.</small>'}<div class="pending-payment-actions pending-category-actions"><button type="button" data-pending-uncategorized="${i}">Dejar sin clasificar</button><button type="button" class="voice-pay" data-pending-category-voice="${i}">🎙 Decir categoría</button></div><small class="muted">Podés confirmar el gasto sin clasificar y ordenarlo después desde “Compras sin clasificar”.</small></div>`;
+  return `<div class="pending-payment-question pending-category-question"><strong>No estoy seguro de la categoría</strong>${state.categories.length?`<select class="pending-category-select" data-index="${i}"><option value="">Clasificar ahora (opcional)</option>${options}</select>`:'<small class="muted">Todavía no tenés categorías creadas.</small>'}<button type="button" class="category-create-button pending-create-category" data-pending-add-category="${i}">＋ Agregar categoría</button><div class="pending-payment-actions pending-category-actions"><button type="button" data-pending-uncategorized="${i}">Dejar sin clasificar</button><button type="button" class="voice-pay" data-pending-category-voice="${i}">🎙 Decir categoría</button></div><small class="muted">Podés confirmar el gasto sin clasificar y ordenarlo después desde “Compras sin clasificar”.</small></div>`;
 }
 function pendingSubcategoryPrompt(e,i){
   if(!e.category)return '';
   const values=subcategoriesFor(e.category);
-  if(!values.length)return '';
-  return `<div class="pending-subcategory-choice"><label>Subcategoría (opcional)<select class="pending-subcategory-select" data-index="${i}"><option value="">Sin subcategoría</option>${values.map((value)=>`<option value="${escape(value)}" ${e.subcategory===value?'selected':''}>${escape(value)}</option>`).join('')}</select></label></div>`;
+  return `<div class="pending-subcategory-choice"><label>Subcategoría (opcional)${values.length?`<select class="pending-subcategory-select" data-index="${i}"><option value="">Sin subcategoría</option>${values.map((value)=>`<option value="${escape(value)}" ${e.subcategory===value?'selected':''}>${escape(value)}</option>`).join('')}</select>`:'<small class="muted">Todavía no hay subcategorías en esta categoría.</small>'}</label><button type="button" class="category-create-button pending-create-subcategory" data-pending-add-subcategory="${i}">＋ Agregar subcategoría</button></div>`;
 }
 function pendingPaymentPrompt(e,i){
   const needsMethod=needsPaymentMethod(e);
@@ -869,6 +868,29 @@ function showPending() {
     select.onchange=()=>{
       const item=pending[Number(select.dataset.index)];if(!item||!select.value)return;
       item.category=select.value;item.subcategory='';item.categoryStatus='manual';item.learnCategory=true;showPending();
+    };
+  });
+  document.querySelectorAll('[data-pending-add-category]').forEach((button)=>{
+    button.onclick=()=>{
+      const item=pending[Number(button.dataset.pendingAddCategory)];if(!item)return;
+      const value=prompt('Nombre de la nueva categoría:')?.trim();
+      if(!value)return;
+      const category=createCategoryEverywhere(value);
+      if(!category)return;
+      item.category=category;item.subcategory='';item.categoryStatus='manual';item.learnCategory=true;showPending();
+    };
+  });
+  document.querySelectorAll('[data-pending-add-subcategory]').forEach((button)=>{
+    button.onclick=()=>{
+      const item=pending[Number(button.dataset.pendingAddSubcategory)];if(!item||!item.category)return;
+      const value=prompt(`Nueva subcategoría dentro de ${item.category}:`)?.trim();
+      if(!value)return;
+      if(!addSubcategory(item.category,value)){
+        const existing=subcategoriesFor(item.category).find((s)=>s.toLowerCase()===value.toLowerCase());
+        if(existing){item.subcategory=existing;showPending();return;}
+        return showToast('Esa subcategoría ya existe');
+      }
+      item.subcategory=value;item.categoryStatus='manual';item.learnCategory=true;showPending();
     };
   });
   document.querySelectorAll('.pending-subcategory-select').forEach((select)=>{
