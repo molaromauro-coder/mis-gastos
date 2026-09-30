@@ -148,3 +148,15 @@ dialog{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:to
 .pending-category-actions{grid-template-columns:1fr 1fr}
 .pending-subcategory-choice{margin:8px 0 12px}
 .pending-subcategory-choice label{display:grid;gap:6px;font-size:12px;font-weight:700;color:#203c56}
+
+
+/* Compras sin clasificar y aprendizaje */
+.unclassified-count{font-size:12px;font-weight:800;color:#5f7380;background:#eef4f7;border-radius:999px;padding:7px 10px}
+.unclassified-list{display:grid;gap:12px;margin-top:16px}
+.unclassified-item{background:#fff;border-radius:17px;padding:14px;box-shadow:0 4px 16px #172f2a0b;display:grid;gap:10px}
+.unclassified-head{display:flex;justify-content:space-between;gap:12px;align-items:start}
+.unclassified-head strong,.unclassified-head small{display:block}
+.unclassified-head small{margin-top:4px;color:var(--muted)}
+.unclassified-head span{font-size:11px;font-weight:800;background:#fff0ca;border-radius:999px;padding:6px 8px;white-space:nowrap}
+.unclassified-item label{display:grid;gap:6px;font-size:12px;font-weight:700}
+.unclassified-item select{margin:0}
