@@ -76,6 +76,38 @@ function seedDemoCardsOnce(){
 }
 seedDemoCardsOnce();
 
+const USER_CATEGORY_BASE_VERSION=1;
+const USER_CATEGORY_BASE={
+  'GASTOS FIJOS':['LUZ','GAS','EXPENSAS','SEGURO AUTO','SEGURO MOTO','SEGURO BICI','SEGURO HOGAR','IMPUESTOS VARIOS','COMIDA FRODO'],
+  'VIANDAS':[],
+  'SUPERMERCADO':['LIMPIEZA','COMIDA','GASEOSAS','VINOS','OTROS'],
+  'KIOSCO':[],
+  'CARAMELOS / CHOCOLATES':[],
+  'VINOS':[],
+  'HOGAR':['ELECTRODOMESTICOS','MUEBLES','REPARACIONES','ADORNOS','OTROS'],
+  'FARMACIA':['MEDICAMENTOS','PERFUMES','CREMAS'],
+  'SALUD':['PSICOLOGO','PSIQUIATRA','OBRA SOCIAL','TRATAMIENTO PELO'],
+  'ENTRADAS PERSONALES':[]
+};
+function seedUserCategoryBaseOnce(){
+  if(sharedMode || Number(state.settings?.userCategoryBaseVersion||0)>=USER_CATEGORY_BASE_VERSION)return;
+  if(!Array.isArray(state.categories))state.categories=[];
+  if(!state.subcategories||typeof state.subcategories!=='object')state.subcategories={};
+  const findCategory=(name)=>state.categories.find((value)=>String(value||'').trim().toLocaleLowerCase('es-AR')===String(name).trim().toLocaleLowerCase('es-AR'));
+  Object.entries(USER_CATEGORY_BASE).forEach(([category,subs])=>{
+    let actual=findCategory(category);
+    if(!actual){actual=category;state.categories.push(actual);}
+    const current=Array.isArray(state.subcategories[actual])?[...state.subcategories[actual]]:[];
+    subs.forEach((sub)=>{
+      if(!current.some((value)=>String(value||'').trim().toLocaleLowerCase('es-AR')===String(sub).trim().toLocaleLowerCase('es-AR')))current.push(sub);
+    });
+    state.subcategories[actual]=current;
+  });
+  state.settings={...state.settings,userCategoryBaseVersion:USER_CATEGORY_BASE_VERSION};
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+}
+seedUserCategoryBaseOnce();
+
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
 let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
 const $ = (s) => document.querySelector(s);
