@@ -69,14 +69,31 @@ test('balance total suma todas las fiestas', () => {
 });
 
 
-test('datos iniciales coinciden con la planilla final',()=>{
+test('Nacho Scoppa coincide con las 8 ventas de la planilla final',()=>{
+  const party=INITIAL_RESALE_PARTIES.find((p)=>p.name==='NACHO SCOPPA');
+  const m=partyMetrics(party,{ownerPercent:70,sellerPercent:30});
+  assert.ok(party);
+  assert.equal(party.tickets.length,8);
+  assert.deepEqual(party.tickets.map((t)=>t.status),Array(8).fill('Vendida'));
+  assert.deepEqual(party.tickets.map((t)=>t.salePrice),[40000,45000,45000,45000,42500,42500,45000,45000]);
+  assert.equal(m.investment,220800);
+  assert.equal(m.sales,350000);
+  assert.equal(m.recovered,220800);
+  assert.equal(m.netGain,129200);
+  assert.equal(Math.round(m.ownerGain),90440);
+  assert.equal(Math.round(m.sellerGain),38760);
+  assert.equal(m.available,0);
+  assert.equal(m.sold,8);
+});
+
+test('datos iniciales coinciden con la planilla final corregida',()=>{
   const m=withPortfolioPercent(portfolioMetrics(INITIAL_RESALE_PARTIES,{ownerPercent:70,sellerPercent:30}));
   assert.equal(m.investment,2392000);
-  assert.equal(m.sales,250000);
-  assert.equal(m.recovered,105800);
-  assert.equal(m.netGain,144200);
-  assert.equal(Math.round(m.totalForOwner),206740);
-  assert.equal(m.available,63);
-  assert.equal(m.sold,4);
+  assert.equal(m.sales,600000);
+  assert.equal(m.recovered,326600);
+  assert.equal(m.netGain,273400);
+  assert.equal(Math.round(m.totalForOwner),517980);
+  assert.equal(m.available,55);
+  assert.equal(m.sold,12);
   assert.equal(m.personal,1);
 });
