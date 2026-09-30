@@ -471,6 +471,9 @@ function fillCategories() {
         if(!confirm(`¿Eliminar la subcategoría ${removed}?`))return;
         state.subcategories[active]=current.filter((_,i)=>i!==index);
         state.expenses.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
+        state.stock.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
+        state.recurring.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
+        state.fixedExpenses.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
         pending.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
         state.categoryRules.forEach((rule)=>{if(rule.category===active&&rule.subcategory===removed)rule.subcategory='';});
         save();syncCategoryConsumers();fillCategories();render();
@@ -1562,10 +1565,16 @@ function applyNaturalConsultation(text) {
   if(q.includes('efectivo')) $('#consultMethod').value='Efectivo';
   if(q.includes('débito')||q.includes('debito')) $('#consultMethod').value='Débito';
   if(q.includes('crédito')||q.includes('credito')) $('#consultMethod').value='Crédito';
-  const category=state.categories.find((c)=>q.includes(c.toLowerCase()));
+  let category=state.categories.find((c)=>q.includes(c.toLowerCase()));
+  let sub='';
+  const subMatches=[];
+  for(const [parent,values] of Object.entries(state.subcategories||{})){
+    for(const value of Array.isArray(values)?values:[])if(q.includes(String(value).toLowerCase()))subMatches.push({parent,value,length:String(value).length});
+  }
+  subMatches.sort((a,b)=>b.length-a.length);
+  if(!category&&subMatches.length)category=subMatches[0].parent;
   if(category){ $('#consultCategory').value=category; renderConsultationFilters(); }
-  const subs=(category?subcategoriesFor(category):Object.values(state.subcategories||{}).flat()).slice().sort((a,b)=>b.length-a.length);
-  const sub=subs.find((s)=>q.includes(String(s).toLowerCase()));
+  if(subMatches.length&&subMatches[0].parent===category)sub=subMatches[0].value;
   if(sub&&$('#consultSubcategory'))$('#consultSubcategory').value=sub;
   const card=state.cards.find((c)=>q.includes(c.name.toLowerCase())); if(card) $('#consultCard').value=card.name;
 }
@@ -1769,7 +1778,7 @@ document.querySelectorAll('nav button').forEach((button) => { button.onclick = (
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
 $('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit+=5;renderHomeRecent();}; $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
 $('#nextStep').onclick = () => { if (manualStep === 1 && !$('#amount').value) return $('#amount').reportValidity(); setManualStep(manualStep + 1); }; $('#prevStep').onclick = () => setManualStep(manualStep - 1);
-$('#method').onchange = updatePaymentFields; $('#category').onchange = () => fillSubcategories(); $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = ()=>{formatLocalizedInputElement($('#amount'));updateInstallmentPreview();}; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
+$('#method').onchange = updatePaymentFields; $('#category').onchange = () => fillSubcategories(); $('#subcategory').onchange=()=>$('#editSelectedSubcategory')?.classList.toggle('hidden',!$('#subcategory').value); $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = ()=>{formatLocalizedInputElement($('#amount'));updateInstallmentPreview();}; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
 $('#expenseForm').onsubmit = async (event) => {
   event.preventDefault();
   const method=$('#method').value;
