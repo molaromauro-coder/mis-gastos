@@ -179,11 +179,13 @@ function reclassifyUncategorizedExpenses(){
 }
 function syncCategoryConsumers(){
   if(reclassifyUncategorizedExpenses())save();
+  fillCategories();
   fillSubcategories();
   fillRecurringCategoryOptions();
   fillStockCategoryOptions();
   renderConsultationFilters();
   renderReport();
+  renderUnclassified();
 }
 function renameCategoryEverywhere(oldName,newName){
   const clean=String(newName||'').trim();
@@ -1387,10 +1389,34 @@ $('#usdFromDate').onchange=renderUsd; $('#usdToDate').onchange=renderUsd;
 $('#usdRateType').onchange=async()=>{ state.settings.usdRateType=$('#usdRateType').value; save(); renderUsd(); await ensureUsdRate(true); renderUsd(); };
 $('#refreshUsdRate').onclick=async()=>{ $('#usdRateMeta').textContent='Actualizando…'; await ensureUsdRate(true); renderUsd(); };
 document.querySelectorAll('[data-history]').forEach((button) => { button.onclick = () => { historyRange = button.dataset.history; document.querySelectorAll('[data-history]').forEach((b) => b.classList.remove('selected')); button.classList.add('selected'); $('#historyDate').classList.toggle('hidden', historyRange !== 'day'); $('#historyMonth').classList.toggle('hidden', historyRange !== 'month'); $('#historyYear').classList.toggle('hidden', historyRange !== 'year'); $('#historyCustom').classList.toggle('hidden', historyRange !== 'custom'); renderHistory(); }; }); ['historyDate', 'historyMonth', 'historyYear', 'historyFrom', 'historyTo'].forEach((id) => { $(`#${id}`).onchange = renderHistory; });
-function addCategory() { const value = $('#newCategory').value.trim(); if (!value || state.categories.some((c) => c.toLowerCase() === value.toLowerCase())) return; state.categories.push(value); state.subcategories[value] ||= []; $('#newCategory').value = ''; save(); syncCategoryConsumers(); fillCategories(); render(); }
+function createCategoryEverywhere(value){
+  const clean=String(value||'').trim();
+  if(!clean)return '';
+  const existing=state.categories.find((c)=>c.toLowerCase()===clean.toLowerCase());
+  if(existing)return existing;
+  state.categories.push(clean);
+  state.subcategories[clean] ||= [];
+  save();
+  syncCategoryConsumers();
+  render();
+  return clean;
+}
+function addCategory() {
+  const input=$('#newCategory');
+  const created=createCategoryEverywhere(input?.value||'');
+  if(created&&input)input.value='';
+  return created;
+}
 function addSubcategory(category,value){ const clean=String(value||'').trim(); if(!category||!clean)return false; const list=subcategoriesFor(category); if(list.some((s)=>s.toLowerCase()===clean.toLowerCase()))return false; state.subcategories[category]=[...list,clean]; save(); syncCategoryConsumers(); return true; }
 $('#categoryForm').onsubmit = (event) => { event.preventDefault(); addCategory(); };
-$('#quickCategory').onclick = () => { const value = prompt('Nombre de la nueva categoría:')?.trim(); if (!value) return; $('#newCategory').value = value; addCategory(); $('#category').value = value; fillSubcategories(); };
+$('#quickCategory').onclick = () => {
+  const value=prompt('Nombre de la nueva categoría:')?.trim();
+  if(!value)return;
+  const category=createCategoryEverywhere(value);
+  if(!category)return;
+  $('#category').value=category;
+  fillSubcategories();
+};
 $('#quickSubcategory').onclick = () => { const category=$('#category').value; if(!category)return showToast('Elegí primero una categoría'); const value=prompt(`Nueva subcategoría dentro de ${category}:`)?.trim(); if(!value)return; if(!addSubcategory(category,value))return showToast('Esa subcategoría ya existe'); fillSubcategories(value); };
 function renderReminderSettings() { const labels = { 3: '3 días antes', 2: '2 días antes', 1: '1 día antes' }; $('#reminderSettings').innerHTML = [3, 2, 1].map((d) => `<label><input type="checkbox" value="${d}" ${state.settings.reminderDays.includes(d) ? 'checked' : ''}>${labels[d]}</label>`).join(''); $('#reminderSettings').onchange = () => { state.settings.reminderDays = [...$('#reminderSettings').querySelectorAll(':checked')].map((i) => Number(i.value)); save(); renderPaymentReminders(); }; }
 function cloneState(){return typeof structuredClone==='function'?structuredClone(state):JSON.parse(JSON.stringify(state));}
@@ -1601,6 +1627,15 @@ $('#consultExportExcel').onclick=exportConsultExcel;
 $('#consultExportPdf').onclick=exportConsultPdf;
 
 $('#addStock').onclick=()=>{ $('#stockForm').reset(); fillStockCategoryOptions(); $('#stockQty').value=1; $('#stockMonths').value=1; $('#stockPaidDate').value=new Date().toISOString().slice(0,10); $('#stockDialog').showModal(); };
+$('#stockQuickCategory').onclick=()=>{
+  const value=prompt('Nombre de la nueva categoría:')?.trim();
+  if(!value)return;
+  const category=createCategoryEverywhere(value);
+  if(!category)return;
+  fillStockCategoryOptions(category);
+  $('#stockCategory').value=category;
+  showToast('✓ Categoría creada y sincronizada');
+};
 $('#stockForm').onsubmit=async(e)=>{e.preventDefault();await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),quantity:Number($('#stockQty').value),months:Number($('#stockMonths').value),totalAmount:Number($('#stockAmount').value),currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});$('#stockDialog').close();renderStock();renderBudget();renderSavings();showToast('Compra de stock guardada');};
 bindHoldToTalk($('#stockVoiceBtn'),{
   process:processStockVoice,
