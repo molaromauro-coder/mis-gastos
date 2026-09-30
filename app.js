@@ -494,6 +494,18 @@ function pendingAmountPrompt(e,i){
   if(e.amount)return '';
   return `<div class="pending-payment-question pending-amount-question"><strong>¿Cuánto pagaste?</strong><div class="pending-amount-row"><input class="pending-amount-input" data-index="${i}" inputmode="decimal" autocomplete="off" placeholder="Ej. 50.000"><button type="button" data-pending-amount-save="${i}">Guardar importe</button></div><button type="button" class="voice-pay" data-pending-amount-voice="${i}">🎙 Mantener para responder</button><small class="muted">Falta el importe: no se puede confirmar hasta completarlo.</small></div>`;
 }
+function pendingCategoryPrompt(e,i){
+  const needsCategory=!e.category&&e.categoryConfirmed!==true;
+  if(!needsCategory)return '';
+  const options=state.categories.map((category)=>`<option value="${escape(category)}">${escape(category)}</option>`).join('');
+  return `<div class="pending-payment-question pending-category-question"><strong>¿En qué categoría lo guardo?</strong>${state.categories.length?`<select class="pending-category-select" data-index="${i}"><option value="">Elegí una categoría</option>${options}</select>`:'<small class="muted">Todavía no tenés categorías creadas.</small>'}<div class="pending-payment-actions pending-category-actions"><button type="button" data-pending-uncategorized="${i}">Sin categoría</button><button type="button" class="voice-pay" data-pending-category-voice="${i}">🎙 Mantener para responder</button></div><small class="muted">No estoy seguro de dónde ubicar este gasto. Elegí una opción antes de confirmar.</small></div>`;
+}
+function pendingSubcategoryPrompt(e,i){
+  if(!e.category)return '';
+  const values=subcategoriesFor(e.category);
+  if(!values.length)return '';
+  return `<div class="pending-subcategory-choice"><label>Subcategoría (opcional)<select class="pending-subcategory-select" data-index="${i}"><option value="">Sin subcategoría</option>${values.map((value)=>`<option value="${escape(value)}" ${e.subcategory===value?'selected':''}>${escape(value)}</option>`).join('')}</select></label></div>`;
+}
 function pendingPaymentPrompt(e,i){
   const needsMethod=e.method==='Sin definir';
   const needsCard=['Débito','Crédito'].includes(e.method)&&!e.card;
@@ -516,6 +528,32 @@ function applyPendingAmountVoice(index,phrase){
   if(!Number.isFinite(amount)||amount<=0){showToast('No pude reconocer el importe. Decilo de nuevo o escribilo');return;}
   item.amount=amount;
   showPending();
+}
+function applyPendingCategoryVoice(index,phrase){
+  const item=pending[index];if(!item)return;
+  const spoken=normVoiceChoice(phrase);
+  if(/\bsin categoria\b/.test(spoken)){
+    item.category='';item.subcategory='';item.categoryConfirmed=true;showPending();return;
+  }
+  const subMatches=[];
+  for(const [parent,values] of Object.entries(state.subcategories||{})){
+    for(const value of Array.isArray(values)?values:[]){
+      const normalizedValue=normVoiceChoice(value);
+      if(normalizedValue&&spoken.includes(normalizedValue))subMatches.push({parent,value,length:normalizedValue.length});
+    }
+  }
+  subMatches.sort((a,b)=>b.length-a.length);
+  if(subMatches.length){
+    item.category=subMatches[0].parent;item.subcategory=subMatches[0].value;item.categoryConfirmed=true;showPending();return;
+  }
+  const categoryMatches=state.categories
+    .map((category)=>({category,normalized:normVoiceChoice(category)}))
+    .filter(({normalized})=>normalized&&spoken.includes(normalized))
+    .sort((a,b)=>b.normalized.length-a.normalized.length);
+  if(categoryMatches.length){
+    item.category=categoryMatches[0].category;item.subcategory='';item.categoryConfirmed=true;showPending();return;
+  }
+  showToast('No reconocí esa categoría. Elegila de la lista o decí “sin categoría”');
 }
 function paymentVoiceAlias(name){
   return normVoiceChoice(name)
@@ -597,6 +635,7 @@ function finishPendingPaymentVoice(){
   restorePendingVoiceButton(button);
   if(phrase){
     if(session.mode==='amount')applyPendingAmountVoice(session.index,phrase);
+    else if(session.mode==='category')applyPendingCategoryVoice(session.index,phrase);
     else applyPendingPaymentVoice(session.index,phrase);
   } else showToast('No escuché una respuesta. Mantené presionado y hablá');
 }
@@ -643,9 +682,11 @@ function startPendingPaymentVoice(index,button,mode='payment'){
   if(pendingVoiceSession)return;
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){
-    const phrase=prompt(mode==='amount'?'Decí o escribí cuánto pagaste.':'Decí o escribí el medio, la tarjeta o la cantidad de cuotas.');
+    const question=mode==='amount'?'Decí o escribí cuánto pagaste.':mode==='category'?'Decí o escribí la categoría (o “sin categoría”).':'Decí o escribí el medio, la tarjeta o la cantidad de cuotas.';
+    const phrase=prompt(question);
     if(phrase){
       if(mode==='amount')applyPendingAmountVoice(index,phrase);
+      else if(mode==='category')applyPendingCategoryVoice(index,phrase);
       else applyPendingPaymentVoice(index,phrase);
     }
     return;
@@ -673,12 +714,14 @@ function showPending() {
     const needsCard=['Débito','Crédito'].includes(e.method)&&!e.card;
     const needsInstallments=e.method==='Crédito'&&e.installmentsSpecified===false;
     const needsDate=!!e.dateAmbiguous;
+    const needsCategory=!e.category&&e.categoryConfirmed!==true;
     const methodLabel=needsMethod?'Medio de pago pendiente':e.method;
     const when=new Date(e.purchaseDate||e.date);
     const whenLabel=needsDate?'Fecha pendiente':(e.dateSpecified&&!e.timeSpecified?when.toLocaleDateString('es-AR'):when.toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}));
     const installmentLabel=e.method==='Crédito'?(needsInstallments?'Cuotas pendientes':`${Math.max(1,Number(e.installments||1))} cuota${Number(e.installments||1)===1?'':'s'}`):'';
-    const meta=[whenLabel,e.category,methodLabel,e.card,installmentLabel].filter(Boolean).join(' · ');
-    return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape(meta)}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingAmountPrompt(e,i)}${pendingCreditDetail(e)}${pendingDatePrompt(e,i)}${pendingPaymentPrompt(e,i)}<div class="actions"><button class="edit">Corregir</button><button class="confirm" ${!e.amount || needsMethod || needsCard || needsInstallments || needsDate ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
+    const categoryLabel=needsCategory?'Categoría pendiente':(e.category||(e.categoryConfirmed===true?'Sin categoría':''));
+    const meta=[whenLabel,categoryLabel,methodLabel,e.card,installmentLabel].filter(Boolean).join(' · ');
+    return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape(meta)}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingAmountPrompt(e,i)}${pendingCategoryPrompt(e,i)}${pendingSubcategoryPrompt(e,i)}${pendingCreditDetail(e)}${pendingDatePrompt(e,i)}${pendingPaymentPrompt(e,i)}<div class="actions"><button class="edit">Corregir</button><button class="confirm" ${!e.amount || needsCategory || needsMethod || needsCard || needsInstallments || needsDate ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
   }).join('');
   if (!$('#confirmDialog').open) $('#confirmDialog').showModal();
   document.querySelectorAll('[data-pending-method]').forEach((button)=>{
@@ -713,6 +756,37 @@ function showPending() {
       const choice=item.dateChoices?.[Number(button.dataset.pendingDateChoice)];if(!choice)return;
       item.date=choice.date;item.purchaseDate=choice.date;item.dateSpecified=true;item.dateAmbiguous=false;showPending();
     };
+  });
+  document.querySelectorAll('.pending-category-select').forEach((select)=>{
+    select.onchange=()=>{
+      const item=pending[Number(select.dataset.index)];if(!item||!select.value)return;
+      item.category=select.value;item.subcategory='';item.categoryConfirmed=true;showPending();
+    };
+  });
+  document.querySelectorAll('.pending-subcategory-select').forEach((select)=>{
+    select.onchange=()=>{
+      const item=pending[Number(select.dataset.index)];if(!item)return;
+      item.subcategory=select.value||'';showPending();
+    };
+  });
+  document.querySelectorAll('[data-pending-uncategorized]').forEach((button)=>{
+    button.onclick=()=>{
+      const item=pending[Number(button.dataset.pendingUncategorized)];if(!item)return;
+      item.category='';item.subcategory='';item.categoryConfirmed=true;showPending();
+    };
+  });
+  document.querySelectorAll('[data-pending-category-voice]').forEach((button)=>{
+    const index=Number(button.dataset.pendingCategoryVoice);
+    button.onclick=(event)=>event.preventDefault();
+    button.oncontextmenu=(event)=>event.preventDefault();
+    button.onpointerdown=(event)=>{
+      event.preventDefault();
+      button.setPointerCapture?.(event.pointerId);
+      startPendingPaymentVoice(index,button,'category');
+    };
+    button.onpointerup=(event)=>{event.preventDefault();stopPendingPaymentVoice();};
+    button.onpointercancel=(event)=>{event.preventDefault();stopPendingPaymentVoice();};
+    button.onpointerleave=(event)=>{if(event.buttons===0)stopPendingPaymentVoice();};
   });
   const savePendingAmount=(index)=>{
     const input=document.querySelector(`.pending-amount-input[data-index="${index}"]`);
@@ -1097,6 +1171,7 @@ function goView(view) {
 async function confirmPending(index, card) {
   const current=pending[index]; if(!current)return;
   if(!Number(current.amount))return showToast('Completá cuánto pagaste antes de confirmar');
+  if(!current.category&&current.categoryConfirmed!==true)return showToast('Elegí una categoría o marcá “Sin categoría”');
   if(current.dateAmbiguous)return showToast('AclarÁ la fecha antes de confirmar');
   if(current.method==='Sin definir')return showToast('Elegí o decí con qué pagaste');
   if(['Débito','Crédito'].includes(current.method)&&!current.card)return showToast('Elegí o decí qué tarjeta o cuenta usaste');
