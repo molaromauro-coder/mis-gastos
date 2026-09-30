@@ -1318,15 +1318,27 @@ function showResaleImportReview(fileName,parsed,comparison){
       const choices=issue.kind==='onlyApp'?
         '<option value="app">Mantener en la app</option><option value="remove">Eliminar de la app</option>':
         issue.kind==='new'?
-        '<option value="excel">Agregar desde Excel</option><option value="app">No importar esta entrada</option>':
-        '<option value="app">Conservar datos de la app</option><option value="excel">Usar datos del Excel</option>';
+        '<option value="excel">Agregar desde Excel</option><option value="app">No importar esta entrada</option><option value="manual">Corregir manualmente</option>':
+        '<option value="app">Conservar datos de la app</option><option value="excel">Usar datos del Excel</option><option value="manual">Corregir manualmente</option>';
       return `<article class="resale-import-row"><strong>${escape(source?.partyName||current?.partyName||'')} · ${escape(source?.type||current?.type||'')} #${integerText(source?.number||current?.number||0)}</strong>
         <small>${label}${issue.fields.length?' · Cambian: '+escape(issue.fields.join(', ')):''}</small>
         <div>App: ${escape(resaleImportTicketLabel(current))}</div>
         <div>Excel: ${escape(resaleImportTicketLabel(source))}</div>
-        <select class="resale-import-decision" data-import-id="${escape(issue.id)}" aria-label="Resolver diferencia" value="${selected}">${choices}</select>
+        <select class="resale-import-decision" data-import-id="${escape(issue.id)}" aria-label="Resolver diferencia">${choices}</select>
+        ${source?`<div class="resale-import-manual hidden" data-manual-import-id="${escape(issue.id)}">
+          <label>Costo compra<input class="import-cost" inputmode="decimal" data-local-number="2" value="${formatNumericInputValue(source.cost,{maximumFractionDigits:2})}"></label>
+          <label>Precio venta<input class="import-sale" inputmode="decimal" data-local-number="2" value="${formatNumericInputValue(source.salePrice,{maximumFractionDigits:2})}"></label>
+          <label>Estado<select class="import-status">${['Disponible','Vendida','Uso personal'].map((s)=>`<option ${s===source.status?'selected':''}>${s}</option>`).join('')}</select></label>
+        </div>`:''}
       </article>`;
     }).join(''):'<div class="empty">No hay diferencias con lo que ya está cargado en la app.</div>';
+  $('#resaleImportDifferences').querySelectorAll('.resale-import-decision').forEach((select)=>{
+    select.onchange=()=>{
+      const manual=$('#resaleImportDifferences').querySelector(`[data-manual-import-id="${select.dataset.importId}"]`);
+      manual?.classList.toggle('hidden',select.value!=='manual');
+    };
+  });
+  bindLocalizedNumberInputs($('#resaleImportDifferences'));
   $('#resaleImportReview').showModal();
 }
 async function readResaleExcelFile(file){
@@ -2456,12 +2468,26 @@ $('#importResaleExcel').onclick=()=>$('#resaleImportFile').click();
 $('#resaleImportFile').onchange=(event)=>readResaleExcelFile(event.target.files?.[0]);
 $('#applyResaleImport').onclick=()=>{
   if(!pendingResaleImport)return;
-  const decisions=Object.fromEntries([...$('#resaleImportDifferences').querySelectorAll('.resale-import-decision')].map((select)=>[select.dataset.importId,select.value]));
-  const applied=pendingResaleImport.comparison.issues.filter((issue)=>{
-    const decision=decisions[issue.id]||(issue.kind==='new'?'excel':'app');
-    return decision==='excel'||decision==='remove';
-  }).length;
-  state.resale.parties=applyResaleImport(state.resale.parties,pendingResaleImport.comparison.issues,decisions,uid);
+  const issues=pendingResaleImport.comparison.issues.map((issue)=>({...issue,imported:issue.imported?{...issue.imported}:null}));
+  const decisions={};
+  for(const select of $('#resaleImportDifferences').querySelectorAll('.resale-import-decision')){
+    const id=select.dataset.importId;
+    const issue=issues.find((item)=>item.id===id);
+    if(!issue)continue;
+    decisions[id]=select.value;
+    if(select.value!=='manual')continue;
+    const row=select.closest('.resale-import-row');
+    const cost=parseLocalizedNumber(row.querySelector('.import-cost')?.value||'');
+    const sale=parseLocalizedNumber(row.querySelector('.import-sale')?.value||'');
+    const status=row.querySelector('.import-status')?.value;
+    if(!Number.isFinite(cost)||cost<0||!Number.isFinite(sale)||sale<0||!['Disponible','Vendida','Uso personal'].includes(status)){
+      return showToast('Revisá costo, precio y estado de la entrada corregida.');
+    }
+    if(!issue.imported)return showToast('Esa entrada sólo existe en la app; elegí conservarla o eliminarla.');
+    issue.imported={...issue.imported,cost,salePrice:sale,status};
+  }
+  const applied=issues.filter((issue)=>['excel','manual','remove'].includes(decisions[issue.id])).length;
+  state.resale.parties=applyResaleImport(state.resale.parties,issues,decisions,uid);
   save();renderResale();$('#resaleImportReview').close();pendingResaleImport=null;
   showToast(`Reventa actualizada: ${integerText(applied)} diferencias resueltas`);
 };
