@@ -1554,7 +1554,7 @@ function openSecuritySetup(){
 }
 async function unlockWithPin(){
   const pin=$('#unlockPin').value.trim();
-  if(!/^\d{4}$/.test(pin)){ $('#lockMessage').textContent='Ingresá los 4 dígitos.'; return false; }
+  if(!/^\d{6}$/.test(pin)){ $('#lockMessage').textContent='Ingresá los 6 dígitos.'; return false; }
   const hash=await hashPin(pin,state.security.pinSalt);
   if(hash!==state.security.pinHash){ $('#lockMessage').textContent='PIN incorrecto.'; $('#unlockPin').value=''; return false; }
   $('#lockDialog').close(); $('#unlockPin').value=''; $('#lockMessage').textContent=''; setTimeout(prepareRecurringDue,100); return true;
@@ -2284,7 +2284,7 @@ micBtn.onselectstart=(e)=>e.preventDefault();
 $('#securitySetupForm').onsubmit=async(e)=>{
   e.preventDefault();
   const p1=$('#securityPin').value.trim(),p2=$('#securityPin2').value.trim();
-  if(!/^\d{4}$/.test(p1))return showToast('El PIN debe tener 4 dígitos');
+  if(!/^\d{6}$/.test(p1))return showToast('El PIN debe tener 6 dígitos');
   if(p1!==p2)return showToast('Los PIN no coinciden');
   const salt=bytesToBase64(randomBytes(16));
   state.security.pinSalt=salt;
@@ -2303,6 +2303,7 @@ $('#lockDialog').addEventListener('cancel',(e)=>e.preventDefault());
 
 $('#privacyBtn').onclick=()=>{state.settings.hideAmounts=!state.settings.hideAmounts;document.body.classList.toggle('hide-amounts',state.settings.hideAmounts);$('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁';save();};
 $('#globalSearchBtn').onclick=()=>{goView('consultations');setTimeout(()=>$('#consultQuery')?.focus(),0);};
+$('#homeCategoriesBtn').onclick=()=>openCategoryManager();
 $('#functionsMenuBtn').onclick=()=>{if($('#menuDialog')?.open)$('#menuDialog').close();$('#functionsDialog').showModal();};
 $('#addFixedExpense').onclick=()=>openFixedExpenseDialog();
 $('#fixedExpenseMonth').onchange=renderFixedExpenses;
