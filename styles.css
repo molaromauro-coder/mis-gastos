@@ -125,3 +125,10 @@ dialog{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:to
 #home .voice-trash small{display:block;margin:0;color:#526979;font-size:11px;font-weight:800;letter-spacing:.02em}
 #home .voice-zone.cancel-ready .voice-trash,#home .voice-trash.armed{display:flex;background:#fee9e6;border-color:#e36f64;box-shadow:0 0 0 8px #f5b7b02e}
 #home .voice-zone.cancel-ready .voice-trash small,#home .voice-trash.armed small{color:#b33b35}
+
+
+/* Gasto pendiente sin importe */
+.pending-amount-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.pending-amount-row input{margin:0;min-height:44px;font-size:18px;font-weight:800}
+.pending-amount-row button{min-height:44px;border:1px solid #c7dbe8;border-radius:11px;background:#fff;color:#24485d;font-weight:800;padding:0 12px}
+.pending .actions .confirm:disabled{background:#e3e7e5!important;color:#85908c!important;opacity:.72;cursor:not-allowed;box-shadow:none}
