@@ -342,3 +342,28 @@ img,svg,canvas,video{
     grid-template-columns:minmax(0,75px) minmax(0,1fr) auto;
   }
 }
+
+/* Categorías maestras, búsqueda global y gastos fijos */
+.category-action-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.category-action-row .category-create-button{margin:8px 0 2px}
+.category-edit-button{border:1px solid #ccd8d2;background:#fff;color:#176143;border-radius:11px;padding:10px 12px;margin:8px 0 2px;font-weight:800;white-space:nowrap}
+.fixed-expense-month{margin:14px 0}.fixed-expense-month label{display:block;font-size:12px;font-weight:800}
+.fixed-expense-card{background:#fff;border-radius:17px;padding:14px;margin:10px 0;box-shadow:0 4px 16px #172f2a0b}
+.fixed-expense-card.disabled{opacity:.58}
+.fixed-expense-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.fixed-expense-head strong,.fixed-expense-head small{display:block}.fixed-expense-head small{margin-top:5px;color:var(--muted);line-height:1.4}
+.fixed-expense-head>span{font-size:11px;font-weight:900;border-radius:999px;padding:6px 9px;white-space:nowrap}
+.fixed-expense-head>span.paid{background:#d5ede1;color:#176143}.fixed-expense-head>span.pending{background:#fff0ca;color:#6d5817}
+.fixed-expense-values{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:13px 0}
+.fixed-expense-values span{background:#f7f8f5;border-radius:11px;padding:10px;font-size:11px;color:var(--muted)}
+.fixed-expense-values strong{display:block;color:var(--ink);margin-top:4px}
+.fixed-expense-actions{display:grid;grid-template-columns:1.25fr .8fr .9fr;gap:7px}
+.fixed-expense-actions button{border:0;border-radius:10px;padding:9px 7px;font-weight:800;background:var(--mint)}
+.fixed-expense-actions .fixed-pay{background:var(--green);color:#fff}
+.fixed-previous-reference{background:#fff0ca;border:1px solid #efd891;border-radius:13px;padding:12px;font-size:13px;line-height:1.45;margin-bottom:8px}
+.search-result-card{background:#fff;border-radius:16px;padding:13px;margin:9px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;box-shadow:0 4px 16px #172f2a0b}
+.search-result-card>div{min-width:0}.search-result-card strong,.search-result-card small{display:block}.search-result-card small{margin-top:4px;color:var(--muted);line-height:1.35}
+.search-result-type{display:inline-block;font-size:10px;font-weight:900;color:#176143;background:#e3f0ea;border-radius:999px;padding:4px 7px;margin-bottom:5px}
+.search-result-card>button{border:0;background:var(--green);color:#fff;border-radius:10px;padding:9px 10px;font-weight:800;white-space:nowrap}
+#globalSearchBtn{font-size:25px;font-weight:900}
+@media(max-width:360px){.fixed-expense-actions{grid-template-columns:1fr}.fixed-expense-values{grid-template-columns:1fr}.search-result-card{align-items:flex-start;flex-direction:column}.search-result-card>button{width:100%}}
