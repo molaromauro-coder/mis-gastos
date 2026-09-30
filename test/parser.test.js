@@ -322,3 +322,17 @@ test('separa tres gastos con medios de pago distintos en un mismo audio',()=>{
   assert.match(items[1].concept,/supermercado/i);
   assert.match(items[2].concept,/combustible/i);
 });
+
+
+test('frase exacta pilcha 475 mil con debito Banco Macro',()=>{
+  const cards=[
+    {name:'Cuenta Banco Macro',type:'Débito'},
+    {name:'Banco Macro',type:'Crédito'}
+  ];
+  const items=parseExpenses('Compré pilcha, gasté 475 mil pesos y pagué con débito Banco Macro',cards);
+  assert.equal(items.length,1);
+  assert.equal(items[0].amount,475000);
+  assert.equal(items[0].method,'Débito');
+  assert.equal(items[0].card,'Cuenta Banco Macro');
+  assert.match(items[0].concept,/pilcha/i);
+});
