@@ -3,7 +3,7 @@ import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, re
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
 import { learnCategoryRule, applyLearnedCategory } from './category-learning.js';
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
-import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot } from './expense-reset.js';
+import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 const resaleApi = sharedMode ? null : await import('./resale.js');
 const normalizeSplit = resaleApi?.normalizeSplit;
@@ -1501,12 +1501,14 @@ $('#resetCurrentMonthCancel').onclick=()=>closeDialogById('#resetCurrentMonthDia
 $('#resetCurrentMonthCancelX').onclick=()=>closeDialogById('#resetCurrentMonthDialog');
 $('#resetCurrentMonthDialog').addEventListener('cancel',(event)=>{event.preventDefault();closeDialogById('#resetCurrentMonthDialog');});
 $('#resetCurrentMonthConfirm').onclick=()=>{
-  const result=moveCurrentMonthExpensesToTrash(state,new Date());
+  const now=new Date();
+  const result=moveCurrentMonthExpensesToTrash(state,now);
   pending=[];
   discarded=null;
   mirrorResetIntoSnapshot(settingsSnapshot,state);
   closeDialogById('#resetCurrentMonthDialog');
   refreshAfterExpenseReset();
+  if(!verifyNoCurrentMonthExpenses(state,now))return showToast('No pude completar el borrado del mes. Probá nuevamente.');
   showToast(result.removed?`✓ ${integerText(result.removed)} movimiento${result.removed===1?'':'s'} enviado${result.removed===1?'':'s'} a Papelera`:'No había movimientos para borrar');
 };
 $('#resetPreviousMonthsBtn').onclick=()=>{
@@ -1531,10 +1533,12 @@ $('#resetPreviousMonthsFinalCancel').onclick=()=>closeDialogById('#resetPrevious
 $('#resetPreviousMonthsFinalCancelX').onclick=()=>closeDialogById('#resetPreviousMonthsFinalDialog');
 $('#resetPreviousMonthsFinalDialog').addEventListener('cancel',(event)=>{event.preventDefault();closeDialogById('#resetPreviousMonthsFinalDialog');});
 $('#resetPreviousMonthsFinalConfirm').onclick=()=>{
-  const result=permanentlyDeletePreviousMonths(state,new Date());
+  const now=new Date();
+  const result=permanentlyDeletePreviousMonths(state,now);
   mirrorResetIntoSnapshot(settingsSnapshot,state);
   closeDialogById('#resetPreviousMonthsFinalDialog');
   refreshAfterExpenseReset();
+  if(!verifyNoPreviousMonthExpenses(state,now))return showToast('No pude completar el borrado histórico. Probá nuevamente.');
   showToast(result.totalRemoved?`✓ ${integerText(result.totalRemoved)} movimiento${result.totalRemoved===1?'':'s'} eliminado${result.totalRemoved===1?'':'s'} definitivamente`:'No había movimientos anteriores para borrar');
 };
 $('#settingsBack').onclick=()=>{
