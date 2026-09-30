@@ -2,6 +2,7 @@ import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
 import { learnCategoryRule, applyLearnedCategory } from './category-learning.js';
+import { configureCloudSync, createCloudSync, joinCloudSync, startCloudSync, disconnectCloudSync, queueCloudPush, getSyncToken, formatSyncToken, generateSyncToken, pullNow as pullCloudNow } from './cloud-sync.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 const resaleApi = sharedMode ? null : await import('./resale.js');
 const normalizeSplit = resaleApi?.normalizeSplit;
@@ -38,7 +39,43 @@ function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.tras
 let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
 const $ = (s) => document.querySelector(s);
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
-const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+let suppressCloudSave=false;
+const save = () => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if(!sharedMode&&!suppressCloudSave)queueCloudPush();
+};
+function syncPayload(){
+  return {
+    expenses:state.expenses||[],
+    cards:state.cards||[],
+    categories:state.categories||[],
+    subcategories:state.subcategories||{},
+    categoryRules:state.categoryRules||[],
+    stock:state.stock||[],
+    recoveries:state.recoveries||[],
+    budgets:state.budgets||{},
+    recurring:state.recurring||[],
+    trash:state.trash||[],
+    settings:state.settings||{},
+    resale:state.resale||{},
+    schemaVersion:state.schemaVersion||4
+  };
+}
+async function applySyncedPayload(payload){
+  const localSecurity=state.security;
+  suppressCloudSave=true;
+  try{
+    ['expenses','cards','categories','subcategories','categoryRules','stock','recoveries','budgets','recurring','trash','settings','resale','schemaVersion'].forEach((key)=>{
+      if(payload?.[key]!==undefined)state[key]=structuredClone(payload[key]);
+    });
+    state.security=localSecurity;
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+    render();
+    renderSyncSettings();
+  } finally {
+    suppressCloudSave=false;
+  }
+}
 const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 const escape = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const effectiveDate = (e) => new Date(e.dueDate || e.date);
@@ -59,6 +96,60 @@ document.querySelectorAll('main > .view:not(#home)').forEach((view)=>{
   button.onclick=()=>goView(previousViewId||'home');
   view.prepend(button);
 });
+function renderSyncSettings(statusInfo=null){
+  const statusEl=$('#syncStatus'),codeEl=$('#syncCode'),connectBtn=$('#syncConnectBtn'),createBtn=$('#syncCreateBtn'),disconnectBtn=$('#syncDisconnectBtn'),copyBtn=$('#syncCopyBtn');
+  if(!statusEl)return;
+  const token=getSyncToken();
+  if(codeEl&&document.activeElement!==codeEl)codeEl.value=token?formatSyncToken(token):'';
+  if(statusInfo){
+    statusEl.textContent=statusInfo.message||'';
+    statusEl.dataset.state=statusInfo.state||'';
+  }else statusEl.textContent=token?'Sincronización configurada':'Todavía no está sincronizado';
+  if(connectBtn)connectBtn.classList.toggle('hidden',!!token);
+  if(createBtn)createBtn.classList.toggle('hidden',!!token);
+  if(disconnectBtn)disconnectBtn.classList.toggle('hidden',!token);
+  if(copyBtn)copyBtn.classList.toggle('hidden',!token);
+}
+function bindSyncControls(){
+  const createBtn=$('#syncCreateBtn'),connectBtn=$('#syncConnectBtn'),disconnectBtn=$('#syncDisconnectBtn'),copyBtn=$('#syncCopyBtn'),codeEl=$('#syncCode');
+  if(!createBtn)return;
+  createBtn.onclick=async()=>{
+    const token=generateSyncToken();
+    if(!confirm('Se va a crear una sincronización usando los datos de ESTE dispositivo como copia inicial. ¿Continuar?'))return;
+    try{
+      await createCloudSync(token);
+      renderSyncSettings();
+      showToast('✓ Sincronización creada');
+    }catch{showToast('No pude crear la sincronización');}
+  };
+  connectBtn.onclick=async()=>{
+    const code=codeEl?.value||'';
+    if(!code.trim())return showToast('Pegá el código de sincronización del otro dispositivo');
+    if(!confirm('Este dispositivo va a usar la copia guardada en la nube. ¿Continuar?'))return;
+    try{
+      await joinCloudSync(code);
+      renderSyncSettings();
+      showToast('✓ Dispositivo conectado');
+    }catch(error){showToast(error?.message||'No pude conectar este dispositivo');}
+  };
+  disconnectBtn.onclick=async()=>{
+    if(!confirm('¿Desconectar este dispositivo de la sincronización? Los datos locales no se borran.'))return;
+    await disconnectCloudSync();
+    renderSyncSettings();
+    showToast('Sincronización desconectada');
+  };
+  copyBtn.onclick=async()=>{
+    const token=getSyncToken();if(!token)return;
+    try{await navigator.clipboard.writeText(formatSyncToken(token));showToast('Código copiado');}
+    catch{prompt('Copiá este código:',formatSyncToken(token));}
+  };
+}
+configureCloudSync({
+  getState:syncPayload,
+  applyState:applySyncedPayload,
+  onStatus:(info)=>renderSyncSettings(info)
+});
+
 function renderHomeClock() {
   const now=new Date();
   if($('#homeDate')) $('#homeDate').textContent=now.toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'long'});
@@ -1301,7 +1392,7 @@ function closeSettingsDiscardingChanges(){
 }
 $('#settingsBtn').onclick = () => {
   settingsSnapshot=cloneState();activeSettingsCategory='';
-  renderReminderSettings();fillCategories();renderRecurringSettings();renderTrash();renderSecurityStatus();
+  renderReminderSettings();fillCategories();renderRecurringSettings();renderTrash();renderSecurityStatus();renderSyncSettings();bindSyncControls();
   $('#settingsDialog').showModal();
 };
 $('#resetExpensesBtn').onclick=()=>{
@@ -1543,4 +1634,4 @@ $('#exportResale').onclick = exportResaleCsv;
 
 window.addEventListener('pagehide',()=>{try{save();}catch{}}); document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){try{save();}catch{}}});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
-const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#consultFrom').value=todayISO.slice(0,8)+'01'; $('#consultTo').value=todayISO; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
+const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#consultFrom').value=todayISO.slice(0,8)+'01'; $('#consultTo').value=todayISO; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); renderSyncSettings(); bindSyncControls(); if(!sharedMode)startCloudSync(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
