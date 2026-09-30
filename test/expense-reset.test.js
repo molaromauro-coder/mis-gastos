@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from '../expense-reset.js';
+import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from '../expense-reset.js';
 import { recentPurchases, groupExpenses } from '../reporting.js';
 
 const now=new Date('2026-09-30T12:00:00-03:00');
@@ -114,4 +114,18 @@ test('usa dueDate como respaldo para registros antiguos sin fecha de compra',()=
   moveCurrentMonthExpensesToTrash(state,now);
   assert.equal(state.expenses.length,0);
   assert.equal(verifyNoCurrentMonthExpenses(state,now),true);
+});
+
+test('el diálogo puede contar gastos históricos en Papelera aunque sólo tengan dueDate',()=>{
+  const state={expenses:[],trash:[{id:'legacy-trash',items:[
+    {id:'legacy-old',amount:10,dueDate:'2026-08-15T10:00:00-03:00'},
+    {id:'legacy-current',amount:20,dueDate:'2026-09-15T10:00:00-03:00'}
+  ]}]};
+  assert.equal(previousMonthExpenseCount(state,now),0);
+  assert.equal(previousMonthTrashItemCount(state,now),1);
+  assert.equal(previousMonthDeletableCount(state,now),1);
+  const result=permanentlyDeletePreviousMonths(state,now);
+  assert.equal(result.totalRemoved,1);
+  assert.equal(state.trash.flatMap(x=>x.items).some(x=>x.id==='legacy-old'),false);
+  assert.equal(state.trash.flatMap(x=>x.items).some(x=>x.id==='legacy-current'),true);
 });
