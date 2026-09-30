@@ -1,6 +1,7 @@
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
+import { learnCategoryRule, applyLearnedCategory } from './category-learning.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 const resaleApi = sharedMode ? null : await import('./resale.js');
 const normalizeSplit = resaleApi?.normalizeSplit;
@@ -10,8 +11,8 @@ const portfolioMetrics = resaleApi?.portfolioMetrics;
 const withPortfolioPercent = resaleApi?.withPortfolioPercent;
 if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
 const STORAGE_KEY = sharedMode ? 'mis-gastos-shared-v1' : 'mis-gastos-v1';
-const defaults = { expenses: [], cards: [], categories: [], subcategories: {}, stock: [], recoveries: [], budgets: {}, recurring: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 4 };
-function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], subcategories: old.subcategories || {}, stock: old.stock || [], recoveries: old.recoveries || [], budgets: old.budgets || {}, recurring: old.recurring || [], trash: old.trash || [], security: { ...defaults.security, ...(old.security || {}) }, settings: { ...defaults.settings, ...(old.settings || {}), usdRateCache: old.settings?.usdRateCache || {} }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 4 }; } catch { return structuredClone(defaults); } }
+const defaults = { expenses: [], cards: [], categories: [], subcategories: {}, categoryRules: [], stock: [], recoveries: [], budgets: {}, recurring: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 4 };
+function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], subcategories: old.subcategories || {}, categoryRules: old.categoryRules || [], stock: old.stock || [], recoveries: old.recoveries || [], budgets: old.budgets || {}, recurring: old.recurring || [], trash: old.trash || [], security: { ...defaults.security, ...(old.security || {}) }, settings: { ...defaults.settings, ...(old.settings || {}), usdRateCache: old.settings?.usdRateCache || {} }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 4 }; } catch { return structuredClone(defaults); } }
 const state = loadState();
 function demoCardId(){return crypto.randomUUID?.() || ('demo-' + Date.now() + '-' + Math.random().toString(16).slice(2));}
 function seedDemoCardsOnce(){
@@ -76,6 +77,52 @@ function expenseHTML(e, showDate = false) {
 function chronologicalPurchases(){
   return recentPurchases(state.expenses);
 }
+function prepareCategoryLearning(items){
+  return (items||[]).map((item)=>{
+    if(item.category)return {...item,categoryStatus:item.categoryStatus||'direct'};
+    return applyLearnedCategory({...item,categoryStatus:'unclassified'},state.categoryRules);
+  });
+}
+function learnFromExpense(item,category,subcategory=''){
+  state.categoryRules=learnCategoryRule(state.categoryRules,item.concept,category,subcategory);
+}
+function expenseGroupKey(item){return item?.parentId||item?.id||'';}
+function classifyExpenseGroup(item,category,subcategory=''){
+  const key=expenseGroupKey(item);
+  state.expenses.forEach((expense)=>{
+    if(expenseGroupKey(expense)!==key)return;
+    expense.category=category;
+    expense.subcategory=subcategory||'';
+    expense.categoryStatus='manual';
+  });
+  learnFromExpense(item,category,subcategory);
+  save();render();
+}
+function renderUnclassified(){
+  const target=$('#unclassifiedList');if(!target)return;
+  const items=recentPurchases(state.expenses).filter((e)=>!e.category);
+  $('#unclassifiedCount').textContent=items.length?`${items.length} pendiente${items.length===1?'':'s'}`:'Todo clasificado';
+  target.innerHTML=items.length?items.map((e)=>{
+    const key=escape(expenseGroupKey(e));
+    const categoryOptions=state.categories.map((category)=>`<option value="${escape(category)}">${escape(category)}</option>`).join('');
+    return `<article class="unclassified-item" data-unclassified-id="${key}"><div class="unclassified-head"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${new Date(e.purchaseDate||e.date).toLocaleDateString('es-AR')} · ${money(purchaseAmount(e),e.currency)}</small></div><span>Sin clasificar</span></div><label>Categoría<select class="unclassified-category"><option value="">Elegí categoría</option>${categoryOptions}</select></label><label>Subcategoría<select class="unclassified-subcategory" disabled><option value="">Sin subcategoría</option></select></label><button type="button" class="primary unclassified-save">Guardar y aprender</button></article>`;
+  }).join(''):'<div class="empty">No tenés compras sin clasificar.</div>';
+  document.querySelectorAll('.unclassified-item').forEach((row)=>{
+    const item=items.find((e)=>expenseGroupKey(e)===row.dataset.unclassifiedId);if(!item)return;
+    const categorySelect=row.querySelector('.unclassified-category');
+    const subSelect=row.querySelector('.unclassified-subcategory');
+    categorySelect.onchange=()=>{
+      const values=subcategoriesFor(categorySelect.value);
+      subSelect.disabled=!categorySelect.value;
+      subSelect.innerHTML='<option value="">Sin subcategoría</option>'+values.map((value)=>`<option value="${escape(value)}">${escape(value)}</option>`).join('');
+    };
+    row.querySelector('.unclassified-save').onclick=()=>{
+      if(!categorySelect.value)return showToast('Elegí una categoría');
+      classifyExpenseGroup(item,categorySelect.value,subSelect.value);
+      showToast('✓ Clasificado · la app aprendió esta relación');
+    };
+  });
+}
 function renderHomeRecent(){
   const target=$('#recentMovements'); if(!target)return;
   const all=chronologicalPurchases(), visible=all.slice(0,recentHomeLimit);
@@ -92,7 +139,7 @@ function renderHomeRecent(){
   }
   $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>4);
 }
-function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); }
+function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function subcategoriesFor(category){
   const values=state.subcategories?.[category];
@@ -111,15 +158,14 @@ function fillStockCategoryOptions(selected=''){
   if(current&&state.categories.includes(current))select.value=current;
 }
 function reclassifyUncategorizedExpenses(){
-  const pairs=[]; let changed=false;
-  Object.entries(state.subcategories||{}).forEach(([category,subs])=>(subs||[]).forEach((sub)=>pairs.push({category,sub})));
+  let changed=false;
   for(const e of state.expenses){
-    if(e.category)continue;
-    const text=String(e.concept||'').toLowerCase();
-    const pair=pairs.find(({sub})=>text.includes(String(sub).toLowerCase()));
-    if(pair){e.category=pair.category;e.subcategory=pair.sub;changed=true;continue;}
-    const category=state.categories.find((c)=>text.includes(String(c).toLowerCase()));
-    if(category){e.category=category;changed=true;}
+    if(e.category||e.categoryStatus==='unclassified')continue;
+    const learned=applyLearnedCategory(e,state.categoryRules);
+    if(learned.category){
+      Object.assign(e,learned);
+      changed=true;
+    }
   }
   return changed;
 }
@@ -143,16 +189,18 @@ function renameCategoryEverywhere(oldName,newName){
   state.recurring.forEach((e)=>{if(e.category===oldName)e.category=clean;});
   state.stock.forEach((e)=>{if(e.category===oldName)e.category=clean;});
   pending.forEach((e)=>{if(e.category===oldName)e.category=clean;});
+  state.categoryRules.forEach((rule)=>{if(rule.category===oldName)rule.category=clean;});
   if(activeSettingsCategory===oldName)activeSettingsCategory=clean;
   save();syncCategoryConsumers();return true;
 }
 function deleteCategoryEverywhere(category){
   const index=state.categories.indexOf(category); if(index<0)return;
   state.categories.splice(index,1);delete state.subcategories[category];
-  state.expenses.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
+  state.expenses.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';e.categoryStatus='unclassified';}});
+  state.categoryRules=state.categoryRules.filter((rule)=>rule.category!==category);
   state.recurring.forEach((e)=>{if(e.category===category)e.category='';});
   state.stock.forEach((e)=>{if(e.category===category)e.category='';});
-  pending.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
+  pending.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';e.categoryStatus='unclassified';}});
   save();syncCategoryConsumers();
 }
 function renameSubcategoryEverywhere(category,oldName,newName){
@@ -162,6 +210,7 @@ function renameSubcategoryEverywhere(category,oldName,newName){
   list[index]=clean;state.subcategories[category]=list;
   state.expenses.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   pending.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
+  state.categoryRules.forEach((rule)=>{if(rule.category===category&&rule.subcategory===oldName)rule.subcategory=clean;});
   save();syncCategoryConsumers();return true;
 }
 function fillSubcategories(selected=''){
@@ -252,6 +301,7 @@ function fillCategories() {
         state.subcategories[active]=current.filter((_,i)=>i!==index);
         state.expenses.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
         pending.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
+        state.categoryRules.forEach((rule)=>{if(rule.category===active&&rule.subcategory===removed)rule.subcategory='';});
         save();syncCategoryConsumers();fillCategories();render();
       };
     });
@@ -474,7 +524,7 @@ function softTapFeedback(){
 }
 document.addEventListener('pointerdown',(event)=>{const button=event.target.closest?.('button');if(!button||button.disabled)return;softTapFeedback();},{passive:true});
 function setManualStep(step) { manualStep = step; document.querySelectorAll('.step').forEach((e) => e.classList.toggle('active', Number(e.dataset.step) === step)); $('#stepLabel').textContent = `PASO ${step} DE 3`; $('#expenseDialogTitle').textContent = ['¿Cuánto gastaste?', 'Elegí una categoría', '¿Cómo pagaste?'][step - 1]; $('#prevStep').classList.toggle('hidden', step === 1); $('#nextStep').classList.toggle('hidden', step === 3); $('#saveExpense').classList.toggle('hidden', step !== 3); }
-function openExpense(data = {}) { $('#expenseForm').reset(); $('#amount').value = data.amount || ''; $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; const voiceNeedsMethod=data.source==='voice'&&data.method==='Sin definir'; $('#method').value = voiceNeedsMethod ? '' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; fillSubcategories(data.subcategory || ''); const firstMissingStep=!Number(data.amount)?1:(!data.category&&data.categoryConfirmed!==true?2:(voiceNeedsMethod?3:1)); setManualStep(firstMissingStep); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
+function openExpense(data = {}) { $('#expenseForm').reset(); $('#amount').value = data.amount || ''; $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; const voiceNeedsMethod=data.source==='voice'&&data.method==='Sin definir'; $('#method').value = voiceNeedsMethod ? '' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; fillSubcategories(data.subcategory || ''); const firstMissingStep=!Number(data.amount)?1:(!data.category&&data.categoryStatus==='unclassified'?2:(voiceNeedsMethod?3:1)); setManualStep(firstMissingStep); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
 function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', !method || method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
 function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value && c.type === $('#method').value), count = Number($('#installments').value || 1), amount = Number($('#amount').value || 0); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${count} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${card.dueDay} de cada mes.</span>`; }
 function pendingCreditDetail(e){
@@ -495,10 +545,10 @@ function pendingAmountPrompt(e,i){
   return `<div class="pending-payment-question pending-amount-question"><strong>¿Cuánto pagaste?</strong><div class="pending-amount-row"><input class="pending-amount-input" data-index="${i}" inputmode="decimal" autocomplete="off" placeholder="Ej. 50.000"><button type="button" data-pending-amount-save="${i}">Guardar importe</button></div><button type="button" class="voice-pay" data-pending-amount-voice="${i}">🎙 Mantener para responder</button><small class="muted">Falta el importe: no se puede confirmar hasta completarlo.</small></div>`;
 }
 function pendingCategoryPrompt(e,i){
-  const needsCategory=!e.category&&e.categoryConfirmed!==true;
+  const needsCategory=!e.category;
   if(!needsCategory)return '';
   const options=state.categories.map((category)=>`<option value="${escape(category)}">${escape(category)}</option>`).join('');
-  return `<div class="pending-payment-question pending-category-question"><strong>¿En qué categoría lo guardo?</strong>${state.categories.length?`<select class="pending-category-select" data-index="${i}"><option value="">Elegí una categoría</option>${options}</select>`:'<small class="muted">Todavía no tenés categorías creadas.</small>'}<div class="pending-payment-actions pending-category-actions"><button type="button" data-pending-uncategorized="${i}">Sin categoría</button><button type="button" class="voice-pay" data-pending-category-voice="${i}">🎙 Mantener para responder</button></div><small class="muted">No estoy seguro de dónde ubicar este gasto. Elegí una opción antes de confirmar.</small></div>`;
+  return `<div class="pending-payment-question pending-category-question"><strong>No estoy seguro de la categoría</strong>${state.categories.length?`<select class="pending-category-select" data-index="${i}"><option value="">Clasificar ahora (opcional)</option>${options}</select>`:'<small class="muted">Todavía no tenés categorías creadas.</small>'}<div class="pending-payment-actions pending-category-actions"><button type="button" data-pending-uncategorized="${i}">Dejar sin clasificar</button><button type="button" class="voice-pay" data-pending-category-voice="${i}">🎙 Decir categoría</button></div><small class="muted">Podés confirmar el gasto sin clasificar y ordenarlo después desde “Compras sin clasificar”.</small></div>`;
 }
 function pendingSubcategoryPrompt(e,i){
   if(!e.category)return '';
@@ -533,7 +583,7 @@ function applyPendingCategoryVoice(index,phrase){
   const item=pending[index];if(!item)return;
   const spoken=normVoiceChoice(phrase);
   if(/\bsin categoria\b/.test(spoken)){
-    item.category='';item.subcategory='';item.categoryConfirmed=true;showPending();return;
+    item.category='';item.subcategory='';item.categoryStatus='unclassified';showPending();return;
   }
   const subMatches=[];
   for(const [parent,values] of Object.entries(state.subcategories||{})){
@@ -544,14 +594,14 @@ function applyPendingCategoryVoice(index,phrase){
   }
   subMatches.sort((a,b)=>b.length-a.length);
   if(subMatches.length){
-    item.category=subMatches[0].parent;item.subcategory=subMatches[0].value;item.categoryConfirmed=true;showPending();return;
+    item.category=subMatches[0].parent;item.subcategory=subMatches[0].value;item.categoryStatus='manual';item.learnCategory=true;showPending();return;
   }
   const categoryMatches=state.categories
     .map((category)=>({category,normalized:normVoiceChoice(category)}))
     .filter(({normalized})=>normalized&&spoken.includes(normalized))
     .sort((a,b)=>b.normalized.length-a.normalized.length);
   if(categoryMatches.length){
-    item.category=categoryMatches[0].category;item.subcategory='';item.categoryConfirmed=true;showPending();return;
+    item.category=categoryMatches[0].category;item.subcategory='';item.categoryStatus='manual';item.learnCategory=true;showPending();return;
   }
   showToast('No reconocí esa categoría. Elegila de la lista o decí “sin categoría”');
 }
@@ -714,14 +764,14 @@ function showPending() {
     const needsCard=['Débito','Crédito'].includes(e.method)&&!e.card;
     const needsInstallments=e.method==='Crédito'&&e.installmentsSpecified===false;
     const needsDate=!!e.dateAmbiguous;
-    const needsCategory=!e.category&&e.categoryConfirmed!==true;
+    const needsCategory=!e.category;
     const methodLabel=needsMethod?'Medio de pago pendiente':e.method;
     const when=new Date(e.purchaseDate||e.date);
     const whenLabel=needsDate?'Fecha pendiente':(e.dateSpecified&&!e.timeSpecified?when.toLocaleDateString('es-AR'):when.toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}));
     const installmentLabel=e.method==='Crédito'?(needsInstallments?'Cuotas pendientes':`${Math.max(1,Number(e.installments||1))} cuota${Number(e.installments||1)===1?'':'s'}`):'';
-    const categoryLabel=needsCategory?'Categoría pendiente':(e.category||(e.categoryConfirmed===true?'Sin categoría':''));
+    const categoryLabel=needsCategory?'Sin clasificar':e.category;
     const meta=[whenLabel,categoryLabel,methodLabel,e.card,installmentLabel].filter(Boolean).join(' · ');
-    const incomplete=!e.amount||needsCategory||needsMethod||needsCard||needsInstallments||needsDate;
+    const incomplete=!e.amount||needsMethod||needsCard||needsInstallments||needsDate;
     return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape(meta)}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingAmountPrompt(e,i)}${pendingCategoryPrompt(e,i)}${pendingSubcategoryPrompt(e,i)}${pendingCreditDetail(e)}${pendingDatePrompt(e,i)}${pendingPaymentPrompt(e,i)}<div class="actions"><button class="edit">${incomplete?'✎ Corregir / completar':'Corregir'}</button><button class="confirm" ${incomplete ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
   }).join('');
   if (!$('#confirmDialog').open) $('#confirmDialog').showModal();
@@ -761,7 +811,7 @@ function showPending() {
   document.querySelectorAll('.pending-category-select').forEach((select)=>{
     select.onchange=()=>{
       const item=pending[Number(select.dataset.index)];if(!item||!select.value)return;
-      item.category=select.value;item.subcategory='';item.categoryConfirmed=true;showPending();
+      item.category=select.value;item.subcategory='';item.categoryStatus='manual';item.learnCategory=true;showPending();
     };
   });
   document.querySelectorAll('.pending-subcategory-select').forEach((select)=>{
@@ -773,7 +823,7 @@ function showPending() {
   document.querySelectorAll('[data-pending-uncategorized]').forEach((button)=>{
     button.onclick=()=>{
       const item=pending[Number(button.dataset.pendingUncategorized)];if(!item)return;
-      item.category='';item.subcategory='';item.categoryConfirmed=true;showPending();
+      item.category='';item.subcategory='';item.categoryStatus='unclassified';showPending();
     };
   });
   document.querySelectorAll('[data-pending-category-voice]').forEach((button)=>{
@@ -1172,11 +1222,11 @@ function goView(view) {
 async function confirmPending(index, card) {
   const current=pending[index]; if(!current)return;
   if(!Number(current.amount))return showToast('Completá cuánto pagaste antes de confirmar');
-  if(!current.category&&current.categoryConfirmed!==true)return showToast('Elegí una categoría o marcá “Sin categoría”');
   if(current.dateAmbiguous)return showToast('AclarÁ la fecha antes de confirmar');
   if(current.method==='Sin definir')return showToast('Elegí o decí con qué pagaste');
   if(['Débito','Crédito'].includes(current.method)&&!current.card)return showToast('Elegí o decí qué tarjeta o cuenta usaste');
   if(current.method==='Crédito'&&current.installmentsSpecified===false)return showToast('Elegí en cuántas cuotas pagaste');
+  if(current.learnCategory&&current.category)learnFromExpense(current,current.category,current.subcategory||'');
   card.classList.add('confirmed');
   let item=pending.splice(index,1)[0];
   item.purchaseDate ||= item.date;
@@ -1196,7 +1246,7 @@ $('#expenseForm').onsubmit = async (event) => {
   if (!method) return showToast('Elegí el medio de pago');
   if (method !== 'Efectivo' && !$('#expenseCard').value) return showToast('Elegí una tarjeta configurada');
   const now=new Date().toISOString();
-  let expense={ id:crypto.randomUUID(), amount:Number($('#amount').value), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#subcategory')?.value || $('#category').value || 'Sin detalle', category:$('#category').value, subcategory:$('#subcategory')?.value || '', method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
+  let expense={ id:crypto.randomUUID(), amount:Number($('#amount').value), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#subcategory')?.value || $('#category').value || 'Sin detalle', category:$('#category').value, subcategory:$('#subcategory')?.value || '', categoryStatus:$('#category').value?'manual':'unclassified', method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
   expense=await stampUsdExpense(expense);
   state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render(); if(pending.length) setTimeout(showPending,180);
 };
@@ -1324,7 +1374,7 @@ function finishExpenseVoice() {
   voiceTranscript=''; voiceCycleText=''; voiceError='';
   resetExpenseVoiceUI();
   if (phrase) {
-    pending=parseExpenses(phrase,state.cards,state.categories,{subcategories:state.subcategories});
+    pending=prepareCategoryLearning(parseExpenses(phrase,state.cards,state.categories,{subcategories:state.subcategories}));
     if (pending.length) showPending();
     else showToast('Escuché el audio, pero no pude interpretar el gasto');
   } else if (!err) {
@@ -1359,7 +1409,7 @@ function startExpenseVoice() {
   window.getSelection?.()?.removeAllRanges?.();
   if (!SpeechRecognition) {
     const phrase = prompt('El navegador no ofrece reconocimiento de voz. Escribí los gastos:');
-    if (phrase) { pending = parseExpenses(phrase, state.cards, state.categories, {subcategories:state.subcategories}); showPending(); }
+    if (phrase) { pending = prepareCategoryLearning(parseExpenses(phrase, state.cards, state.categories, {subcategories:state.subcategories})); showPending(); }
     return;
   }
   voiceTranscript='';voiceCycleText='';voiceError='';voiceCancelled=false;voiceCancelArmed=false;voiceStopRequested=false;voiceHoldActive=true;voiceSessionFinished=false;
