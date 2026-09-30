@@ -1866,11 +1866,11 @@ function createSubcategoryFromPrompt(categorySelector,subcategorySelector,wrapSe
 }
 function editCategoryFromSelect(selectSelector){
   const select=$(selectSelector),oldName=select?.value||'';
-  if(!oldName)return showToast('Elegí una categoría para editar');
+  if(!oldName){showToast('Elegí una categoría para editar');return '';}
   const value=prompt('Nuevo nombre de la categoría:',oldName)?.trim();
-  if(!value||value===oldName)return;
-  if(!renameCategoryEverywhere(oldName,value))return showToast('No pude cambiar el nombre. Revisá que no esté repetido.');
-  fillCategorySelect(selectSelector,value);select.value=value;showToast('✓ Categoría actualizada en toda la app');
+  if(!value||value===oldName)return oldName;
+  if(!renameCategoryEverywhere(oldName,value)){showToast('No pude cambiar el nombre. Revisá que no esté repetido.');return '';}
+  fillCategorySelect(selectSelector,value);select.value=value;showToast('✓ Categoría actualizada en toda la app');return value;
 }
 function editSubcategoryFromSelect(categorySelector,subcategorySelector,wrapSelector){
   const category=$(categorySelector)?.value||'',select=$(subcategorySelector),oldName=select?.value||'';
@@ -1889,7 +1889,7 @@ function openCategoryManager(){
 $('#categoryForm').onsubmit = (event) => { event.preventDefault(); addCategory(); };
 $('#quickCategory').onclick = () => { const category=createCategoryFromPrompt('#category'); if(category){$('#category').value=category;fillSubcategories();} };
 $('#quickSubcategory').onclick = () => createSubcategoryFromPrompt('#category','#subcategory','#subcategoryWrap');
-$('#editSelectedCategory').onclick=()=>editCategoryFromSelect('#category');
+$('#editSelectedCategory').onclick=()=>{if(editCategoryFromSelect('#category'))fillSubcategories();};
 $('#editSelectedSubcategory').onclick=()=>editSubcategoryFromSelect('#category','#subcategory','#subcategoryWrap');
 function renderReminderSettings() { const labels = { 3: '3 días antes', 2: '2 días antes', 1: '1 día antes' }; $('#reminderSettings').innerHTML = [3, 2, 1].map((d) => `<label><input type="checkbox" value="${d}" ${state.settings.reminderDays.includes(d) ? 'checked' : ''}>${labels[d]}</label>`).join(''); $('#reminderSettings').onchange = () => { state.settings.reminderDays = [...$('#reminderSettings').querySelectorAll(':checked')].map((i) => Number(i.value)); save(); renderPaymentReminders(); }; }
 function cloneState(){return typeof structuredClone==='function'?structuredClone(state):JSON.parse(JSON.stringify(state));}
@@ -2176,7 +2176,7 @@ $('#fixedExpensePaymentForm').onsubmit=async(event)=>{
 };
 $('#fixedQuickCategory').onclick=()=>{const category=createCategoryFromPrompt('#fixedExpenseCategory');if(category)fillScopedSubcategories('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');};
 $('#fixedQuickSubcategory').onclick=()=>createSubcategoryFromPrompt('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');
-$('#fixedEditCategory').onclick=()=>editCategoryFromSelect('#fixedExpenseCategory');
+$('#fixedEditCategory').onclick=()=>{if(editCategoryFromSelect('#fixedExpenseCategory'))fillScopedSubcategories('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');};
 $('#fixedEditSubcategory').onclick=()=>editSubcategoryFromSelect('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');
 
 $('#addRecurring').onclick=()=>openRecurringDialog();
@@ -2184,7 +2184,7 @@ $('#recurringMethod').onchange=updateRecurringCardField;
 $('#recurringCategory').onchange=()=>fillScopedSubcategories('#recurringCategory','#recurringSubcategory','#recurringSubcategoryWrap');
 $('#recurringQuickCategory').onclick=()=>{const category=createCategoryFromPrompt('#recurringCategory');if(category)fillScopedSubcategories('#recurringCategory','#recurringSubcategory','#recurringSubcategoryWrap');};
 $('#recurringQuickSubcategory').onclick=()=>createSubcategoryFromPrompt('#recurringCategory','#recurringSubcategory','#recurringSubcategoryWrap');
-$('#recurringEditCategory').onclick=()=>editCategoryFromSelect('#recurringCategory');
+$('#recurringEditCategory').onclick=()=>{if(editCategoryFromSelect('#recurringCategory'))fillScopedSubcategories('#recurringCategory','#recurringSubcategory','#recurringSubcategoryWrap');};
 $('#recurringEditSubcategory').onclick=()=>editSubcategoryFromSelect('#recurringCategory','#recurringSubcategory','#recurringSubcategoryWrap');
 $('#recurringForm').onsubmit=(e)=>{e.preventDefault();const data={concept:$('#recurringConcept').value.trim(),amount:localizedInputNumber('#recurringAmount'),currency:$('#recurringCurrency').value,category:$('#recurringCategory').value.trim(),subcategory:$('#recurringSubcategory').value.trim(),method:$('#recurringMethod').value,card:$('#recurringMethod').value==='Efectivo'?'':$('#recurringCard').value,day:Number($('#recurringDay').value),active:true};if(!Number.isFinite(data.amount)||data.amount<=0)return showToast('Ingresá un importe válido');if(data.method!=='Efectivo'&&!data.card)return showToast('Elegí una tarjeta');if(editingRecurringId){const r=state.recurring.find((x)=>x.id===editingRecurringId);if(r)Object.assign(r,data);}else state.recurring.push({id:uid(),...data,lastPromptedMonth:null});editingRecurringId=null;save();$('#recurringDialog').close();renderRecurringSettings();showToast('Gasto recurrente guardado');};
 $('#reportManageCategories').onclick=openCategoryManager;
@@ -2223,7 +2223,7 @@ $('#addStock').onclick=()=>{
 $('#stockCategory').onchange=()=>fillScopedSubcategories('#stockCategory','#stockSubcategory','#stockSubcategoryWrap');
 $('#stockQuickCategory').onclick=()=>{const category=createCategoryFromPrompt('#stockCategory');if(category)fillScopedSubcategories('#stockCategory','#stockSubcategory','#stockSubcategoryWrap');};
 $('#stockQuickSubcategory').onclick=()=>createSubcategoryFromPrompt('#stockCategory','#stockSubcategory','#stockSubcategoryWrap');
-$('#stockEditCategory').onclick=()=>editCategoryFromSelect('#stockCategory');
+$('#stockEditCategory').onclick=()=>{if(editCategoryFromSelect('#stockCategory'))fillScopedSubcategories('#stockCategory','#stockSubcategory','#stockSubcategoryWrap');};
 $('#stockEditSubcategory').onclick=()=>editSubcategoryFromSelect('#stockCategory','#stockSubcategory','#stockSubcategoryWrap');
 $('#stockForm').onsubmit=async(e)=>{
   e.preventDefault();
