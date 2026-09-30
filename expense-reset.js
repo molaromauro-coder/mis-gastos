@@ -36,6 +36,22 @@ export function previousMonthExpenseCount(state,now=new Date()){
   }).length;
 }
 
+export function previousMonthTrashItemCount(state,now=new Date()){
+  const {start}=monthBounds(now);
+  let count=0;
+  for(const record of state?.trash||[]){
+    for(const item of record.items||[]){
+      const d=purchaseDate(item);
+      if(d&&d<start)count++;
+    }
+  }
+  return count;
+}
+
+export function previousMonthDeletableCount(state,now=new Date()){
+  return previousMonthExpenseCount(state,now)+previousMonthTrashItemCount(state,now);
+}
+
 export function moveCurrentMonthExpensesToTrash(state,now=new Date()){
   const {start,next}=monthBounds(now);
   const removed=[],kept=[];
