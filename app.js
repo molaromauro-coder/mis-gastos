@@ -1626,7 +1626,33 @@ $('#recurringForm').onsubmit=(e)=>{e.preventDefault();const data={concept:$('#re
 $('#consultExportExcel').onclick=exportConsultExcel;
 $('#consultExportPdf').onclick=exportConsultPdf;
 
-$('#addStock').onclick=()=>{ $('#stockForm').reset(); fillStockCategoryOptions(); $('#stockQty').value=1; $('#stockMonths').value=1; $('#stockPaidDate').value=new Date().toISOString().slice(0,10); $('#stockDialog').showModal(); };
+function syncStockPreset(selectId,inputId){
+  const select=$(selectId),input=$(inputId);if(!select||!input)return;
+  const manual=select.value==='manual';
+  input.classList.toggle('hidden',!manual);
+  input.required=manual;
+  if(!manual)input.value='';
+}
+function stockPresetValue(selectId,inputId){
+  const select=$(selectId),input=$(inputId);
+  if(!select)return 0;
+  const value=select.value==='manual'?Number(input?.value):Number(select.value);
+  return Number.isFinite(value)&&value>=1?value:0;
+}
+$('#stockQtyPreset').onchange=()=>syncStockPreset('#stockQtyPreset','#stockQtyManual');
+$('#stockMonthsPreset').onchange=()=>syncStockPreset('#stockMonthsPreset','#stockMonthsManual');
+$('#addStock').onclick=()=>{
+  $('#stockForm').reset();
+  fillStockCategoryOptions();
+  $('#stockQtyPreset').value='1';
+  $('#stockMonthsPreset').value='1';
+  $('#stockQtyManual').value='';
+  $('#stockMonthsManual').value='';
+  syncStockPreset('#stockQtyPreset','#stockQtyManual');
+  syncStockPreset('#stockMonthsPreset','#stockMonthsManual');
+  $('#stockPaidDate').value=new Date().toISOString().slice(0,10);
+  $('#stockDialog').showModal();
+};
 $('#stockQuickCategory').onclick=()=>{
   const value=prompt('Nombre de la nueva categoría:')?.trim();
   if(!value)return;
@@ -1636,7 +1662,15 @@ $('#stockQuickCategory').onclick=()=>{
   $('#stockCategory').value=category;
   showToast('✓ Categoría creada y sincronizada');
 };
-$('#stockForm').onsubmit=async(e)=>{e.preventDefault();await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),quantity:Number($('#stockQty').value),months:Number($('#stockMonths').value),totalAmount:Number($('#stockAmount').value),currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});$('#stockDialog').close();renderStock();renderBudget();renderSavings();showToast('Compra de stock guardada');};
+$('#stockForm').onsubmit=async(e)=>{
+  e.preventDefault();
+  const quantity=stockPresetValue('#stockQtyPreset','#stockQtyManual');
+  const months=stockPresetValue('#stockMonthsPreset','#stockMonthsManual');
+  if(!quantity)return showToast('Elegí o ingresá una cantidad válida');
+  if(!months)return showToast('Elegí o ingresá los meses estimados');
+  await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),quantity,months,totalAmount:Number($('#stockAmount').value),currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});
+  $('#stockDialog').close();renderStock();renderBudget();renderSavings();showToast('Compra de stock guardada');
+};
 bindHoldToTalk($('#stockVoiceBtn'),{
   process:processStockVoice,
   fallbackPrompt:'Decí o escribí, por ejemplo: consumí 2 cafés',
