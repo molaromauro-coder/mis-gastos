@@ -355,6 +355,7 @@ function renameCategoryEverywhere(oldName,newName){
   state.subcategories[clean]=state.subcategories[oldName]||[];
   delete state.subcategories[oldName];
   state.expenses.forEach((e)=>{if(e.category===oldName)e.category=clean;});
+  state.trash.forEach((entry)=>{(entry.items||[]).forEach((e)=>{if(e.category===oldName)e.category=clean;});});
   state.recurring.forEach((e)=>{if(e.category===oldName)e.category=clean;});
   state.stock.forEach((e)=>{if(e.category===oldName)e.category=clean;});
   state.fixedExpenses.forEach((e)=>{if(e.category===oldName)e.category=clean;});
@@ -367,6 +368,7 @@ function deleteCategoryEverywhere(category){
   const index=state.categories.indexOf(category); if(index<0)return;
   state.categories.splice(index,1);delete state.subcategories[category];
   state.expenses.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';e.categoryStatus='unclassified';}});
+  state.trash.forEach((entry)=>{(entry.items||[]).forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';e.categoryStatus='unclassified';}});});
   state.categoryRules=state.categoryRules.filter((rule)=>rule.category!==category);
   state.recurring.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
   state.stock.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
@@ -380,6 +382,7 @@ function renameSubcategoryEverywhere(category,oldName,newName){
   if(index<0||!clean||list.some((s)=>s!==oldName&&s.toLowerCase()===clean.toLowerCase()))return false;
   list[index]=clean;state.subcategories[category]=list;
   state.expenses.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
+  state.trash.forEach((entry)=>{(entry.items||[]).forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});});
   state.stock.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.recurring.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.fixedExpenses.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
@@ -476,6 +479,7 @@ function fillCategories() {
         if(!confirm(`¿Eliminar la subcategoría ${removed}?`))return;
         state.subcategories[active]=current.filter((_,i)=>i!==index);
         state.expenses.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
+        state.trash.forEach((entry)=>{(entry.items||[]).forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});});
         state.stock.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
         state.recurring.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
         state.fixedExpenses.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
