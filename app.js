@@ -174,6 +174,11 @@ document.querySelectorAll('main > .view:not(#home)').forEach((view)=>{
   const button=document.createElement('button');
   button.type='button';button.className='view-back';button.textContent='← Atrás';button.setAttribute('aria-label','Volver a la pantalla anterior');
   button.onclick=()=>{
+    if(view.id==='fixedExpenses'){
+      goView('home');
+      setTimeout(()=>{const dialog=$('#functionsDialog');if(dialog&&!dialog.open)dialog.showModal();},0);
+      return;
+    }
     if(menuViewIds.has(view.id)){
       returnToMainMenu();
       return;
@@ -2184,6 +2189,7 @@ $('#recurringEditSubcategory').onclick=()=>editSubcategoryFromSelect('#recurring
 $('#recurringForm').onsubmit=(e)=>{e.preventDefault();const data={concept:$('#recurringConcept').value.trim(),amount:localizedInputNumber('#recurringAmount'),currency:$('#recurringCurrency').value,category:$('#recurringCategory').value.trim(),subcategory:$('#recurringSubcategory').value.trim(),method:$('#recurringMethod').value,card:$('#recurringMethod').value==='Efectivo'?'':$('#recurringCard').value,day:Number($('#recurringDay').value),active:true};if(!Number.isFinite(data.amount)||data.amount<=0)return showToast('Ingresá un importe válido');if(data.method!=='Efectivo'&&!data.card)return showToast('Elegí una tarjeta');if(editingRecurringId){const r=state.recurring.find((x)=>x.id===editingRecurringId);if(r)Object.assign(r,data);}else state.recurring.push({id:uid(),...data,lastPromptedMonth:null});editingRecurringId=null;save();$('#recurringDialog').close();renderRecurringSettings();showToast('Gasto recurrente guardado');};
 $('#reportManageCategories').onclick=openCategoryManager;
 $('#consultManageCategories').onclick=openCategoryManager;
+$('#unclassifiedManageCategories').onclick=openCategoryManager;
 $('#consultExportExcel').onclick=exportConsultExcel;
 $('#consultExportPdf').onclick=exportConsultPdf;
 
