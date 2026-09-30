@@ -1178,6 +1178,33 @@ $('#settingsBtn').onclick = () => {
   renderReminderSettings();fillCategories();renderRecurringSettings();renderTrash();renderSecurityStatus();
   $('#settingsDialog').showModal();
 };
+$('#resetExpensesBtn').onclick=()=>{
+  const registered=recentPurchases(state.expenses).length;
+  const trashed=(state.trash||[]).length;
+  $('#resetExpensesSummary').textContent=`Se eliminarán ${registered} gasto${registered===1?'':'s'} registrado${registered===1?'':'s'}${trashed?` y ${trashed} elemento${trashed===1?'':'s'} de la Papelera`:''}. Esta acción no se puede deshacer.`;
+  $('#resetExpensesDialog').showModal();
+};
+function closeResetExpensesDialog(){if($('#resetExpensesDialog').open)$('#resetExpensesDialog').close();}
+$('#resetExpensesCancel').onclick=closeResetExpensesDialog;
+$('#resetExpensesCancelX').onclick=closeResetExpensesDialog;
+$('#resetExpensesDialog').addEventListener('cancel',(event)=>{event.preventDefault();closeResetExpensesDialog();});
+$('#resetExpensesConfirm').onclick=()=>{
+  state.expenses=[];
+  state.trash=[];
+  pending=[];
+  discarded=null;
+  recentHomeLimit=4;
+  if(settingsSnapshot){
+    settingsSnapshot.expenses=[];
+    settingsSnapshot.trash=[];
+  }
+  save();
+  closeResetExpensesDialog();
+  if($('#confirmDialog')?.open)$('#confirmDialog').close();
+  renderTrash();
+  render();
+  showToast('✓ Gastos borrados · medios de pago conservados');
+};
 $('#settingsBack').onclick=()=>{
   if(activeSettingsCategory){activeSettingsCategory='';fillCategories();return;}
   closeSettingsKeepingChanges();

@@ -132,3 +132,11 @@ dialog{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:to
 .pending-amount-row input{margin:0;min-height:44px;font-size:18px;font-weight:800}
 .pending-amount-row button{min-height:44px;border:1px solid #c7dbe8;border-radius:11px;background:#fff;color:#24485d;font-weight:800;padding:0 12px}
 .pending .actions .confirm:disabled{background:#e3e7e5!important;color:#85908c!important;opacity:.72;cursor:not-allowed;box-shadow:none}
+
+
+/* Reset de gastos */
+.danger-settings{margin-top:18px}
+.danger-button,.danger-confirm{border:0;border-radius:12px;background:#b84d45;color:#fff;font-weight:800;padding:11px 14px}
+.danger-dialog .reset-warning{margin:14px 0;padding:12px;border-radius:12px;background:#fff0ee;color:#8f3933;font-size:13px;font-weight:700;line-height:1.4}
+.danger-dialog .settings-save-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.danger-dialog .secondary{border:1px solid #ccd4cf;background:#fff;border-radius:12px;font-weight:800;padding:12px}
