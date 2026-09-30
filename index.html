@@ -78,7 +78,7 @@
 <dialog id="functionsDialog" class="menu-dialog"><div class="menu-grabber"></div><div class="dialog-head"><div><h2>Funciones</h2><small>Herramientas de Mis Gastos</small></div><button class="close">×</button></div><div class="menu-list"><button data-menu-view="fixedExpenses"><span class="menu-icon">📌</span><span class="menu-copy"><strong>Gastos fijos</strong><small>Configurá, editá y controlá los pagos de cada mes</small></span><b>›</b></button></div></dialog>
 <dialog id="expenseDialog"><form id="expenseForm"><div class="dialog-head"><div><small>NUEVO GASTO</small><h2>Registrar gasto</h2></div><button type="button" class="close">×</button></div>
 <label class="big-amount">Importe<input id="amount" type="text" inputmode="decimal" data-local-number="2" required placeholder="0"></label>
-<div class="segmented"><input type="radio" name="currency" id="ars" value="ARS" checked><label for="ars">Pesos</label><input type="radio" name="currency" id="usd" value="USD"><label for="usd">Dólares</label></div>
+<div class="segmented"><input type="radio" name="currency" id="currencyArs" value="ARS" checked><label for="currencyArs">Pesos</label><input type="radio" name="currency" id="currencyUsd" value="USD"><label for="currencyUsd">Dólares</label></div>
 <label>Concepto<input id="concept" placeholder="¿En qué gastaste?"></label>
 <label>Categoría<select id="category"><option value="">Sin categoría</option></select></label>
 <div class="category-action-row"><button type="button" id="quickCategory" class="category-create-button">＋ Agregar categoría</button><button type="button" id="editSelectedCategory" class="category-edit-button">✎ Editar</button></div>
