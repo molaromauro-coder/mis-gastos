@@ -1,5 +1,5 @@
 function purchaseDate(item){
-  const value=item?.purchaseDate||item?.date;
+  const value=item?.purchaseDate||item?.date||item?.dueDate;
   const d=value?new Date(value):null;
   return d&&Number.isFinite(d.getTime())?d:null;
 }
@@ -87,4 +87,13 @@ export function mirrorResetIntoSnapshot(snapshot,state){
   if(!snapshot)return;
   snapshot.expenses=structuredClone(state.expenses||[]);
   snapshot.trash=structuredClone(state.trash||[]);
+}
+
+
+export function verifyNoCurrentMonthExpenses(state,now=new Date()){
+  return currentMonthExpenseCount(state,now)===0;
+}
+
+export function verifyNoPreviousMonthExpenses(state,now=new Date()){
+  return previousMonthExpenseCount(state,now)===0;
 }
