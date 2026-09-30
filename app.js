@@ -566,6 +566,23 @@ function renderReportChart(rows){
   const top=rows.slice(0,6), max=Math.max(...top.map((r)=>r.arsEquivalent),1);
   target.innerHTML=top.length?top.map((r)=>`<div class="report-chart-row"><span>${escape(r.key)}</span><div><i style="width:${Math.max(2,r.arsEquivalent/max*100)}%"></i></div><strong>${money(r.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin datos para graficar.</div>';
 }
+function renderReportPie(items){
+  const target=$('#reportPie'); if(!target)return;
+  const grouped=groupExpenses(items,e=>e.category || 'Sin categoría').filter((r)=>r.arsEquivalent>0).sort((a,b)=>b.arsEquivalent-a.arsEquivalent);
+  const total=grouped.reduce((s,r)=>s+r.arsEquivalent,0);
+  if(!grouped.length||!total){target.innerHTML='<div class="empty">Sin datos para graficar.</div>';return;}
+  const main=grouped.slice(0,7);
+  const rest=grouped.slice(7).reduce((s,r)=>s+r.arsEquivalent,0);
+  const rows=rest>0?[...main,{key:'Resto',arsEquivalent:rest,count:0}]:main;
+  let cursor=0;
+  const slices=rows.map((row,index)=>{
+    const start=cursor, percent=row.arsEquivalent/total*100; cursor+=percent;
+    const color=`hsl(${(index*47+156)%360} 38% 55%)`;
+    return {...row,start,end:cursor,percent,color};
+  });
+  const gradient=slices.map((row)=>`${row.color} ${row.start}% ${row.end}%`).join(',');
+  target.innerHTML=`<div class="report-pie-layout"><div class="report-pie-chart" style="background:conic-gradient(${gradient})" role="img" aria-label="Distribución porcentual por categoría"></div><div class="report-pie-legend">${slices.map((row)=>`<div><i style="background:${row.color}"></i><span>${escape(row.key)}</span><strong>${row.percent.toLocaleString('es-AR',{maximumFractionDigits:1})}%</strong></div>`).join('')}</div></div><small class="report-pie-note">La torta muestra categorías de origen sin duplicar acumuladores transversales.</small>`;
+}
 function normalizedCategoryName(value){return String(value||'').trim().toLocaleLowerCase('es-AR');}
 function categoryHasCrossSubcategories(category){
   const target=normalizedCategoryName(category);
@@ -622,6 +639,7 @@ function renderReport() {
   $('#reportComparison').textContent = diff == null ? 'Sin período previo' : `${diff >= 0 ? '+' : ''}${diff.toLocaleString('es-AR',{maximumFractionDigits:1})}%`;
   const categoryRows=configuredCategoryRows(items);
   renderReportChart(categoryRows.filter((r)=>r.arsEquivalent>0));
+  renderReportPie(items);
   renderReportRows($('#reportCategories'),categoryRows,'category');
   renderReportRows($('#reportMethods'),groupExpenses(items,e=>e.method || 'Sin definir'),'method');
   const top = items.slice().sort((a,b)=>expenseArsEquivalent(b)-expenseArsEquivalent(a)).slice(0,8);
