@@ -390,6 +390,8 @@ function fillSubcategories(selected=''){
   if(selected&&values.includes(selected))select.value=selected;
   $('#subcategoryWrap')?.classList.toggle('hidden',!category);
   $('#quickSubcategory')?.classList.toggle('hidden',!category);
+  $('#editSelectedCategory')?.classList.toggle('hidden',!category);
+  $('#editSelectedSubcategory')?.classList.toggle('hidden',!category||!select.value);
 }
 
 function installPointerReorder(container,selector,onMove,ignore='button,input,select,summary,details,a'){
@@ -1733,16 +1735,53 @@ function addCategory() {
   return created;
 }
 function addSubcategory(category,value){ const clean=String(value||'').trim(); if(!category||!clean)return false; const list=subcategoriesFor(category); if(list.some((s)=>s.toLowerCase()===clean.toLowerCase()))return false; state.subcategories[category]=[...list,clean]; save(); syncCategoryConsumers(); return true; }
-$('#categoryForm').onsubmit = (event) => { event.preventDefault(); addCategory(); };
-$('#quickCategory').onclick = () => {
+function createCategoryFromPrompt(selectSelector){
   const value=prompt('Nombre de la nueva categoría:')?.trim();
-  if(!value)return;
+  if(!value)return '';
   const category=createCategoryEverywhere(value);
-  if(!category)return;
-  $('#category').value=category;
-  fillSubcategories();
-};
-$('#quickSubcategory').onclick = () => { const category=$('#category').value; if(!category)return showToast('Elegí primero una categoría'); const value=prompt(`Nueva subcategoría dentro de ${category}:`)?.trim(); if(!value)return; if(!addSubcategory(category,value))return showToast('Esa subcategoría ya existe'); fillSubcategories(value); };
+  if(category&&$(selectSelector)){fillCategorySelect(selectSelector,category);$(selectSelector).value=category;}
+  return category;
+}
+function createSubcategoryFromPrompt(categorySelector,subcategorySelector,wrapSelector){
+  const category=$(categorySelector)?.value||'';
+  if(!category){showToast('Elegí primero una categoría');return '';}
+  const value=prompt(`Nueva subcategoría dentro de ${category}:`)?.trim();
+  if(!value)return '';
+  if(!addSubcategory(category,value)){
+    const existing=subcategoriesFor(category).find((s)=>s.toLowerCase()===value.toLowerCase());
+    if(!existing){showToast('Esa subcategoría ya existe');return '';}
+    fillScopedSubcategories(categorySelector,subcategorySelector,wrapSelector,existing);return existing;
+  }
+  fillScopedSubcategories(categorySelector,subcategorySelector,wrapSelector,value);
+  return value;
+}
+function editCategoryFromSelect(selectSelector){
+  const select=$(selectSelector),oldName=select?.value||'';
+  if(!oldName)return showToast('Elegí una categoría para editar');
+  const value=prompt('Nuevo nombre de la categoría:',oldName)?.trim();
+  if(!value||value===oldName)return;
+  if(!renameCategoryEverywhere(oldName,value))return showToast('No pude cambiar el nombre. Revisá que no esté repetido.');
+  fillCategorySelect(selectSelector,value);select.value=value;showToast('✓ Categoría actualizada en toda la app');
+}
+function editSubcategoryFromSelect(categorySelector,subcategorySelector,wrapSelector){
+  const category=$(categorySelector)?.value||'',select=$(subcategorySelector),oldName=select?.value||'';
+  if(!category)return showToast('Elegí una categoría');
+  if(!oldName)return showToast('Elegí una subcategoría para editar');
+  const value=prompt('Nuevo nombre de la subcategoría:',oldName)?.trim();
+  if(!value||value===oldName)return;
+  if(!renameSubcategoryEverywhere(category,oldName,value))return showToast('No pude cambiar el nombre. Revisá que no esté repetido.');
+  fillScopedSubcategories(categorySelector,subcategorySelector,wrapSelector,value);showToast('✓ Subcategoría actualizada en toda la app');
+}
+function openCategoryManager(){
+  settingsSnapshot=cloneState();activeSettingsCategory='';
+  renderReminderSettings();fillCategories();renderTrash();renderSecurityStatus();
+  $('#settingsDialog').showModal();
+}
+$('#categoryForm').onsubmit = (event) => { event.preventDefault(); addCategory(); };
+$('#quickCategory').onclick = () => { const category=createCategoryFromPrompt('#category'); if(category){$('#category').value=category;fillSubcategories();} };
+$('#quickSubcategory').onclick = () => createSubcategoryFromPrompt('#category','#subcategory','#subcategoryWrap');
+$('#editSelectedCategory').onclick=()=>editCategoryFromSelect('#category');
+$('#editSelectedSubcategory').onclick=()=>editSubcategoryFromSelect('#category','#subcategory','#subcategoryWrap');
 function renderReminderSettings() { const labels = { 3: '3 días antes', 2: '2 días antes', 1: '1 día antes' }; $('#reminderSettings').innerHTML = [3, 2, 1].map((d) => `<label><input type="checkbox" value="${d}" ${state.settings.reminderDays.includes(d) ? 'checked' : ''}>${labels[d]}</label>`).join(''); $('#reminderSettings').onchange = () => { state.settings.reminderDays = [...$('#reminderSettings').querySelectorAll(':checked')].map((i) => Number(i.value)); save(); renderPaymentReminders(); }; }
 function cloneState(){return typeof structuredClone==='function'?structuredClone(state):JSON.parse(JSON.stringify(state));}
 function restoreState(snapshot){
