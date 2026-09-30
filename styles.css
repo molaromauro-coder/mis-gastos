@@ -388,3 +388,10 @@ img,svg,canvas,video{
 .resale-import-warnings:empty{display:none}
 .resale-import-actions{display:flex;gap:10px}
 .resale-import-actions button{flex:1}
+
+.home-month-net{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0;padding:13px;border-radius:15px;background:#e9f2ec}
+.home-month-net>div:first-child{grid-column:1/-1;display:flex;justify-content:space-between;align-items:baseline}
+.home-month-net small{font-size:10px;color:#4b7568;font-weight:700}
+.home-month-net strong{font-size:19px;color:#173f37}
+.home-month-net span{font-size:13px;font-weight:700}
+.home-month-net>div:not(:first-child){display:grid;gap:3px}
