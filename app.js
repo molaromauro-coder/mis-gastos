@@ -2112,6 +2112,59 @@ $('#unlockPin').onkeydown=(e)=>{if(e.key==='Enter'){e.preventDefault();unlockWit
 $('#lockDialog').addEventListener('cancel',(e)=>e.preventDefault());
 
 $('#privacyBtn').onclick=()=>{state.settings.hideAmounts=!state.settings.hideAmounts;document.body.classList.toggle('hide-amounts',state.settings.hideAmounts);$('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁';save();};
+$('#globalSearchBtn').onclick=()=>{goView('consultations');setTimeout(()=>$('#consultQuery')?.focus(),0);};
+$('#functionsMenuBtn').onclick=()=>{if($('#menuDialog')?.open)$('#menuDialog').close();$('#functionsDialog').showModal();};
+$('#addFixedExpense').onclick=()=>openFixedExpenseDialog();
+$('#fixedExpenseMonth').onchange=renderFixedExpenses;
+$('#fixedExpenseMethod').onchange=()=>updateFixedExpenseCardField();
+$('#fixedExpenseCategory').onchange=()=>fillScopedSubcategories('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');
+$('#fixedExpenseForm').onsubmit=(event)=>{
+  event.preventDefault();
+  const data={
+    concept:$('#fixedExpenseConcept').value.trim(),
+    currency:$('#fixedExpenseCurrency').value,
+    category:$('#fixedExpenseCategory').value,
+    subcategory:$('#fixedExpenseSubcategory').value,
+    method:$('#fixedExpenseMethod').value,
+    card:$('#fixedExpenseMethod').value==='Efectivo'?'':$('#fixedExpenseCard').value,
+    day:Number($('#fixedExpenseDay').value||1),
+    active:true
+  };
+  if(!data.concept)return showToast('Ingresá el concepto');
+  if(data.method!=='Efectivo'&&!data.card)return showToast('Elegí una tarjeta o cuenta');
+  if(editingFixedExpenseId){
+    const item=state.fixedExpenses.find((x)=>x.id===editingFixedExpenseId);
+    if(item)Object.assign(item,data,{active:item.active!==false});
+  }else state.fixedExpenses.push({id:uid(),...data});
+  editingFixedExpenseId=null;save();$('#fixedExpenseDialog').close();renderFixedExpenses();showToast('✓ Gasto fijo guardado');
+};
+$('#fixedExpensePaymentForm').onsubmit=async(event)=>{
+  event.preventDefault();
+  const item=state.fixedExpenses.find((x)=>x.id===$('#fixedExpensePaymentForm').dataset.fixedExpenseId);
+  const key=$('#fixedExpensePaymentForm').dataset.month||monthKey(new Date());
+  if(!item)return;
+  const amount=localizedInputNumber('#fixedExpensePaymentAmount');
+  if(!Number.isFinite(amount)||amount<=0)return showToast('Ingresá el importe de este mes');
+  const paidDate=$('#fixedExpensePaymentDate').value||new Date().toISOString().slice(0,10);
+  let expense={
+    id:editingFixedPaymentExpenseId||uid(),
+    amount,currency:item.currency,concept:item.concept,category:item.category||'',subcategory:item.subcategory||'',
+    method:item.method||'Efectivo',card:item.method==='Efectivo'?'':item.card||'',installments:1,
+    date:paidDate+'T12:00:00',purchaseDate:paidDate+'T12:00:00',source:'fixed',
+    fixedExpenseId:item.id,fixedExpenseMonth:key,categoryStatus:'manual'
+  };
+  if(expense.currency==='USD')expense=await stampUsdExpense(expense);
+  if(editingFixedPaymentExpenseId){
+    const index=state.expenses.findIndex((e)=>e.id===editingFixedPaymentExpenseId);
+    if(index>=0)state.expenses[index]=expense;
+  }else state.expenses.push(expense);
+  editingFixedPaymentExpenseId=null;save();$('#fixedExpensePaymentDialog').close();render();showToast('✓ Pago del gasto fijo registrado');
+};
+$('#fixedQuickCategory').onclick=()=>{const category=createCategoryFromPrompt('#fixedExpenseCategory');if(category)fillScopedSubcategories('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');};
+$('#fixedQuickSubcategory').onclick=()=>createSubcategoryFromPrompt('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');
+$('#fixedEditCategory').onclick=()=>editCategoryFromSelect('#fixedExpenseCategory');
+$('#fixedEditSubcategory').onclick=()=>editSubcategoryFromSelect('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');
+
 $('#addRecurring').onclick=()=>openRecurringDialog();
 $('#recurringMethod').onchange=updateRecurringCardField;
 $('#recurringForm').onsubmit=(e)=>{e.preventDefault();const data={concept:$('#recurringConcept').value.trim(),amount:localizedInputNumber('#recurringAmount'),currency:$('#recurringCurrency').value,category:$('#recurringCategory').value.trim(),method:$('#recurringMethod').value,card:$('#recurringMethod').value==='Efectivo'?'':$('#recurringCard').value,day:Number($('#recurringDay').value),active:true};if(!Number.isFinite(data.amount)||data.amount<=0)return showToast('Ingresá un importe válido');if(data.method!=='Efectivo'&&!data.card)return showToast('Elegí una tarjeta');if(editingRecurringId){const r=state.recurring.find((x)=>x.id===editingRecurringId);if(r)Object.assign(r,data);}else state.recurring.push({id:uid(),...data,lastPromptedMonth:null});editingRecurringId=null;save();$('#recurringDialog').close();renderRecurringSettings();showToast('Gasto recurrente guardado');};
@@ -2194,7 +2247,7 @@ bindHoldToTalk($('#consultMic'),{
 });
 
 
-document.querySelectorAll('[data-menu-view]').forEach((button) => { button.onclick = () => { $('#menuDialog').close(); goView(button.dataset.menuView); }; });
+document.querySelectorAll('[data-menu-view]').forEach((button) => { button.onclick = () => { const dialog=button.closest('dialog'); if(dialog?.open)dialog.close(); if($('#menuDialog')?.open)$('#menuDialog').close(); goView(button.dataset.menuView); }; });
 document.querySelectorAll('[data-menu-coming]').forEach((button) => { button.onclick = () => showToast(`${button.dataset.menuComing}: lo terminamos en la siguiente revisión`); });
 if(!sharedMode && resaleApi){
 $('#addResaleParty').onclick = () => $('#resalePartyDialog').showModal();
