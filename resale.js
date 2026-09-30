@@ -163,7 +163,7 @@ export function partyMetrics(party, split) {
   const available = tickets.filter((t) => (t.status || 'Disponible') === 'Disponible').length;
   const sold = tickets.filter((t) => t.status === 'Vendida').length;
   const personal = tickets.filter((t) => t.status === 'Uso personal').length;
-  const gainPercent = sales > 0 && investment ? ((sales - investment) / investment) * 100 : 0;
+  const gainPercent = recovered ? (netGain / recovered) * 100 : 0;
   return {
     investment, sales, recovered, netGain, ownerGain, sellerGain,
     totalForOwner: recovered + ownerGain,
@@ -195,6 +195,6 @@ export function portfolioMetrics(parties = [], split) {
 export function withPortfolioPercent(metrics) {
   return {
     ...metrics,
-    gainPercent: metrics.investment ? ((metrics.sales - metrics.investment) / metrics.investment) * 100 : 0
+    gainPercent: metrics.recovered ? (metrics.netGain / metrics.recovered) * 100 : 0
   };
 }
