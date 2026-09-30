@@ -124,7 +124,7 @@ export function applyResaleImport(existingParties,issues,decisions,makeId){
   const parties=structuredClone(existingParties);
   for(const issue of issues){
     const chosen=decisions[issue.id]||'app';
-    if(chosen!=='excel'&&chosen!=='remove')continue;
+    if(chosen!=='excel'&&chosen!=='manual'&&chosen!=='remove')continue;
     let party=parties.find((p)=>p.id===issue.partyId);
     if(issue.kind==='onlyApp'){
       if(chosen==='remove'&&party)party.tickets=party.tickets.filter((t)=>t.id!==issue.ticketId);
