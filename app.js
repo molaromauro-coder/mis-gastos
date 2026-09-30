@@ -2,6 +2,7 @@ import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
 import { learnCategoryRule, applyLearnedCategory } from './category-learning.js';
+import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 const resaleApi = sharedMode ? null : await import('./resale.js');
 const normalizeSplit = resaleApi?.normalizeSplit;
@@ -38,6 +39,39 @@ function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.tras
 let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
 const $ = (s) => document.querySelector(s);
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
+const numberText=(n,maximumFractionDigits=2)=>formatLocalizedNumber(n,{maximumFractionDigits});
+const integerText=(n)=>formatLocalizedInteger(n);
+function formatLocalizedInputElement(input){
+  if(!input)return;
+  const max=Number(input.dataset.localNumber??2);
+  const raw=String(input.value??'');
+  if(!raw)return;
+  const hasComma=raw.includes(',');
+  const [wholeRaw,fractionRaw='']=raw.split(',');
+  const wholeDigits=wholeRaw.replace(/[^0-9-]/g,'');
+  if(!wholeDigits||wholeDigits==='-')return;
+  const negative=wholeDigits.startsWith('-');
+  const digits=wholeDigits.replace(/-/g,'').replace(/^0+(?=\d)/,'')||'0';
+  const grouped=integerText(Number(digits));
+  const fraction=max>0?fractionRaw.replace(/\D/g,'').slice(0,max):'';
+  input.value=(negative?'-':'')+grouped+(hasComma&&max>0?','+fraction:'');
+  try{input.setSelectionRange(input.value.length,input.value.length);}catch{}
+}
+function bindLocalizedNumberInputs(root=document){
+  root.querySelectorAll?.('[data-local-number]').forEach((input)=>{
+    if(input.dataset.localNumberBound==='1')return;
+    input.dataset.localNumberBound='1';
+    input.addEventListener('input',()=>formatLocalizedInputElement(input));
+    input.addEventListener('blur',()=>formatLocalizedInputElement(input));
+    formatLocalizedInputElement(input);
+  });
+}
+function localizedInputNumber(selector){return parseLocalizedNumber($(selector)?.value||0);}
+function setLocalizedInput(selector,value,max=2){
+  const input=$(selector);if(!input)return;
+  input.value=value===''||value===null||value===undefined?'':formatNumericInputValue(value,{maximumFractionDigits:max});
+}
+
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 const escape = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -109,7 +143,7 @@ function classifyExpenseGroup(item,category,subcategory=''){
 function renderUnclassified(){
   const target=$('#unclassifiedList');if(!target)return;
   const items=recentPurchases(state.expenses).filter((e)=>!e.category);
-  $('#unclassifiedCount').textContent=items.length?`${items.length} pendiente${items.length===1?'':'s'}`:'Todo clasificado';
+  $('#unclassifiedCount').textContent=items.length?`${integerText(items.length)} pendiente${items.length===1?'':'s'}`:'Todo clasificado';
   target.innerHTML=items.length?items.map((e)=>{
     const key=escape(expenseGroupKey(e));
     const categoryOptions=state.categories.map((category)=>`<option value="${escape(category)}">${escape(category)}</option>`).join('');
@@ -534,9 +568,9 @@ function softTapFeedback(){
 }
 document.addEventListener('pointerdown',(event)=>{const button=event.target.closest?.('button');if(!button||button.disabled)return;softTapFeedback();},{passive:true});
 function setManualStep(step) { manualStep = step; document.querySelectorAll('.step').forEach((e) => e.classList.toggle('active', Number(e.dataset.step) === step)); $('#stepLabel').textContent = `PASO ${step} DE 3`; $('#expenseDialogTitle').textContent = ['¿Cuánto gastaste?', 'Elegí una categoría', '¿Cómo pagaste?'][step - 1]; $('#prevStep').classList.toggle('hidden', step === 1); $('#nextStep').classList.toggle('hidden', step === 3); $('#saveExpense').classList.toggle('hidden', step !== 3); }
-function openExpense(data = {}) { $('#expenseForm').reset(); $('#amount').value = data.amount || ''; $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; const voiceNeedsMethod=data.source==='voice'&&data.method==='Sin definir'; $('#method').value = voiceNeedsMethod ? '' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; fillSubcategories(data.subcategory || ''); const firstMissingStep=!Number(data.amount)?1:(!data.category&&data.categoryStatus==='unclassified'?2:(voiceNeedsMethod?3:1)); setManualStep(firstMissingStep); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
+function openExpense(data = {}) { $('#expenseForm').reset(); setLocalizedInput('#amount',data.amount||'',2); $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; const voiceNeedsMethod=data.source==='voice'&&data.method==='Sin definir'; $('#method').value = voiceNeedsMethod ? '' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; fillSubcategories(data.subcategory || ''); const firstMissingStep=!Number(data.amount)?1:(!data.category&&data.categoryStatus==='unclassified'?2:(voiceNeedsMethod?3:1)); setManualStep(firstMissingStep); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
 function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', !method || method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
-function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value && c.type === $('#method').value), count = Number($('#installments').value || 1), amount = Number($('#amount').value || 0); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${count} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${card.dueDay} de cada mes.</span>`; }
+function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value && c.type === $('#method').value), count = Number($('#installments').value || 1), amount = localizedInputNumber('#amount'); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${count} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${card.dueDay} de cada mes.</span>`; }
 function pendingCreditDetail(e){
   if(e.method!=='Crédito'||!e.card||!e.amount||e.installmentsSpecified===false)return '';
   const card=state.cards.find((c)=>c.name===e.card&&c.type==='Crédito'); if(!card)return '';
@@ -552,7 +586,7 @@ function pendingDatePrompt(e,i){
 }
 function pendingAmountPrompt(e,i){
   if(e.amount)return '';
-  return `<div class="pending-payment-question pending-amount-question"><strong>¿Cuánto pagaste?</strong><div class="pending-amount-row"><input class="pending-amount-input" data-index="${i}" inputmode="decimal" autocomplete="off" placeholder="Ej. 50.000"><button type="button" data-pending-amount-save="${i}">Guardar importe</button></div><button type="button" class="voice-pay" data-pending-amount-voice="${i}">🎙 Mantener para responder</button><small class="muted">Falta el importe: no se puede confirmar hasta completarlo.</small></div>`;
+  return `<div class="pending-payment-question pending-amount-question"><strong>¿Cuánto pagaste?</strong><div class="pending-amount-row"><input class="pending-amount-input" data-index="${i}" inputmode="decimal" data-local-number="2" autocomplete="off" placeholder="Ej. 50.000"><button type="button" data-pending-amount-save="${i}">Guardar importe</button></div><button type="button" class="voice-pay" data-pending-amount-voice="${i}">🎙 Mantener para responder</button><small class="muted">Falta el importe: no se puede confirmar hasta completarlo.</small></div>`;
 }
 function pendingCategoryPrompt(e,i){
   const needsCategory=!e.category;
@@ -861,6 +895,7 @@ function showPending() {
     if(!Number.isFinite(amount)||amount<=0)return showToast('Ingresá un importe válido');
     item.amount=amount;showPending();
   };
+  bindLocalizedNumberInputs($('#pendingList'));
   document.querySelectorAll('[data-pending-amount-save]').forEach((button)=>{
     button.onclick=()=>savePendingAmount(Number(button.dataset.pendingAmountSave));
   });
@@ -918,7 +953,7 @@ function renderResale() {
   $('#resaleOwner').textContent = money(total.totalForOwner, 'ARS');
   $('#resaleSeller').textContent = money(total.sellerGain, 'ARS');
   $('#resaleSplitLabel').textContent = `${split.ownerPercent}% Mauro · ${split.sellerPercent}% vendedor`;
-  $('#resaleStock').textContent = `${total.available} disponibles · ${total.sold} vendidas · ${total.personal} uso personal`;
+  $('#resaleStock').textContent = `${integerText(total.available)} disponibles · ${integerText(total.sold)} vendidas · ${integerText(total.personal)} uso personal`;
   if ($('#resaleOwnerHead')) $('#resaleOwnerHead').textContent = `Ganancia Mauro (${split.ownerPercent}%)`;
   if ($('#resaleSellerHead')) $('#resaleSellerHead').textContent = `Total vendedor (${split.sellerPercent}%)`;
   if ($('#resaleBalanceBody')) {
@@ -940,24 +975,25 @@ function renderResale() {
       const tm = ticketMetrics(ticket, split);
       const sold = ticket.status === 'Vendida';
       return `<div class="resale-ticket" data-ticket-id="${escape(ticket.id)}" data-party-id="${escape(party.id)}">
-        <div class="resale-ticket-head"><div><strong>${escape(ticket.type)} · #${ticket.number}</strong><small>Costo ${money(ticket.cost, 'ARS')}</small></div><select class="resale-status">
+        <div class="resale-ticket-head"><div><strong>${escape(ticket.type)} · #${integerText(ticket.number)}</strong><small>Costo ${money(ticket.cost, 'ARS')}</small></div><select class="resale-status">
           ${['Disponible','Vendida','Uso personal'].map((s) => `<option ${ticket.status === s ? 'selected' : ''}>${s}</option>`).join('')}
         </select></div>
-        <div class="resale-ticket-sale"><label>Precio de venta<input class="resale-price" type="number" min="0" step="0.01" value="${Number(ticket.salePrice || 0)}"></label>
+        <div class="resale-ticket-sale"><label>Precio de venta<input class="resale-price" type="text" inputmode="decimal" data-local-number="2" value="${formatNumericInputValue(ticket.salePrice||0,{maximumFractionDigits:2})}"></label>
         <div class="resale-ticket-result"><span>Recuperado <strong>${money(tm.recovered, 'ARS')}</strong></span><span>Ganancia <strong>${money(tm.netGain, 'ARS')}</strong></span><span>% <strong>${sold ? pct(tm.gainPercent) : '—'}</strong></span><span>Mauro <strong>${money(tm.ownerGain, 'ARS')}</strong></span><span>Vendedor <strong>${money(tm.sellerGain, 'ARS')}</strong></span></div></div>
       </div>`;
     }).join('');
     return `<details class="resale-party" data-party-id="${escape(party.id)}"><summary><strong>${escape(party.name)}</strong><span>›</span></summary>
-      <div class="resale-party-meta">${party.date ? new Date(party.date + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin fecha'} · ${m.totalTickets} entradas</div>
+      <div class="resale-party-meta">${party.date ? new Date(party.date + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin fecha'} · ${integerText(m.totalTickets)} entradas</div>
       <div class="resale-metrics"><div><small>Costo recuperado</small><strong>${money(m.recovered,'ARS')}</strong></div><div><small>Ventas</small><strong>${money(m.sales,'ARS')}</strong></div><div class="metric-wide"><small>Ganancia neta</small><strong>${money(m.netGain,'ARS')}</strong><em>${pct(m.gainPercent)} general</em></div><div><small>Total Mauro</small><strong>${money(m.totalForOwner,'ARS')}</strong></div><div><small>Total vendedor</small><strong>${money(m.sellerGain,'ARS')}</strong></div></div>
       <div class="resale-tickets">${tickets}</div><button class="delete-party" type="button">Eliminar fiesta</button></details>`;
   }).join('');
+  bindLocalizedNumberInputs($('#resaleList'));
   document.querySelectorAll('.resale-ticket').forEach((row) => {
     const party = state.resale.parties.find((p) => p.id === row.dataset.partyId);
     const ticket = party?.tickets.find((t) => t.id === row.dataset.ticketId);
     if (!ticket) return;
     row.querySelector('.resale-status').onchange = (e) => { ticket.status = e.target.value; save(); renderResale(); };
-    row.querySelector('.resale-price').onchange = (e) => { ticket.salePrice = Number(e.target.value || 0); save(); renderResale(); };
+    row.querySelector('.resale-price').onchange = (e) => { ticket.salePrice = parseLocalizedNumber(e.target.value); save(); renderResale(); };
   });
   document.querySelectorAll('.resale-party').forEach((card) => {
     card.querySelector('.delete-party').onclick = () => {
@@ -1011,7 +1047,7 @@ document.addEventListener('click',(e)=>{const b=e.target.closest?.('[data-delete
 
 function recurringCardOptions(method,selected=''){const cards=state.cards.filter((c)=>c.type===method);return '<option value="">Elegí una tarjeta</option>'+cards.map((c)=>`<option value="${escape(c.name)}" ${c.name===selected?'selected':''}>${escape(c.name)}</option>`).join('');}
 function updateRecurringCardField(){const method=$('#recurringMethod').value;$('#recurringCardWrap').classList.toggle('hidden',method==='Efectivo');$('#recurringCard').innerHTML=recurringCardOptions(method,$('#recurringCard').value);}
-function openRecurringDialog(item=null){editingRecurringId=item?.id||null;$('#recurringForm').reset();$('#recurringTitle').textContent=item?'Editar recurrente':'Nuevo recurrente';$('#recurringConcept').value=item?.concept||'';$('#recurringAmount').value=item?.amount||'';$('#recurringCurrency').value=item?.currency||'ARS';fillRecurringCategoryOptions(item?.category||'');$('#recurringMethod').value=item?.method||'Efectivo';$('#recurringDay').value=item?.day||1;updateRecurringCardField();$('#recurringCard').value=item?.card||'';$('#recurringDialog').showModal();}
+function openRecurringDialog(item=null){editingRecurringId=item?.id||null;$('#recurringForm').reset();$('#recurringTitle').textContent=item?'Editar recurrente':'Nuevo recurrente';$('#recurringConcept').value=item?.concept||'';setLocalizedInput('#recurringAmount',item?.amount||'',2);$('#recurringCurrency').value=item?.currency||'ARS';fillRecurringCategoryOptions(item?.category||'');$('#recurringMethod').value=item?.method||'Efectivo';$('#recurringDay').value=item?.day||1;updateRecurringCardField();$('#recurringCard').value=item?.card||'';$('#recurringDialog').showModal();}
 function renderRecurringSettings(){if(!$('#recurringList'))return;$('#recurringList').innerHTML=state.recurring.length?state.recurring.map((r)=>`<article class="settings-item" data-recurring-id="${escape(r.id)}"><div><strong>${escape(r.concept)}</strong><small>${money(r.amount,r.currency)} · día ${r.day} · ${escape(r.method)}${r.card?' · '+escape(r.card):''}</small></div><div class="mini-actions"><button class="edit-recurring" type="button">Editar</button><button class="toggle-recurring" type="button">${r.active===false?'Activar':'Desactivar'}</button></div></article>`).join(''):'<div class="empty">No configuraste gastos recurrentes.</div>';document.querySelectorAll('[data-recurring-id]').forEach((row)=>{const r=state.recurring.find((x)=>x.id===row.dataset.recurringId);if(!r)return;row.querySelector('.edit-recurring').onclick=()=>openRecurringDialog(r);row.querySelector('.toggle-recurring').onclick=()=>{r.active=r.active===false?true:false;save();renderRecurringSettings();};});}
 function prepareRecurringDue(){const now=new Date(),key=monthKey(now),due=[];for(const r of state.recurring){if(r.active===false||Number(r.day||1)>now.getDate()||r.lastPromptedMonth===key)continue;due.push({id:uid(),amount:Number(r.amount),currency:r.currency,concept:r.concept,category:r.category||'',method:r.method,card:r.card||'',installments:1,date:now.toISOString(),purchaseDate:now.toISOString(),source:'recurring',recurringId:r.id});r.lastPromptedMonth=key;}if(due.length){pending.push(...due);save();showPending();}}
 
@@ -1110,10 +1146,10 @@ function renderStock() {
   const rows=state.stock.map((p)=>({p,m:stockMetrics(p)}));
   const totalRemaining=rows.reduce((s,x)=>s+x.m.remaining,0);
   const totalValue=rows.reduce((s,x)=>s+x.m.remainingValue,0);
-  $('#stockSummary').textContent=`${totalRemaining} unidades disponibles · ${money(totalValue,'ARS')} aprox.`;
+  $('#stockSummary').textContent=`${integerText(totalRemaining)} unidades disponibles · ${money(totalValue,'ARS')} aprox.`;
   $('#stockList').innerHTML=rows.length ? rows.map(({p,m})=>`<article class="stock-card" data-stock-id="${escape(p.id)}">
     <div class="stock-head"><div><strong>${escape(p.product)}</strong><small>${escape(p.category || 'Sin categoría')} · pagado ${new Date(p.paidDate+'T12:00:00').toLocaleDateString('es-AR')}</small></div><span class="stock-money">${p.currency==='USD' ? money(p.totalAmount,'USD') : money(p.totalAmount,'ARS')}</span></div>
-    <div class="stock-stats"><div><span>Comprado</span><strong>${m.qty}</strong></div><div><span>Consumido</span><strong>${m.consumed}</strong></div><div><span>Disponible</span><strong>${m.remaining}</strong></div></div>
+    <div class="stock-stats"><div><span>Comprado</span><strong>${numberText(m.qty)}</strong></div><div><span>Consumido</span><strong>${numberText(m.consumed)}</strong></div><div><span>Disponible</span><strong>${numberText(m.remaining)}</strong></div></div>
     <div class="stock-actions"><button class="consume">Consumir</button><button class="adjust">Ajustar</button></div></article>`).join('') : '<div class="empty">Todavía no cargaste compras de stock.</div>';
   document.querySelectorAll('.stock-card').forEach((card)=>{
     const p=state.stock.find((x)=>x.id===card.dataset.stockId);
@@ -1147,7 +1183,7 @@ function renderBudget() {
   if (!$('#budgetMonth')) return;
   const key=$('#budgetMonth').value || currentMonthKey();
   const entry=budgetFor(key), m=budgetMetrics(key);
-  if(document.activeElement !== $('#budgetAmount')) $('#budgetAmount').value=entry.amount || '';
+  if(document.activeElement !== $('#budgetAmount')) setLocalizedInput('#budgetAmount',entry.amount||'',2);
   if(document.activeElement !== $('#budgetReason')) $('#budgetReason').value=entry.reason || '';
   $('#budgetCurrent').textContent=money(m.budget,'ARS');
   $('#budgetSpent').textContent=money(m.spent,'ARS');
@@ -1184,7 +1220,7 @@ function renderConsultationFilters() {
 function consultationItems() {
   let from=$('#consultFrom').value ? new Date($('#consultFrom').value+'T00:00:00') : new Date('2000-01-01T00:00:00');
   let to=$('#consultTo').value ? new Date($('#consultTo').value+'T23:59:59') : new Date('2100-01-01T23:59:59');
-  const cat=$('#consultCategory').value, method=$('#consultMethod').value, currency=$('#consultCurrency').value, card=$('#consultCard').value, min=Number($('#consultMin').value||0);
+  const cat=$('#consultCategory').value, method=$('#consultMethod').value, currency=$('#consultCurrency').value, card=$('#consultCard').value, min=localizedInputNumber('#consultMin');
   return state.expenses.filter((e)=>{ const d=effectiveDate(e); const value=Number(e.amount||0); return d>=from&&d<=to&&(!cat||e.category===cat)&&(!method||e.method===method)&&(!currency||e.currency===currency)&&(!card||e.card===card)&&value>=min; });
 }
 
@@ -1348,14 +1384,14 @@ document.querySelectorAll('nav button').forEach((button) => { button.onclick = (
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
 $('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit+=5;renderHomeRecent();}; $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
 $('#nextStep').onclick = () => { if (manualStep === 1 && !$('#amount').value) return $('#amount').reportValidity(); setManualStep(manualStep + 1); }; $('#prevStep').onclick = () => setManualStep(manualStep - 1);
-$('#method').onchange = updatePaymentFields; $('#category').onchange = () => fillSubcategories(); $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = updateInstallmentPreview; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
+$('#method').onchange = updatePaymentFields; $('#category').onchange = () => fillSubcategories(); $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = ()=>{formatLocalizedInputElement($('#amount'));updateInstallmentPreview();}; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
 $('#expenseForm').onsubmit = async (event) => {
   event.preventDefault();
   const method=$('#method').value;
   if (!method) return showToast('Elegí el medio de pago');
   if (method !== 'Efectivo' && !$('#expenseCard').value) return showToast('Elegí una tarjeta configurada');
   const now=new Date().toISOString();
-  let expense={ id:crypto.randomUUID(), amount:Number($('#amount').value), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#subcategory')?.value || $('#category').value || 'Sin detalle', category:$('#category').value, subcategory:$('#subcategory')?.value || '', categoryStatus:$('#category').value?'manual':'unclassified', method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
+  let expense={ id:crypto.randomUUID(), amount:localizedInputNumber('#amount'), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#subcategory')?.value || $('#category').value || 'Sin detalle', category:$('#category').value, subcategory:$('#subcategory')?.value || '', categoryStatus:$('#category').value?'manual':'unclassified', method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
   expense=await stampUsdExpense(expense);
   state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render(); if(pending.length) setTimeout(showPending,180);
 };
@@ -1440,7 +1476,7 @@ $('#settingsBtn').onclick = () => {
 $('#resetExpensesBtn').onclick=()=>{
   const registered=recentPurchases(state.expenses).length;
   const trashed=(state.trash||[]).length;
-  $('#resetExpensesSummary').textContent=`Se eliminarán ${registered} gasto${registered===1?'':'s'} registrado${registered===1?'':'s'}${trashed?` y ${trashed} elemento${trashed===1?'':'s'} de la Papelera`:''}. Esta acción no se puede deshacer.`;
+  $('#resetExpensesSummary').textContent=`Se eliminarán ${integerText(registered)} gasto${registered===1?'':'s'} registrado${registered===1?'':'s'}${trashed?` y ${integerText(trashed)} elemento${trashed===1?'':'s'} de la Papelera`:''}. Esta acción no se puede deshacer.`;
   $('#resetExpensesDialog').showModal();
 };
 function closeResetExpensesDialog(){if($('#resetExpensesDialog').open)$('#resetExpensesDialog').close();}
@@ -1622,7 +1658,7 @@ $('#lockDialog').addEventListener('cancel',(e)=>e.preventDefault());
 $('#privacyBtn').onclick=()=>{state.settings.hideAmounts=!state.settings.hideAmounts;document.body.classList.toggle('hide-amounts',state.settings.hideAmounts);$('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁';save();};
 $('#addRecurring').onclick=()=>openRecurringDialog();
 $('#recurringMethod').onchange=updateRecurringCardField;
-$('#recurringForm').onsubmit=(e)=>{e.preventDefault();const data={concept:$('#recurringConcept').value.trim(),amount:Number($('#recurringAmount').value),currency:$('#recurringCurrency').value,category:$('#recurringCategory').value.trim(),method:$('#recurringMethod').value,card:$('#recurringMethod').value==='Efectivo'?'':$('#recurringCard').value,day:Number($('#recurringDay').value),active:true};if(data.method!=='Efectivo'&&!data.card)return showToast('Elegí una tarjeta');if(editingRecurringId){const r=state.recurring.find((x)=>x.id===editingRecurringId);if(r)Object.assign(r,data);}else state.recurring.push({id:uid(),...data,lastPromptedMonth:null});editingRecurringId=null;save();$('#recurringDialog').close();renderRecurringSettings();showToast('Gasto recurrente guardado');};
+$('#recurringForm').onsubmit=(e)=>{e.preventDefault();const data={concept:$('#recurringConcept').value.trim(),amount:localizedInputNumber('#recurringAmount'),currency:$('#recurringCurrency').value,category:$('#recurringCategory').value.trim(),method:$('#recurringMethod').value,card:$('#recurringMethod').value==='Efectivo'?'':$('#recurringCard').value,day:Number($('#recurringDay').value),active:true};if(data.method!=='Efectivo'&&!data.card)return showToast('Elegí una tarjeta');if(editingRecurringId){const r=state.recurring.find((x)=>x.id===editingRecurringId);if(r)Object.assign(r,data);}else state.recurring.push({id:uid(),...data,lastPromptedMonth:null});editingRecurringId=null;save();$('#recurringDialog').close();renderRecurringSettings();showToast('Gasto recurrente guardado');};
 $('#consultExportExcel').onclick=exportConsultExcel;
 $('#consultExportPdf').onclick=exportConsultPdf;
 
@@ -1636,7 +1672,7 @@ function syncStockPreset(selectId,inputId){
 function stockPresetValue(selectId,inputId){
   const select=$(selectId),input=$(inputId);
   if(!select)return 0;
-  const value=select.value==='manual'?Number(input?.value):Number(select.value);
+  const value=select.value==='manual'?parseLocalizedNumber(input?.value):Number(select.value);
   return Number.isFinite(value)&&value>=1?value:0;
 }
 $('#stockQtyPreset').onchange=()=>syncStockPreset('#stockQtyPreset','#stockQtyManual');
@@ -1668,7 +1704,7 @@ $('#stockForm').onsubmit=async(e)=>{
   const months=stockPresetValue('#stockMonthsPreset','#stockMonthsManual');
   if(!quantity)return showToast('Elegí o ingresá una cantidad válida');
   if(!months)return showToast('Elegí o ingresá los meses estimados');
-  await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),quantity,months,totalAmount:Number($('#stockAmount').value),currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});
+  await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),quantity,months,totalAmount:localizedInputNumber('#stockAmount'),currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});
   $('#stockDialog').close();renderStock();renderBudget();renderSavings();showToast('Compra de stock guardada');
 };
 bindHoldToTalk($('#stockVoiceBtn'),{
@@ -1680,11 +1716,11 @@ bindHoldToTalk($('#stockVoiceBtn'),{
 });
 
 $('#addRecovery').onclick=()=>{ $('#recoveryForm').reset(); $('#recoveryDate').value=new Date().toISOString().slice(0,10); $('#recoveryDialog').showModal(); };
-$('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:Number($('#recoveryAmount').value),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value};if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();renderRecoveries();showToast('Recupero guardado');};
+$('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:localizedInputNumber('#recoveryAmount'),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value};if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();renderRecoveries();showToast('Recupero guardado');};
 $('#recoveryMonth').onchange=renderRecoveries;
 
 $('#budgetMonth').onchange=renderBudget;
-$('#saveBudget').onclick=()=>{ const key=$('#budgetMonth').value||currentMonthKey(), amount=Number($('#budgetAmount').value||0), reason=$('#budgetReason').value.trim(); const current=budgetFor(key); const history=[...(current.history||[]),{date:new Date().toISOString(),amount,reason}]; state.budgets[key]={amount,reason,history}; save(); renderBudget(); renderSavings(); renderBudgetHomeAlert(); showToast('Presupuesto guardado'); };
+$('#saveBudget').onclick=()=>{ const key=$('#budgetMonth').value||currentMonthKey(), amount=localizedInputNumber('#budgetAmount'), reason=$('#budgetReason').value.trim(); const current=budgetFor(key); const history=[...(current.history||[]),{date:new Date().toISOString(),amount,reason}]; state.budgets[key]={amount,reason,history}; save(); renderBudget(); renderSavings(); renderBudgetHomeAlert(); showToast('Presupuesto guardado'); };
 $('#savingsYear').onchange=renderSavings;
 
 $('#runConsult').onclick=runConsultation;
@@ -1711,7 +1747,7 @@ $('#resalePartyForm').onsubmit = (event) => {
     date: $('#resalePartyDate').value,
     type: $('#resaleTicketType').value.trim(),
     qty: Number($('#resaleQty').value || 1),
-    cost: Number($('#resaleCost').value || 0)
+    cost: localizedInputNumber('#resaleCost')
   });
   save(); event.target.reset(); $('#resaleQty').value = 1; $('#resalePartyDialog').close(); renderResale(); showToast('Compra agregada');
 };
@@ -1731,4 +1767,5 @@ $('#exportResale').onclick = exportResaleCsv;
 
 window.addEventListener('pagehide',()=>{try{save();}catch{}}); document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){try{save();}catch{}}});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
+bindLocalizedNumberInputs();
 const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#consultFrom').value=todayISO.slice(0,8)+'01'; $('#consultTo').value=todayISO; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
