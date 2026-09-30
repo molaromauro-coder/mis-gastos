@@ -342,3 +342,19 @@ img,svg,canvas,video{
     grid-template-columns:minmax(0,75px) minmax(0,1fr) auto;
   }
 }
+
+
+/* Informes: selector Barras / Torta */
+.report-chart-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:22px}
+.report-chart-head .report-section-title{margin:0}
+.report-chart-toggle{display:flex;background:#e7edf1;border-radius:11px;padding:3px;gap:2px}
+.report-chart-toggle button{border:0;background:transparent;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:800;color:#6f8291}
+.report-chart-toggle button.selected{background:#fff;color:#244b70;box-shadow:0 2px 7px #0001}
+.report-chart-pie{display:grid;gap:16px}
+.report-pie{width:min(210px,70vw);aspect-ratio:1;border-radius:50%;margin:4px auto;position:relative}
+.report-pie:after{content:"";position:absolute;inset:29%;border-radius:50%;background:#fff}
+.report-pie-legend{display:grid;gap:7px}
+.report-pie-legend>div{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:11px}
+.report-pie-legend>div>span:first-child{display:flex;align-items:center;gap:7px;min-width:0}
+.report-pie-legend i{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}
+.report-pie-legend strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
