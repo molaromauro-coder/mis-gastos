@@ -395,3 +395,6 @@ img,svg,canvas,video{
 .home-month-net strong{font-size:19px;color:#173f37}
 .home-month-net span{font-size:13px;font-weight:700}
 .home-month-net>div:not(:first-child){display:grid;gap:3px}
+
+.resale-import-manual{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;padding:10px;background:#f0f7f3;border-radius:12px}
+.resale-import-manual label{font-size:11px;font-weight:700}
