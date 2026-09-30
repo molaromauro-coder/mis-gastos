@@ -25,7 +25,7 @@ function phraseMentioned(text,phrase){
   let at=-1;
   for(const word of target){
     const next=hay.indexOf(word,at+1);
-    if(next<0||next-at>4)return false;
+    if(next<0||(at>=0&&next-at>4))return false;
     at=next;
   }
   return true;
