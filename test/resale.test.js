@@ -16,6 +16,17 @@ test('entrada vendida recupera costo, calcula ganancia y reparto', () => {
   assert.ok(Math.abs(m.gainPercent - 164.65028355387523) < 1e-9);
 });
 
+
+test('entrada marcada vendida sin precio no genera recupero ni pérdida ficticia', () => {
+  const m = ticketMetrics({ cost: 26450, salePrice: 0, status: 'Vendida' }, { ownerPercent: 70, sellerPercent: 30 });
+  assert.equal(m.salePrice, 0);
+  assert.equal(m.recovered, 0);
+  assert.equal(m.netGain, 0);
+  assert.equal(m.ownerGain, 0);
+  assert.equal(m.sellerGain, 0);
+  assert.equal(m.gainPercent, 0);
+});
+
 test('disponible y uso personal no generan recupero ni ganancia', () => {
   for (const status of ['Disponible', 'Uso personal']) {
     const m = ticketMetrics({ cost: 80500, salePrice: 100000, status }, { ownerPercent: 70, sellerPercent: 30 });
