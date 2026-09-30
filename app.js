@@ -78,13 +78,20 @@ const escape = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;'
 const effectiveDate = (e) => new Date(e.dueDate || e.date);
 document.querySelectorAll('dialog .close').forEach((button)=>{button.textContent='←';button.setAttribute('aria-label','Volver');button.classList.add('back-button');});
 let previousViewId='home';
+const menuViewIds=new Set([...document.querySelectorAll('[data-menu-view]')].map((button)=>button.dataset.menuView).filter(Boolean));
+function returnToMainMenu(){
+  goView('home');
+  setTimeout(()=>{
+    const menu=$('#menuDialog');
+    if(menu&&!menu.open)menu.showModal();
+  },0);
+}
 document.addEventListener('click',(event)=>{
   const trigger=event.target.closest?.('[data-menu-view],[data-view]');
   if(!trigger)return;
   const destination=trigger.dataset.menuView||trigger.dataset.view;
   const current=document.querySelector('.view.active')?.id||'home';
-  if(trigger.dataset.menuView&&destination)previousViewId='menu';
-  else if(destination&&destination!==current)previousViewId=current;
+  if(!trigger.dataset.menuView&&destination&&destination!==current)previousViewId=current;
   if(destination==='cards'){activeCardType='';setTimeout(renderCards,0);}
 },true);
 document.querySelectorAll('main > .view:not(#home)').forEach((view)=>{
@@ -92,9 +99,8 @@ document.querySelectorAll('main > .view:not(#home)').forEach((view)=>{
   const button=document.createElement('button');
   button.type='button';button.className='view-back';button.textContent='← Atrás';button.setAttribute('aria-label','Volver a la pantalla anterior');
   button.onclick=()=>{
-    if(previousViewId==='menu'){
-      goView('home');
-      setTimeout(()=>$('#menuDialog')?.showModal(),0);
+    if(menuViewIds.has(view.id)){
+      returnToMainMenu();
       return;
     }
     goView(previousViewId||'home');
