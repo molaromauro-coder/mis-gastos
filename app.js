@@ -4,6 +4,7 @@ import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonth
 import { learnCategoryRule, applyLearnedCategory } from './category-learning.js';
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
+import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 const resaleApi = sharedMode ? null : await import('./resale.js');
 const normalizeSplit = resaleApi?.normalizeSplit;
@@ -575,7 +576,7 @@ function softTapFeedback(){
 }
 document.addEventListener('pointerdown',(event)=>{const button=event.target.closest?.('button');if(!button||button.disabled)return;softTapFeedback();},{passive:true});
 function setManualStep(step) { manualStep = step; document.querySelectorAll('.step').forEach((e) => e.classList.toggle('active', Number(e.dataset.step) === step)); $('#stepLabel').textContent = `PASO ${step} DE 3`; $('#expenseDialogTitle').textContent = ['¿Cuánto gastaste?', 'Elegí una categoría', '¿Cómo pagaste?'][step - 1]; $('#prevStep').classList.toggle('hidden', step === 1); $('#nextStep').classList.toggle('hidden', step === 3); $('#saveExpense').classList.toggle('hidden', step !== 3); }
-function openExpense(data = {}) { $('#expenseForm').reset(); setLocalizedInput('#amount',data.amount||'',2); $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; const voiceNeedsMethod=data.source==='voice'&&data.method==='Sin definir'; $('#method').value = voiceNeedsMethod ? '' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; fillSubcategories(data.subcategory || ''); const firstMissingStep=!Number(data.amount)?1:(!data.category&&data.categoryStatus==='unclassified'?2:(voiceNeedsMethod?3:1)); setManualStep(firstMissingStep); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
+function openExpense(data = {}) { $('#expenseForm').reset(); setLocalizedInput('#amount',data.amount||'',2); $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; const voiceNeedsMethod=data.source==='voice'&&needsPaymentMethod(data); $('#method').value = voiceNeedsMethod ? '' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; fillSubcategories(data.subcategory || ''); const firstMissingStep=!Number(data.amount)?1:(!data.category&&data.categoryStatus==='unclassified'?2:(voiceNeedsMethod?3:1)); setManualStep(firstMissingStep); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
 function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', !method || method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
 function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value && c.type === $('#method').value), count = Number($('#installments').value || 1), amount = localizedInputNumber('#amount'); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${integerText(count)} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${integerText(card.dueDay)} de cada mes.</span>`; }
 function pendingCreditDetail(e){
@@ -608,9 +609,9 @@ function pendingSubcategoryPrompt(e,i){
   return `<div class="pending-subcategory-choice"><label>Subcategoría (opcional)<select class="pending-subcategory-select" data-index="${i}"><option value="">Sin subcategoría</option>${values.map((value)=>`<option value="${escape(value)}" ${e.subcategory===value?'selected':''}>${escape(value)}</option>`).join('')}</select></label></div>`;
 }
 function pendingPaymentPrompt(e,i){
-  const needsMethod=e.method==='Sin definir';
-  const needsCard=['Débito','Crédito'].includes(e.method)&&!e.card;
-  const needsInstallments=e.method==='Crédito'&&e.installmentsSpecified===false;
+  const needsMethod=needsPaymentMethod(e);
+  const needsCard=needsPaymentCard(e);
+  const needsInstallments=needsPaymentInstallments(e);
   if(needsMethod){
     return `<div class="pending-payment-question"><strong>¿Con qué pagaste?</strong><div class="pending-payment-actions"><button type="button" data-pending-method="Efectivo" data-index="${i}">Efectivo</button><button type="button" data-pending-method="Débito" data-index="${i}">Débito</button><button type="button" data-pending-method="Crédito" data-index="${i}">Crédito</button><button type="button" class="voice-pay" data-pending-pay-voice="${i}">🎙 Mantener para responder</button></div></div>`;
   }
@@ -679,7 +680,7 @@ function applyPendingPaymentVoice(index,phrase){
   const explicit=[...spoken.matchAll(/\b(efectivo|debito|credito)\b/g)];
   const explicitMethod=explicit.length?({efectivo:'Efectivo',debito:'Débito',credito:'Crédito'}[explicit.at(-1)[1]]):'';
   const mentionsPayment=namedAll.length>0 || explicit.length>0 || /\bcuotas?\b/.test(spoken);
-  let method=item.method;
+  let method=needsPaymentMethod(item)?'Sin definir':item.method;
   if(explicitMethod) method=explicitMethod;
   else if(/\bcuotas?\b/.test(spoken)) method='Crédito';
   else if(namedAll.length) method='Débito';
@@ -816,9 +817,9 @@ function stopPendingPaymentVoice(){
 function showPending() {
   if (!pending.length) { if ($('#confirmDialog').open) $('#confirmDialog').close(); return; }
   $('#pendingList').innerHTML = pending.map((e, i) => {
-    const needsMethod=e.method==='Sin definir';
-    const needsCard=['Débito','Crédito'].includes(e.method)&&!e.card;
-    const needsInstallments=e.method==='Crédito'&&e.installmentsSpecified===false;
+    const needsMethod=needsPaymentMethod(e);
+    const needsCard=needsPaymentCard(e);
+    const needsInstallments=needsPaymentInstallments(e);
     const needsDate=!!e.dateAmbiguous;
     const needsCategory=!e.category;
     const methodLabel=needsMethod?'Medio de pago pendiente':e.method;
@@ -828,7 +829,7 @@ function showPending() {
     const categoryLabel=needsCategory?'Sin clasificar':e.category;
     const meta=[whenLabel,categoryLabel,methodLabel,e.card,installmentLabel].filter(Boolean).join(' · ');
     const incomplete=!e.amount||needsMethod||needsCard||needsInstallments||needsDate;
-    return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape(meta)}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingAmountPrompt(e,i)}${pendingCategoryPrompt(e,i)}${pendingSubcategoryPrompt(e,i)}${pendingCreditDetail(e)}${pendingDatePrompt(e,i)}${pendingPaymentPrompt(e,i)}<div class="actions"><button class="edit">${incomplete?'✎ Corregir / completar':'Corregir'}</button><button class="confirm" ${incomplete ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
+    return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape(meta)}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingAmountPrompt(e,i)}${pendingDatePrompt(e,i)}${pendingPaymentPrompt(e,i)}${pendingCategoryPrompt(e,i)}${pendingSubcategoryPrompt(e,i)}${pendingCreditDetail(e)}<div class="actions"><button class="edit">${incomplete?'✎ Corregir / completar':'Corregir'}</button><button class="confirm" ${incomplete ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
   }).join('');
   if (!$('#confirmDialog').open) $('#confirmDialog').showModal();
   document.querySelectorAll('[data-pending-method]').forEach((button)=>{
@@ -1375,7 +1376,7 @@ async function confirmPending(index, card) {
   const current=pending[index]; if(!current)return;
   if(!Number(current.amount))return showToast('Completá cuánto pagaste antes de confirmar');
   if(current.dateAmbiguous)return showToast('AclarÁ la fecha antes de confirmar');
-  if(current.method==='Sin definir')return showToast('Elegí o decí con qué pagaste');
+  if(needsPaymentMethod(current))return showToast('Elegí o decí con qué pagaste');
   if(['Débito','Crédito'].includes(current.method)&&!current.card)return showToast('Elegí o decí qué tarjeta o cuenta usaste');
   if(current.method==='Crédito'&&current.installmentsSpecified===false)return showToast('Elegí en cuántas cuotas pagaste');
   if(current.learnCategory&&current.category)learnFromExpense(current,current.category,current.subcategory||'');
