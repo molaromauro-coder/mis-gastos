@@ -1502,37 +1502,132 @@ function renderSavings() {
 
 function renderConsultationFilters() {
   if (!$('#consultCategory')) return;
-  const category=$('#consultCategory').value, card=$('#consultCard').value;
-  $('#consultCategory').innerHTML='<option value="">Todas</option>'+state.categories.map((c)=>`<option ${c===category?'selected':''}>${escape(c)}</option>`).join('');
-  $('#consultCard').innerHTML='<option value="">Todas</option>'+state.cards.map((c)=>`<option ${c.name===card?'selected':''}>${escape(c.name)}</option>`).join('');
+  const category=$('#consultCategory').value, subcategory=$('#consultSubcategory')?.value||'', card=$('#consultCard').value;
+  $('#consultCategory').innerHTML='<option value="">Todas</option>'+state.categories.map((c)=>`<option value="${escape(c)}" ${c===category?'selected':''}>${escape(c)}</option>`).join('');
+  const subValues=category?subcategoriesFor(category):[];
+  if($('#consultSubcategory')){
+    $('#consultSubcategory').innerHTML='<option value="">Todas</option>'+subValues.map((s)=>`<option value="${escape(s)}" ${s===subcategory?'selected':''}>${escape(s)}</option>`).join('');
+    $('#consultSubcategory').disabled=!category;
+  }
+  $('#consultCard').innerHTML='<option value="">Todas</option>'+state.cards.map((c)=>`<option value="${escape(c.name)}" ${c.name===card?'selected':''}>${escape(c.name)}</option>`).join('');
 }
-
-function consultationItems() {
-  let from=$('#consultFrom').value ? new Date($('#consultFrom').value+'T00:00:00') : new Date('2000-01-01T00:00:00');
-  let to=$('#consultTo').value ? new Date($('#consultTo').value+'T23:59:59') : new Date('2100-01-01T23:59:59');
-  const cat=$('#consultCategory').value, method=$('#consultMethod').value, currency=$('#consultCurrency').value, card=$('#consultCard').value, min=localizedInputNumber('#consultMin');
-  return state.expenses.filter((e)=>{ const d=effectiveDate(e); const value=Number(e.amount||0); return d>=from&&d<=to&&(!cat||e.category===cat)&&(!method||e.method===method)&&(!currency||e.currency===currency)&&(!card||e.card===card)&&value>=min; });
+function globalSearchRows(){
+  const expenses=state.expenses.map((e)=>({
+    type:e.source==='fixed'?'Pago de gasto fijo':'Gasto / pago',
+    date:new Date(e.purchaseDate||e.date),
+    concept:e.concept||'Sin detalle',
+    category:e.category||'',
+    subcategory:e.subcategory||'',
+    method:e.method||'',
+    card:e.card||'',
+    currency:e.currency||'ARS',
+    amount:Number(e.amount||0),
+    arsEquivalent:expenseArsEquivalent(e),
+    raw:e
+  }));
+  const stock=state.stock.map((p)=>({
+    type:'Compra',
+    date:new Date((p.paidDate||new Date().toISOString().slice(0,10))+'T12:00:00'),
+    concept:p.product||'Compra de stock',
+    category:p.category||'',
+    subcategory:p.subcategory||'',
+    method:p.method||'',
+    card:p.card||'',
+    currency:p.currency||'ARS',
+    amount:Number(p.totalAmount||0),
+    arsEquivalent:p.currency==='USD'?Number(p.totalAmount||0)*Number(p.fxRate||0):Number(p.totalAmount||0),
+    raw:p
+  }));
+  const recoveries=state.recoveries.map((r)=>({
+    type:'Recupero de gasto',
+    date:new Date((r.date||new Date().toISOString().slice(0,10))+'T12:00:00'),
+    concept:r.concept||'Recupero',
+    category:r.category||'',
+    subcategory:r.subcategory||'',
+    method:'',
+    card:'',
+    currency:r.currency||'ARS',
+    amount:Number(r.amount||0),
+    arsEquivalent:r.currency==='USD'?Number(r.amount||0)*Number(r.fxRate||0):Number(r.amount||0),
+    raw:r
+  }));
+  return [...expenses,...stock,...recoveries];
 }
-
 function applyNaturalConsultation(text) {
-  const q=text.toLowerCase(), now=new Date(), today=now.toISOString().slice(0,10);
+  const q=String(text||'').toLowerCase(), now=new Date(), today=now.toISOString().slice(0,10);
   if(q.includes('este mes')){ $('#consultFrom').value=`${today.slice(0,8)}01`; $('#consultTo').value=today; }
+  if(q.includes('mes pasado')){ const d=new Date(now.getFullYear(),now.getMonth()-1,1), last=new Date(now.getFullYear(),now.getMonth(),0); $('#consultFrom').value=d.toISOString().slice(0,10); $('#consultTo').value=last.toISOString().slice(0,10); }
   if(q.includes('hoy')){ $('#consultFrom').value=today; $('#consultTo').value=today; }
   if(q.includes('dólar')||q.includes('dolar')) $('#consultCurrency').value='USD';
   if(q.includes('efectivo')) $('#consultMethod').value='Efectivo';
   if(q.includes('débito')||q.includes('debito')) $('#consultMethod').value='Débito';
   if(q.includes('crédito')||q.includes('credito')) $('#consultMethod').value='Crédito';
-  const category=state.categories.find((c)=>q.includes(c.toLowerCase())); if(category) $('#consultCategory').value=category;
+  const category=state.categories.find((c)=>q.includes(c.toLowerCase()));
+  if(category){ $('#consultCategory').value=category; renderConsultationFilters(); }
+  const subs=(category?subcategoriesFor(category):Object.values(state.subcategories||{}).flat()).slice().sort((a,b)=>b.length-a.length);
+  const sub=subs.find((s)=>q.includes(String(s).toLowerCase()));
+  if(sub&&$('#consultSubcategory'))$('#consultSubcategory').value=sub;
   const card=state.cards.find((c)=>q.includes(c.name.toLowerCase())); if(card) $('#consultCard').value=card.name;
 }
-
+function consultationRows() {
+  const from=$('#consultFrom').value ? new Date($('#consultFrom').value+'T00:00:00') : new Date('2000-01-01T00:00:00');
+  const to=$('#consultTo').value ? new Date($('#consultTo').value+'T23:59:59') : new Date('2100-01-01T23:59:59');
+  const cat=$('#consultCategory').value, sub=$('#consultSubcategory')?.value||'', method=$('#consultMethod').value, currency=$('#consultCurrency').value, card=$('#consultCard').value;
+  const min=localizedInputNumber('#consultMin'), exact=localizedInputNumber('#consultAmount');
+  const query=String($('#consultQuery').value||'').toLowerCase().trim();
+  const generic=/^(|.*\b(cuanto|cuánto|gaste|gasté|gasto|gastos|pague|pagué|pago|pagos|compra|compras|recupero|recuperos|este mes|mes pasado|hoy|en|de|por|con|que|qué|cuál|cual)\b.*)$/i.test(query);
+  return globalSearchRows().filter((row)=>{
+    if(!(row.date>=from&&row.date<=to))return false;
+    if(cat&&row.category!==cat)return false;
+    if(sub&&row.subcategory!==sub)return false;
+    if(method&&row.method!==method)return false;
+    if(currency&&row.currency!==currency)return false;
+    if(card&&row.card!==card)return false;
+    if(Number.isFinite(min)&&min>0&&row.arsEquivalent<min)return false;
+    if(Number.isFinite(exact)&&exact>0&&Math.abs(row.arsEquivalent-exact)>0.01)return false;
+    if(query&&!generic){
+      const haystack=[row.type,row.concept,row.category,row.subcategory,row.method,row.card].join(' ').toLowerCase();
+      const tokens=query.replace(/[^a-záéíóúüñ0-9 ]/gi,' ').split(/\s+/).filter((t)=>t.length>2);
+      if(tokens.length&&!tokens.every((token)=>haystack.includes(token)))return false;
+    }
+    return true;
+  });
+}
+function renderConsultationRow(row){
+  return `<article class="search-result-card"><div><span class="search-result-type">${escape(row.type)}</span><strong>${escape(row.concept)}</strong><small>${row.date.toLocaleDateString('es-AR')} · ${escape([row.category,row.subcategory].filter(Boolean).join(' · ')||'Sin categoría')}${row.method?' · '+escape(row.method):''}</small></div><strong>${money(row.amount,row.currency)}</strong></article>`;
+}
+function renderFixedPendingConsultation(){
+  const key=monthKey(new Date());
+  const items=fixedExpensePendingForMonth(key);
+  $('#consultArs').textContent=money(0,'ARS'); $('#consultUsd').textContent=money(0,'USD'); $('#consultEquivalent').textContent=money(0,'ARS');
+  $('#consultAnswer').textContent=items.length?`Tenés ${integerText(items.length)} gasto${items.length===1?'':'s'} fijo${items.length===1?'':'s'} pendiente${items.length===1?'':'s'} de pago este mes.`:'No tenés gastos fijos pendientes de pago este mes.';
+  $('#consultResults').innerHTML=items.length?items.map((item)=>{
+    const previous=fixedExpensePreviousAmount(item,key);
+    return `<article class="search-result-card fixed-pending-search" data-consult-fixed-id="${escape(item.id)}"><div><span class="search-result-type">Gasto fijo pendiente</span><strong>${escape(item.concept)}</strong><small>Día habitual ${integerText(item.day||1)}${previous?' · Mes anterior '+money(previous,item.currency):' · Sin importe anterior'}</small></div><button type="button">Registrar pago</button></article>`;
+  }).join(''):'<div class="empty">Todo al día.</div>';
+  document.querySelectorAll('[data-consult-fixed-id]').forEach((row)=>{
+    const item=state.fixedExpenses.find((x)=>x.id===row.dataset.consultFixedId);
+    row.querySelector('button').onclick=()=>item&&openFixedExpensePayment(item,key);
+  });
+  return items;
+}
 function runConsultation() {
-  applyNaturalConsultation($('#consultQuery').value);
-  const items=consultationItems(), [ars,usd]=totals(items), eq=items.reduce((s,e)=>s+expenseArsEquivalent(e),0);
+  const query=String($('#consultQuery').value||'');
+  if(/gastos?\s+fijos?.*pendient|pendient.*gastos?\s+fijos?/i.test(query)){
+    const items=renderFixedPendingConsultation();
+    if($('#consultSpeak').checked&&'speechSynthesis' in window){speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance($('#consultAnswer').textContent));}
+    return items;
+  }
+  applyNaturalConsultation(query);
+  renderConsultationFilters();
+  const rows=consultationRows();
+  const ars=rows.filter((r)=>r.currency==='ARS').reduce((s,r)=>s+r.amount,0);
+  const usd=rows.filter((r)=>r.currency==='USD').reduce((s,r)=>s+r.amount,0);
+  const eq=rows.reduce((s,r)=>s+r.arsEquivalent,0);
   $('#consultArs').textContent=money(ars,'ARS'); $('#consultUsd').textContent=money(usd,'USD'); $('#consultEquivalent').textContent=money(eq,'ARS');
-  const answer=`Encontré ${integerText(items.length)} movimiento${items.length===1?'':'s'}. Total: ${money(ars,'ARS')}${usd ? ' y '+money(usd,'USD') : ''}.`;
+  const answer=`Encontré ${integerText(rows.length)} movimiento${rows.length===1?'':'s'}. Equivalente total: ${money(eq,'ARS')}.`;
   $('#consultAnswer').textContent=answer;
-  $('#consultResults').innerHTML=items.length ? items.sort((a,b)=>effectiveDate(b)-effectiveDate(a)).map((e)=>expenseHTML(e,true)).join('') : '<div class="empty">No encontré movimientos con esos filtros.</div>';
+  $('#consultResults').innerHTML=rows.length?rows.sort((a,b)=>b.date-a.date).map(renderConsultationRow).join(''):'<div class="empty">No encontré movimientos con esos filtros.</div>';
   if($('#consultSpeak').checked && 'speechSynthesis' in window){ speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(answer)); }
 }
 
