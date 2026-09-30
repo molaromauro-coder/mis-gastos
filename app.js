@@ -37,6 +37,41 @@ function seedDemoCardsOnce(){
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
 }
 seedDemoCardsOnce();
+
+const DEMO_CATEGORY_SEED_VERSION = 1;
+const DEMO_CATEGORIES = {
+  'Alimentación': ['Supermercado','Kiosco','Restaurante','Delivery','Café'],
+  'Transporte': ['Combustible','Peajes','Estacionamiento','Taxi / Uber','Transporte público'],
+  'Hogar': ['Alquiler','Expensas','Electricidad','Gas','Internet','Limpieza'],
+  'Salud': ['Farmacia','Médico','Odontología','Gimnasio'],
+  'Entretenimiento': ['Salidas','Streaming','Cine / Teatro','Eventos'],
+  'Compras': ['Ropa','Tecnología','Regalos','Artículos para el hogar'],
+  'Trabajo': ['Insumos','Herramientas','Comidas laborales','Traslados'],
+  'Educación': ['Cursos','Libros','Suscripciones'],
+  'Viajes': ['Alojamiento','Pasajes','Comidas','Actividades'],
+  'Mascotas': ['Alimento','Veterinaria','Accesorios'],
+  'Servicios personales': ['Peluquería','Cuidado personal'],
+  'Impuestos y tasas': ['Impuestos','Tasas','Monotributo'],
+  'Otros': ['Varios']
+};
+function seedDemoCategoriesOnce(){
+  if(Number(state.settings?.demoCategoriesSeedVersion||0)>=DEMO_CATEGORY_SEED_VERSION)return;
+  if(!Array.isArray(state.categories))state.categories=[];
+  if(!state.subcategories||typeof state.subcategories!=='object')state.subcategories={};
+  Object.entries(DEMO_CATEGORIES).forEach(([category,subs])=>{
+    let actual=state.categories.find((value)=>String(value).trim().toLowerCase()===category.toLowerCase());
+    if(!actual){actual=category;state.categories.push(actual);}
+    const current=Array.isArray(state.subcategories[actual])?[...state.subcategories[actual]]:[];
+    subs.forEach((sub)=>{
+      if(!current.some((value)=>String(value).trim().toLowerCase()===sub.toLowerCase()))current.push(sub);
+    });
+    state.subcategories[actual]=current;
+  });
+  state.settings={...state.settings,demoCategoriesSeedVersion:DEMO_CATEGORY_SEED_VERSION};
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+}
+seedDemoCategoriesOnce();
+
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
 let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
 const $ = (s) => document.querySelector(s);
@@ -155,16 +190,40 @@ function renderUnclassified(){
   target.innerHTML=items.length?items.map((e)=>{
     const key=escape(expenseGroupKey(e));
     const categoryOptions=state.categories.map((category)=>`<option value="${escape(category)}">${escape(category)}</option>`).join('');
-    return `<article class="unclassified-item" data-unclassified-id="${key}"><div class="unclassified-head"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${new Date(e.purchaseDate||e.date).toLocaleDateString('es-AR')} · ${money(purchaseAmount(e),e.currency)}</small></div><span>Sin clasificar</span></div><label>Categoría<select class="unclassified-category"><option value="">Elegí categoría</option>${categoryOptions}</select></label><label>Subcategoría<select class="unclassified-subcategory" disabled><option value="">Sin subcategoría</option></select></label><button type="button" class="primary unclassified-save">Guardar y aprender</button></article>`;
+    return `<article class="unclassified-item" data-unclassified-id="${key}"><div class="unclassified-head"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${new Date(e.purchaseDate||e.date).toLocaleDateString('es-AR')} · ${money(purchaseAmount(e),e.currency)}</small></div><span>Sin clasificar</span></div><label>Categoría<select class="unclassified-category"><option value="">Elegí categoría</option>${categoryOptions}</select></label><button type="button" class="category-create-button unclassified-add-category">＋ Agregar categoría</button><div class="unclassified-subcategory-wrap hidden"><label>Subcategoría<select class="unclassified-subcategory"><option value="">Sin subcategoría</option></select></label><button type="button" class="category-create-button unclassified-add-subcategory">＋ Agregar subcategoría</button></div><button type="button" class="primary unclassified-save">Guardar y aprender</button></article>`;
   }).join(''):'<div class="empty">No tenés compras sin clasificar.</div>';
   document.querySelectorAll('.unclassified-item').forEach((row)=>{
     const item=items.find((e)=>expenseGroupKey(e)===row.dataset.unclassifiedId);if(!item)return;
     const categorySelect=row.querySelector('.unclassified-category');
+    const subWrap=row.querySelector('.unclassified-subcategory-wrap');
     const subSelect=row.querySelector('.unclassified-subcategory');
-    categorySelect.onchange=()=>{
+    const refreshSubcategories=(selected='')=>{
       const values=subcategoriesFor(categorySelect.value);
-      subSelect.disabled=!categorySelect.value;
+      subWrap.classList.toggle('hidden',!categorySelect.value);
       subSelect.innerHTML='<option value="">Sin subcategoría</option>'+values.map((value)=>`<option value="${escape(value)}">${escape(value)}</option>`).join('');
+      if(selected&&values.includes(selected))subSelect.value=selected;
+    };
+    categorySelect.onchange=()=>refreshSubcategories();
+    row.querySelector('.unclassified-add-category').onclick=()=>{
+      const value=prompt('Nombre de la nueva categoría:')?.trim();
+      if(!value)return;
+      const category=createCategoryEverywhere(value);
+      if(!category)return;
+      renderUnclassified();
+      const updated=[...document.querySelectorAll('.unclassified-item')].find((card)=>card.dataset.unclassifiedId===row.dataset.unclassifiedId);
+      const select=updated?.querySelector('.unclassified-category');
+      if(select){select.value=category;select.dispatchEvent(new Event('change'));}
+    };
+    row.querySelector('.unclassified-add-subcategory').onclick=()=>{
+      const category=categorySelect.value;if(!category)return;
+      const value=prompt(`Nueva subcategoría dentro de ${category}:`)?.trim();
+      if(!value)return;
+      if(!addSubcategory(category,value)){
+        const existing=subcategoriesFor(category).find((sub)=>sub.toLowerCase()===value.toLowerCase());
+        if(existing)return refreshSubcategories(existing);
+        return showToast('Esa subcategoría ya existe');
+      }
+      refreshSubcategories(value);
     };
     row.querySelector('.unclassified-save').onclick=()=>{
       if(!categorySelect.value)return showToast('Elegí una categoría');
