@@ -232,3 +232,11 @@ dialog{
   body{position:static;overflow:auto}
   .app{height:calc(100dvh - 40px);max-height:calc(100dvh - 40px)}
 }
+
+
+/* Reseteo por período */
+.reset-options{display:grid;grid-template-columns:1fr;gap:9px;margin-top:12px}
+.danger-outline{background:transparent!important;color:var(--red)!important;border:1px solid rgba(187,75,69,.4)!important}
+.danger-confirm:disabled,.danger-button:disabled{opacity:.45;cursor:not-allowed}
+.permanent-warning{line-height:1.5}
+.permanent-warning strong{color:var(--red)}
