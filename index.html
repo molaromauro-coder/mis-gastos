@@ -1,4 +1,4 @@
-<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#eaf4ff"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Mis Gastos"><title>Mis Gastos</title><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><link rel="icon" href="icons/apple-touch-icon.png"><link rel="stylesheet" href="styles.css?v=72"></head>
+<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#eaf4ff"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Mis Gastos"><title>Mis Gastos</title><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><link rel="icon" href="icons/apple-touch-icon.png"><link rel="stylesheet" href="styles.css?v=73"></head>
 <body><div class="app"><header class="home-header"><div><small id="homeDate">Sáb, 26 de septiembre</small><h1>Mis Gastos</h1></div><div class="header-actions"><button class="icon-btn" id="globalSearchBtn" aria-label="Buscar en Mis Gastos">🔍</button><button class="icon-btn" id="settingsBtn" aria-label="Configuración">⚙</button></div></header><main>
 <section id="home" class="view active">
 <div class="today-card">
@@ -57,6 +57,10 @@
   <p class="muted">El concepto se repite todos los meses, pero el importe puede cambiar. Al registrar el pago podés usar como referencia el importe del mes anterior.</p>
   <div class="fixed-expense-month"><label>Mes<input id="fixedExpenseMonth" type="month"></label></div>
   <div id="fixedExpenseSummary" class="notice"></div>
+  <div id="fixedExpenseOrderTools" class="fixed-expense-order-tools hidden">
+    <div><strong>Ordenar lista</strong><small id="fixedExpenseOrderSelected">Seleccioná un gasto para moverlo</small></div>
+    <div><button id="fixedMoveUp" type="button" disabled>↑ Subir</button><button id="fixedMoveDown" type="button" disabled>↓ Bajar</button></div>
+  </div>
   <div id="fixedExpenseList" class="module-list"></div>
 </section>
 
@@ -163,4 +167,4 @@
 <dialog id="recoveryDialog"><form id="recoveryForm"><div class="dialog-head"><div><small>NUEVO RECUPERO</small><h2>Registrar dinero recuperado</h2></div><button type="button" class="close">×</button></div>
 <div class="form-row"><label>Importe<input id="recoveryAmount" type="text" inputmode="decimal" data-local-number="2" required></label><label>Moneda<select id="recoveryCurrency"><option>ARS</option><option>USD</option></select></label></div>
 <label>Concepto / nota<input id="recoveryConcept" placeholder="Ej. Comida con Juan"></label><label>Fecha<input id="recoveryDate" type="date" required></label><button class="primary">Guardar recupero</button></form></dialog>
-<div id="toast" class="toast" role="status"></div><script type="module" src="app.js?v=72"></script></body></html>
+<div id="toast" class="toast" role="status"></div><script type="module" src="app.js?v=73"></script></body></html>
