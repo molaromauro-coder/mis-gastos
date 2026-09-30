@@ -387,3 +387,23 @@ test('reconoce efectivo aunque se diga antes del monto',()=>{
   assert.equal(item.card,'');
   assert.match(item.concept,/caramelos/i);
 });
+
+test('voz: seguro de auto con Brubank reconoce subcategoría y débito',()=>{
+  const cards=[{name:'Brubank',type:'Débito'}];
+  const options={subcategories:{'GASTOS FIJOS':['LUZ','GAS','SEGURO AUTO','SEGURO MOTO']}};
+  const e=parseExpense('Pagué 150 mil pesos de seguro de auto con Brubank',cards,['GASTOS FIJOS'],options);
+  assert.equal(e.amount,150000);
+  assert.equal(e.category,'GASTOS FIJOS');
+  assert.equal(e.subcategory,'SEGURO AUTO');
+  assert.equal(e.method,'Débito');
+  assert.equal(e.card,'Brubank');
+});
+
+test('voz: tolera que iPhone transcriba Brubank como Pro Bank',()=>{
+  const cards=[{name:'Brubank',type:'Débito'}];
+  const options={subcategories:{'GASTOS FIJOS':['SEGURO AUTO']}};
+  const e=parseExpense('Pagué 150 mil seguro auto con Pro Bank',cards,['GASTOS FIJOS'],options);
+  assert.equal(e.subcategory,'SEGURO AUTO');
+  assert.equal(e.method,'Débito');
+  assert.equal(e.card,'Brubank');
+});
