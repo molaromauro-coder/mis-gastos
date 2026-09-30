@@ -76,40 +76,6 @@ function seedDemoCardsOnce(){
 }
 seedDemoCardsOnce();
 
-const DEMO_CATEGORY_SEED_VERSION = 1;
-const DEMO_CATEGORIES = {
-  'Alimentación': ['Supermercado','Kiosco','Restaurante','Delivery','Café'],
-  'Transporte': ['Combustible','Peajes','Estacionamiento','Taxi / Uber','Transporte público'],
-  'Hogar': ['Alquiler','Expensas','Electricidad','Gas','Internet','Limpieza'],
-  'Salud': ['Farmacia','Médico','Odontología','Gimnasio'],
-  'Entretenimiento': ['Salidas','Streaming','Cine / Teatro','Eventos'],
-  'Compras': ['Ropa','Tecnología','Regalos','Artículos para el hogar'],
-  'Trabajo': ['Insumos','Herramientas','Comidas laborales','Traslados'],
-  'Educación': ['Cursos','Libros','Suscripciones'],
-  'Viajes': ['Alojamiento','Pasajes','Comidas','Actividades'],
-  'Mascotas': ['Alimento','Veterinaria','Accesorios'],
-  'Servicios personales': ['Peluquería','Cuidado personal'],
-  'Impuestos y tasas': ['Impuestos','Tasas','Monotributo'],
-  'Otros': ['Varios']
-};
-function seedDemoCategoriesOnce(){
-  if(Number(state.settings?.demoCategoriesSeedVersion||0)>=DEMO_CATEGORY_SEED_VERSION)return;
-  if(!Array.isArray(state.categories))state.categories=[];
-  if(!state.subcategories||typeof state.subcategories!=='object')state.subcategories={};
-  Object.entries(DEMO_CATEGORIES).forEach(([category,subs])=>{
-    let actual=state.categories.find((value)=>String(value).trim().toLowerCase()===category.toLowerCase());
-    if(!actual){actual=category;state.categories.push(actual);}
-    const current=Array.isArray(state.subcategories[actual])?[...state.subcategories[actual]]:[];
-    subs.forEach((sub)=>{
-      if(!current.some((value)=>String(value).trim().toLowerCase()===sub.toLowerCase()))current.push(sub);
-    });
-    state.subcategories[actual]=current;
-  });
-  state.settings={...state.settings,demoCategoriesSeedVersion:DEMO_CATEGORY_SEED_VERSION};
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-}
-seedDemoCategoriesOnce();
-
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
 let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
 const $ = (s) => document.querySelector(s);
