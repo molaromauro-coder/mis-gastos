@@ -14,6 +14,57 @@ function normalized(text) {
   return String(text||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+const PHRASE_STOPWORDS=new Set(['de','del','la','el','las','los','un','una']);
+function meaningfulWords(text){
+  return (normalized(text).match(/[a-z0-9]+/g)||[]).filter((word)=>!PHRASE_STOPWORDS.has(word));
+}
+function phraseMentioned(text,phrase){
+  const hay=meaningfulWords(text), target=meaningfulWords(phrase);
+  if(!target.length)return false;
+  if(target.length===1)return hay.includes(target[0]);
+  let at=-1;
+  for(const word of target){
+    const next=hay.indexOf(word,at+1);
+    if(next<0||(at>=0&&next-at>4))return false;
+    at=next;
+  }
+  return true;
+}
+function editDistance(a,b){
+  const left=String(a||''),right=String(b||'');
+  let prev=Array.from({length:right.length+1},(_,i)=>i);
+  for(let i=1;i<=left.length;i++){
+    const cur=[i];
+    for(let j=1;j<=right.length;j++)cur[j]=Math.min(cur[j-1]+1,prev[j]+1,prev[j-1]+(left[i-1]===right[j-1]?0:1));
+    prev=cur;
+  }
+  return prev[right.length];
+}
+function cardSpeechAliases(name){
+  const base=normalized(name).replace(/\b(?:cuenta|tarjeta|debito|credito)\b/g,' ').replace(/\s+/g,' ').trim();
+  const aliases=[base];
+  if(base==='brubank')aliases.push('bru bank','bro bank','pro bank','bruban');
+  return [...new Set(aliases.filter(Boolean))];
+}
+function fuzzyCardMention(lower,name){
+  const aliases=cardSpeechAliases(name);
+  for(const alias of aliases)if(phraseMentioned(lower,alias)||lower.includes(alias))return {matched:true,index:lower.lastIndexOf(alias)};
+  const words=meaningfulWords(lower);
+  for(const alias of aliases){
+    const compact=alias.replace(/\s+/g,'');
+    if(compact.length<5)continue;
+    const maxDistance=compact.length>=9?3:2;
+    for(let size=1;size<=Math.min(3,words.length);size++){
+      for(let i=0;i<=words.length-size;i++){
+        const spoken=words.slice(i,i+size).join('');
+        if(Math.abs(spoken.length-compact.length)>maxDistance)continue;
+        if(editDistance(spoken,compact)<=maxDistance)return {matched:true,index:i};
+      }
+    }
+  }
+  return {matched:false,index:-1};
+}
+
 function parseNumberWords(tokens){
   let total=0,current=0,found=false;
   for(const token of tokens){
@@ -123,10 +174,9 @@ function parseInstallments(text){
 }
 
 function categoryFor(text, categories) {
-  const lower=normalized(text);
   for(const category of categories){
     const name=typeof category==='string'?category:category?.name;
-    if(name&&lower.includes(normalized(name))) return name;
+    if(name&&phraseMentioned(text,name)) return name;
   }
   return '';
 }
@@ -258,20 +308,10 @@ export function parseExpense(text,cards=[],categories=[],options={}){
   const explicitMethod=paymentMentions.length
     ? ({efectivo:'Efectivo',debito:'Débito',credito:'Crédito'}[paymentMentions.at(-1)[1]])
     : '';
-  const paymentAlias=(name)=>normalized(name)
-    .replace(/\b(?:cuenta|tarjeta|debito|credito)\b/g,' ')
-    .replace(/\s+/g,' ')
-    .trim();
   const namedCandidates=cards
-    .filter((item)=>{
-      if(!item?.name)return false;
-      const full=normalized(item.name),alias=paymentAlias(item.name);
-      return lower.includes(full)||(alias&&lower.includes(alias));
-    })
-    .map((item)=>{
-      const full=normalized(item.name),alias=paymentAlias(item.name);
-      return {item,index:Math.max(lower.lastIndexOf(full),alias?lower.lastIndexOf(alias):-1)};
-    })
+    .map((item)=>({item,match:item?.name?fuzzyCardMention(lower,item.name):{matched:false,index:-1}}))
+    .filter(({match})=>match.matched)
+    .map(({item,match})=>({item,index:match.index}))
     .sort((a,b)=>b.index-a.index);
 
   // Regla de uso: una tarjeta/cuenta nombrada sin decir "crédito" se interpreta como débito.
@@ -285,7 +325,7 @@ export function parseExpense(text,cards=[],categories=[],options={}){
   const subMap=options?.subcategories||{};
   outer: for(const [parent,values] of Object.entries(subMap)){
     for(const value of Array.isArray(values)?values:[]){
-      if(value&&lower.includes(normalized(value))){category=parent;subcategory=value;break outer;}
+      if(value&&phraseMentioned(lower,value)){category=parent;subcategory=value;break outer;}
     }
   }
 
