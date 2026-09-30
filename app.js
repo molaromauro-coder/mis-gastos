@@ -49,14 +49,22 @@ document.addEventListener('click',(event)=>{
   if(!trigger)return;
   const destination=trigger.dataset.menuView||trigger.dataset.view;
   const current=document.querySelector('.view.active')?.id||'home';
-  if(destination&&destination!==current)previousViewId=current;
+  if(trigger.dataset.menuView&&destination)previousViewId='menu';
+  else if(destination&&destination!==current)previousViewId=current;
   if(destination==='cards'){activeCardType='';setTimeout(renderCards,0);}
 },true);
 document.querySelectorAll('main > .view:not(#home)').forEach((view)=>{
   if(view.querySelector(':scope > .view-back'))return;
   const button=document.createElement('button');
   button.type='button';button.className='view-back';button.textContent='← Atrás';button.setAttribute('aria-label','Volver a la pantalla anterior');
-  button.onclick=()=>goView(previousViewId||'home');
+  button.onclick=()=>{
+    if(previousViewId==='menu'){
+      goView('home');
+      setTimeout(()=>$('#menuDialog')?.showModal(),0);
+      return;
+    }
+    goView(previousViewId||'home');
+  };
   view.prepend(button);
 });
 function renderHomeClock() {
