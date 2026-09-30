@@ -367,7 +367,7 @@ function deleteCategoryEverywhere(category){
   state.categories.splice(index,1);delete state.subcategories[category];
   state.expenses.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';e.categoryStatus='unclassified';}});
   state.categoryRules=state.categoryRules.filter((rule)=>rule.category!==category);
-  state.recurring.forEach((e)=>{if(e.category===category)e.category='';});
+  state.recurring.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
   state.stock.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
   state.fixedExpenses.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
   pending.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';e.categoryStatus='unclassified';}});
@@ -380,6 +380,7 @@ function renameSubcategoryEverywhere(category,oldName,newName){
   list[index]=clean;state.subcategories[category]=list;
   state.expenses.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.stock.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
+  state.recurring.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.fixedExpenses.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   pending.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.categoryRules.forEach((rule)=>{if(rule.category===category&&rule.subcategory===oldName)rule.subcategory=clean;});
