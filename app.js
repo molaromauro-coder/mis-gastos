@@ -301,6 +301,7 @@ function fillCategories() {
         state.subcategories[active]=current.filter((_,i)=>i!==index);
         state.expenses.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
         pending.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
+        state.categoryRules.forEach((rule)=>{if(rule.category===active&&rule.subcategory===removed)rule.subcategory='';});
         save();syncCategoryConsumers();fillCategories();render();
       };
     });
