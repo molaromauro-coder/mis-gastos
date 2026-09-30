@@ -1742,7 +1742,9 @@ function consultationRows() {
   const cat=$('#consultCategory').value, sub=$('#consultSubcategory')?.value||'', method=$('#consultMethod').value, currency=$('#consultCurrency').value, card=$('#consultCard').value;
   const min=localizedInputNumber('#consultMin'), exact=localizedInputNumber('#consultAmount');
   const query=String($('#consultQuery').value||'').toLowerCase().trim();
-  const generic=/^(|.*\b(cuanto|cuánto|gaste|gasté|gasto|gastos|pague|pagué|pago|pagos|compra|compras|recupero|recuperos|este mes|mes pasado|hoy|en|de|por|con|que|qué|cuál|cual)\b.*)$/i.test(query);
+  const normalizeSearch=(value)=>String(value||'').toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+  const stopWords=new Set(['cuanto','gaste','gasto','gastos','pague','pago','pagos','compra','compras','recupero','recuperos','busca','buscar','buscame','mostra','mostrar','mostrame','dame','de','del','la','las','el','los','en','por','con','que','cual','cuando','este','esta','mes','pasado','hoy','ayer','entre','desde','hasta','mis','mi','un','una','al','para','ars','usd','pesos','peso','dolares','dolar','tarjeta','efectivo','debito','credito','categoria','subcategoria']);
+  const tokens=normalizeSearch(query).replace(/[^a-z0-9 ]/g,' ').split(/\\s+/).filter((token)=>token.length>2&&!stopWords.has(token));
   return globalSearchRows().filter((row)=>{
     if(!(row.date>=from&&row.date<=to))return false;
     if(cat){
@@ -1757,10 +1759,9 @@ function consultationRows() {
     if(card&&row.card!==card)return false;
     if(Number.isFinite(min)&&min>0&&row.arsEquivalent<min)return false;
     if(Number.isFinite(exact)&&exact>0&&Math.abs(row.arsEquivalent-exact)>0.01)return false;
-    if(query&&!generic){
-      const haystack=[row.type,row.concept,row.category,row.subcategory,row.method,row.card].join(' ').toLowerCase();
-      const tokens=query.replace(/[^a-záéíóúüñ0-9 ]/gi,' ').split(/\s+/).filter((t)=>t.length>2);
-      if(tokens.length&&!tokens.every((token)=>haystack.includes(token)))return false;
+    if(tokens.length){
+      const haystack=normalizeSearch([row.type,row.concept,row.category,row.subcategory,row.method,row.card].join(' '));
+      if(!tokens.every((token)=>haystack.includes(token)))return false;
     }
     return true;
   });
