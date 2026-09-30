@@ -292,17 +292,32 @@ function subcategoriesFor(category){
   const values=state.subcategories?.[category];
   return Array.isArray(values)?values:[];
 }
-function fillRecurringCategoryOptions(selected=''){
-  const select=$('#recurringCategory'); if(!select)return;
+function fillCategorySelect(selector,selected=''){
+  const select=$(selector); if(!select)return '';
   const current=selected||select.value||'';
   select.innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(c)}</option>`).join('');
   if(current&&state.categories.includes(current))select.value=current;
+  return select.value||'';
+}
+function fillScopedSubcategories(categorySelector,subcategorySelector,wrapSelector,selected=''){
+  const category=$(categorySelector)?.value||'';
+  const select=$(subcategorySelector); if(!select)return;
+  const values=category?subcategoriesFor(category):[];
+  select.innerHTML='<option value="">Sin subcategoría</option>'+values.map((s)=>`<option value="${escape(s)}">${escape(s)}</option>`).join('');
+  if(selected&&values.includes(selected))select.value=selected;
+  $(wrapSelector)?.classList.toggle('hidden',!category);
+}
+function fillRecurringCategoryOptions(selected=''){
+  fillCategorySelect('#recurringCategory',selected);
+  fillScopedSubcategories('#recurringCategory','#recurringSubcategory','#recurringSubcategoryWrap');
 }
 function fillStockCategoryOptions(selected=''){
-  const select=$('#stockCategory'); if(!select)return;
-  const current=selected||select.value||'';
-  select.innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(c)}</option>`).join('');
-  if(current&&state.categories.includes(current))select.value=current;
+  fillCategorySelect('#stockCategory',selected);
+  fillScopedSubcategories('#stockCategory','#stockSubcategory','#stockSubcategoryWrap');
+}
+function fillFixedExpenseCategoryOptions(selected=''){
+  fillCategorySelect('#fixedExpenseCategory',selected);
+  fillScopedSubcategories('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');
 }
 function reclassifyUncategorizedExpenses(){
   let changed=false;
