@@ -704,8 +704,22 @@ function softTapFeedback(){
   } catch {}
 }
 document.addEventListener('pointerdown',(event)=>{const button=event.target.closest?.('button');if(!button||button.disabled)return;softTapFeedback();},{passive:true});
-function setManualStep(step) { manualStep = step; document.querySelectorAll('.step').forEach((e) => e.classList.toggle('active', Number(e.dataset.step) === step)); $('#stepLabel').textContent = `PASO ${step} DE 3`; $('#expenseDialogTitle').textContent = ['¿Cuánto gastaste?', 'Elegí una categoría', '¿Cómo pagaste?'][step - 1]; $('#prevStep').classList.toggle('hidden', step === 1); $('#nextStep').classList.toggle('hidden', step === 3); $('#saveExpense').classList.toggle('hidden', step !== 3); }
-function openExpense(data = {}) { $('#expenseForm').reset(); setLocalizedInput('#amount',data.amount||'',2); $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; const voiceNeedsMethod=data.source==='voice'&&needsPaymentMethod(data); $('#method').value = voiceNeedsMethod ? '' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; fillSubcategories(data.subcategory || ''); const firstMissingStep=!Number(data.amount)?1:(!data.category&&data.categoryStatus==='unclassified'?2:(voiceNeedsMethod?3:1)); setManualStep(firstMissingStep); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
+function openExpense(data = {}) {
+  $('#expenseForm').reset();
+  setLocalizedInput('#amount',data.amount||'',2);
+  $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || '';
+  const voiceNeedsMethod=data.source==='voice'&&needsPaymentMethod(data);
+  $('#method').value = voiceNeedsMethod ? '' : data.method || '';
+  $('#installments').value = data.installments || 1;
+  document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true;
+  fillCategories();
+  $('#category').value = data.category || '';
+  fillSubcategories(data.subcategory || '');
+  updatePaymentFields();
+  $('#expenseCard').value = data.card || '';
+  updateInstallmentPreview();
+  $('#expenseDialog').showModal();
+}
 function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', !method || method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
 function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value && c.type === $('#method').value), count = Number($('#installments').value || 1), amount = localizedInputNumber('#amount'); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${integerText(count)} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${integerText(card.dueDay)} de cada mes.</span>`; }
 function pendingCreditDetail(e){
@@ -1789,7 +1803,6 @@ async function confirmPending(index, card) {
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
 $('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit+=5;renderHomeRecent();}; $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
-$('#nextStep').onclick = () => { if (manualStep === 1 && !$('#amount').value) return $('#amount').reportValidity(); setManualStep(manualStep + 1); }; $('#prevStep').onclick = () => setManualStep(manualStep - 1);
 $('#method').onchange = updatePaymentFields; $('#category').onchange = () => fillSubcategories(); $('#subcategory').onchange=()=>$('#editSelectedSubcategory')?.classList.toggle('hidden',!$('#subcategory').value); $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = ()=>{formatLocalizedInputElement($('#amount'));updateInstallmentPreview();}; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
 $('#expenseForm').onsubmit = async (event) => {
   event.preventDefault();
