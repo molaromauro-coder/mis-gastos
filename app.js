@@ -14,8 +14,46 @@ const portfolioMetrics = resaleApi?.portfolioMetrics;
 const withPortfolioPercent = resaleApi?.withPortfolioPercent;
 if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
 const STORAGE_KEY = sharedMode ? 'mis-gastos-shared-v1' : 'mis-gastos-v1';
-const defaults = { expenses: [], cards: [], categories: [], subcategories: {}, categoryRules: [], stock: [], recoveries: [], budgets: {}, recurring: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 4 };
-function loadState() { try { const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); return { ...defaults, ...old, expenses: old.expenses || [], cards: old.cards || [], categories: old.categories || [], subcategories: old.subcategories || {}, categoryRules: old.categoryRules || [], stock: old.stock || [], recoveries: old.recoveries || [], budgets: old.budgets || {}, recurring: old.recurring || [], trash: old.trash || [], security: { ...defaults.security, ...(old.security || {}) }, settings: { ...defaults.settings, ...(old.settings || {}), usdRateCache: old.settings?.usdRateCache || {} }, resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] }, schemaVersion: 4 }; } catch { return structuredClone(defaults); } }
+const defaults = { expenses: [], cards: [], categories: [], subcategories: {}, categoryRules: [], stock: [], recoveries: [], budgets: {}, recurring: [], fixedExpenses: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 5 };
+function loadState() {
+  try {
+    const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const legacyRecurring = Array.isArray(old.recurring) ? old.recurring : [];
+    const fixedExpenses = Array.isArray(old.fixedExpenses)
+      ? old.fixedExpenses
+      : legacyRecurring.map((r,i)=>({
+          id:r.id || `legacy-fixed-${i+1}`,
+          concept:r.concept || 'Gasto fijo',
+          currency:r.currency || 'ARS',
+          category:r.category || '',
+          subcategory:r.subcategory || '',
+          method:r.method || 'Efectivo',
+          card:r.card || '',
+          day:Number(r.day || 1),
+          active:r.active !== false,
+          legacyAmount:Number(r.amount || 0)
+        }));
+    return {
+      ...defaults,
+      ...old,
+      expenses: old.expenses || [],
+      cards: old.cards || [],
+      categories: old.categories || [],
+      subcategories: old.subcategories || {},
+      categoryRules: old.categoryRules || [],
+      stock: old.stock || [],
+      recoveries: old.recoveries || [],
+      budgets: old.budgets || {},
+      recurring: legacyRecurring,
+      fixedExpenses,
+      trash: old.trash || [],
+      security: { ...defaults.security, ...(old.security || {}) },
+      settings: { ...defaults.settings, ...(old.settings || {}), usdRateCache: old.settings?.usdRateCache || {} },
+      resale: { ...defaults.resale, ...(old.resale || {}), parties: old.resale?.parties || [] },
+      schemaVersion: 5
+    };
+  } catch { return structuredClone(defaults); }
+}
 const state = loadState();
 function demoCardId(){return crypto.randomUUID?.() || ('demo-' + Date.now() + '-' + Math.random().toString(16).slice(2));}
 function seedDemoCardsOnce(){
@@ -248,7 +286,7 @@ function renderHomeRecent(){
   }
   $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>4);
 }
-function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); }
+function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function subcategoriesFor(category){
   const values=state.subcategories?.[category];
@@ -284,6 +322,7 @@ function syncCategoryConsumers(){
   fillSubcategories();
   fillRecurringCategoryOptions();
   fillStockCategoryOptions();
+  fillFixedExpenseCategoryOptions();
   renderConsultationFilters();
   renderReport();
   renderUnclassified();
@@ -299,6 +338,7 @@ function renameCategoryEverywhere(oldName,newName){
   state.expenses.forEach((e)=>{if(e.category===oldName)e.category=clean;});
   state.recurring.forEach((e)=>{if(e.category===oldName)e.category=clean;});
   state.stock.forEach((e)=>{if(e.category===oldName)e.category=clean;});
+  state.fixedExpenses.forEach((e)=>{if(e.category===oldName)e.category=clean;});
   pending.forEach((e)=>{if(e.category===oldName)e.category=clean;});
   state.categoryRules.forEach((rule)=>{if(rule.category===oldName)rule.category=clean;});
   if(activeSettingsCategory===oldName)activeSettingsCategory=clean;
@@ -310,7 +350,8 @@ function deleteCategoryEverywhere(category){
   state.expenses.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';e.categoryStatus='unclassified';}});
   state.categoryRules=state.categoryRules.filter((rule)=>rule.category!==category);
   state.recurring.forEach((e)=>{if(e.category===category)e.category='';});
-  state.stock.forEach((e)=>{if(e.category===category)e.category='';});
+  state.stock.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
+  state.fixedExpenses.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
   pending.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';e.categoryStatus='unclassified';}});
   save();syncCategoryConsumers();
 }
@@ -320,6 +361,8 @@ function renameSubcategoryEverywhere(category,oldName,newName){
   if(index<0||!clean||list.some((s)=>s!==oldName&&s.toLowerCase()===clean.toLowerCase()))return false;
   list[index]=clean;state.subcategories[category]=list;
   state.expenses.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
+  state.stock.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
+  state.fixedExpenses.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   pending.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.categoryRules.forEach((rule)=>{if(rule.category===category&&rule.subcategory===oldName)rule.subcategory=clean;});
   save();syncCategoryConsumers();return true;
