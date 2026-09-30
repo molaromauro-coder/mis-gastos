@@ -3,7 +3,7 @@ import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, re
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
 import { learnCategoryRule, applyLearnedCategory } from './category-learning.js';
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
-import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
+import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
@@ -1384,14 +1384,54 @@ function moveExpenseToTrash(expenseId){
   state.trash.push({id:uid(),deletedAt:new Date().toISOString(),items});
   save();render();renderTrash();showToast('Gasto enviado a Papelera');
 }
-function renderTrash(){
-  if(!$('#trashList'))return;purgeExpiredTrash();
-  $('#trashList').innerHTML=state.trash.length?state.trash.slice().reverse().map((r)=>{
-    const first=r.items[0]||{},total=r.items.reduce((s,e)=>s+Number(e.amount||0),0),days=Math.max(0,30-Math.floor((Date.now()-new Date(r.deletedAt).getTime())/86400000));
-    return `<article class="settings-item" data-trash-id="${escape(r.id)}"><div><strong>${escape(first.concept||'Gasto')}</strong><small>${money(total,first.currency||'ARS')} · ${integerText(days)} días restantes</small></div><div class="mini-actions"><button class="restore-trash" type="button">Restaurar</button><button class="delete-trash" type="button">Eliminar</button></div></article>`;
-  }).join(''):'<div class="empty">La Papelera está vacía.</div>';
-  document.querySelectorAll('[data-trash-id]').forEach((row)=>{const id=row.dataset.trashId;row.querySelector('.restore-trash').onclick=()=>{const rec=state.trash.find((x)=>x.id===id);if(!rec)return;state.expenses.push(...rec.items);state.trash=state.trash.filter((x)=>x.id!==id);save();render();renderTrash();showToast('Gasto restaurado');};row.querySelector('.delete-trash').onclick=()=>{if(!confirm('¿Eliminar definitivamente este gasto?'))return;state.trash=state.trash.filter((x)=>x.id!==id);save();renderTrash();};});
+function updateTrashBulkActions(){
+  const toolbar=$('#trashBulkActions'),selectAll=$('#trashSelectAll'),deleteSelected=$('#deleteSelectedTrash');
+  if(!toolbar||!selectAll||!deleteSelected)return;
+  const checks=[...document.querySelectorAll('.trash-select')];
+  toolbar.classList.toggle('hidden',checks.length===0);
+  const selected=checks.filter((check)=>check.checked);
+  deleteSelected.disabled=selected.length===0;
+  deleteSelected.textContent=selected.length?(`Eliminar seleccionados (${integerText(selected.length)})`):'Eliminar seleccionados';
+  selectAll.checked=checks.length>0&&selected.length===checks.length;
+  selectAll.indeterminate=selected.length>0&&selected.length<checks.length;
 }
+function commitTrashDeletion(ids){
+  const result=permanentlyDeleteTrashRecords(state,ids);
+  if(result.removedRecords){
+    mirrorResetIntoSnapshot(settingsSnapshot,state);
+    save();
+    renderTrash();
+    render();
+  }
+  return result;
+}
+function renderTrash(){
+  if(!$('#trashList'))return;
+  purgeExpiredTrash();
+  $('#trashList').innerHTML=state.trash.length?state.trash.slice().reverse().map((record)=>{
+    const first=record.items[0]||{},total=record.items.reduce((sum,e)=>sum+Number(e.amount||0),0),days=Math.max(0,30-Math.floor((Date.now()-new Date(record.deletedAt).getTime())/86400000));
+    return `<article class="settings-item trash-item" data-trash-id="${escape(record.id)}"><label class="trash-check" aria-label="Seleccionar gasto"><input class="trash-select" type="checkbox"></label><div class="trash-copy"><strong>${escape(first.concept||'Gasto')}</strong><small>${money(total,first.currency||'ARS')} · ${integerText(days)} días restantes</small></div><div class="mini-actions"><button class="restore-trash" type="button">Restaurar</button><button class="delete-trash" type="button">Eliminar</button></div></article>`;
+  }).join(''):'<div class="empty">La Papelera está vacía.</div>';
+
+  document.querySelectorAll('[data-trash-id]').forEach((row)=>{
+    const id=row.dataset.trashId;
+    row.querySelector('.trash-select').onchange=updateTrashBulkActions;
+    row.querySelector('.restore-trash').onclick=()=>{
+      const rec=state.trash.find((x)=>x.id===id);if(!rec)return;
+      state.expenses.push(...rec.items);
+      state.trash=state.trash.filter((x)=>x.id!==id);
+      mirrorResetIntoSnapshot(settingsSnapshot,state);
+      save();render();renderTrash();showToast('Gasto restaurado');
+    };
+    row.querySelector('.delete-trash').onclick=()=>{
+      if(!confirm('¿Eliminar definitivamente este gasto?'))return;
+      const result=commitTrashDeletion([id]);
+      if(result.removedRecords)showToast('Gasto eliminado definitivamente');
+    };
+  });
+  updateTrashBulkActions();
+}
+
 document.addEventListener('click',(e)=>{const b=e.target.closest?.('[data-delete-expense]');if(!b)return;if(confirm('¿Enviar este gasto a Papelera?'))moveExpenseToTrash(b.dataset.deleteExpense);});
 
 function recurringCardOptions(method,selected=''){const cards=state.cards.filter((c)=>c.type===method);return '<option value="">Elegí una tarjeta</option>'+cards.map((c)=>`<option value="${escape(c.name)}" ${c.name===selected?'selected':''}>${escape(c.name)}</option>`).join('');}
@@ -1958,7 +1998,7 @@ async function confirmPending(index, card) {
 }
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
-$('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit+=5;renderHomeRecent();}; $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
+$('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit+=5;renderHomeRecent();}; $('#recentOpenHistory').onclick=()=>goView('history'); $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
 $('#method').onchange = updatePaymentFields; $('#category').onchange = () => fillSubcategories(); $('#subcategory').onchange=()=>$('#editSelectedSubcategory')?.classList.toggle('hidden',!$('#subcategory').value); $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = ()=>{formatLocalizedInputElement($('#amount'));updateInstallmentPreview();}; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
 $('#expenseForm').onsubmit = async (event) => {
   event.preventDefault();
@@ -2145,6 +2185,25 @@ $('#resetPreviousMonthsFinalConfirm').onclick=()=>{
   refreshAfterExpenseReset();
   if(!verifyNoPreviousMonthExpenses(state,now))return showToast('No pude completar el borrado histórico. Probá nuevamente.');
   showToast(result.totalRemoved?`✓ ${integerText(result.totalRemoved)} movimiento${result.totalRemoved===1?'':'s'} eliminado${result.totalRemoved===1?'':'s'} definitivamente`:'No había movimientos anteriores para borrar');
+};
+$('#trashSelectAll').onchange=()=>{
+  const checked=$('#trashSelectAll').checked;
+  document.querySelectorAll('.trash-select').forEach((input)=>{input.checked=checked;});
+  updateTrashBulkActions();
+};
+$('#deleteSelectedTrash').onclick=()=>{
+  const ids=[...document.querySelectorAll('[data-trash-id]')].filter((row)=>row.querySelector('.trash-select')?.checked).map((row)=>row.dataset.trashId);
+  if(!ids.length)return;
+  if(!confirm(`¿Eliminar definitivamente ${integerText(ids.length)} gasto${ids.length===1?'':'s'} seleccionado${ids.length===1?'':'s'}?`))return;
+  const result=commitTrashDeletion(ids);
+  if(result.removedRecords)showToast(`✓ ${integerText(result.removedRecords)} gasto${result.removedRecords===1?'':'s'} eliminado${result.removedRecords===1?'':'s'} definitivamente`);
+};
+$('#deleteAllTrash').onclick=()=>{
+  const ids=state.trash.map((record)=>record.id);
+  if(!ids.length)return;
+  if(!confirm(`¿Vaciar toda la Papelera? Se eliminarán definitivamente ${integerText(ids.length)} gasto${ids.length===1?'':'s'}.`))return;
+  const result=commitTrashDeletion(ids);
+  if(result.removedRecords)showToast(`✓ Papelera vaciada: ${integerText(result.removedRecords)} gasto${result.removedRecords===1?'':'s'} eliminado${result.removedRecords===1?'':'s'}`);
 };
 $('#settingsBack').onclick=()=>{
   if(activeSettingsCategory){activeSettingsCategory='';fillCategories();return;}
