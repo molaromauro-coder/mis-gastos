@@ -560,18 +560,43 @@ function reportLabel(range, from, to) {
   return `${from.toLocaleDateString('es-AR')} al ${to.toLocaleDateString('es-AR')}`;
 }
 function renderReportRows(target, rows, kind) {
-  target.innerHTML = rows.length ? rows.map((r) => `<button class="report-row" data-report-kind="${kind}" data-report-key="${escape(r.key)}"><span><strong>${escape(r.key)}</strong><small>${integerText(r.count)} movimiento${r.count === 1 ? '' : 's'}${r.usd ? ` · ${money(r.usd,'USD')}` : ''}</small></span><strong>${money(r.arsEquivalent,'ARS')}</strong></button>`).join('') : '<div class="empty">Sin movimientos.</div>';
+  target.innerHTML = rows.length ? rows.map((r) => `<button class="report-row" data-report-kind="${kind}" data-report-key="${escape(r.key)}"><span><strong>${escape(r.key)}</strong><small>${integerText(r.count)} movimiento${r.count === 1 ? '' : 's'}${r.rollup?' · acumulado transversal':''}${r.usd ? ` · ${money(r.usd,'USD')}` : ''}</small></span><strong>${money(r.arsEquivalent,'ARS')}</strong></button>`).join('') : '<div class="empty">Sin movimientos.</div>';
 }
 function renderReportChart(rows){
   const target=$('#reportChart'); if(!target)return;
   const top=rows.slice(0,6), max=Math.max(...top.map((r)=>r.arsEquivalent),1);
   target.innerHTML=top.length?top.map((r)=>`<div class="report-chart-row"><span>${escape(r.key)}</span><div><i style="width:${Math.max(2,r.arsEquivalent/max*100)}%"></i></div><strong>${money(r.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin datos para graficar.</div>';
 }
+function normalizedCategoryName(value){return String(value||'').trim().toLocaleLowerCase('es-AR');}
+function categoryHasCrossSubcategories(category){
+  const target=normalizedCategoryName(category);
+  if(!target)return false;
+  return Object.entries(state.subcategories||{}).some(([parent,values])=>
+    normalizedCategoryName(parent)!==target &&
+    (Array.isArray(values)?values:[]).some((sub)=>normalizedCategoryName(sub)===target)
+  );
+}
+function categoryRollupItems(items,category){
+  const target=normalizedCategoryName(category);
+  const rollup=categoryHasCrossSubcategories(category);
+  return items.filter((e)=>{
+    const direct=normalizedCategoryName(e.category)===target;
+    if(!rollup)return direct;
+    return direct||normalizedCategoryName(e.subcategory)===target;
+  });
+}
+function categoryRollupRow(items,category){
+  const rollupItems=categoryRollupItems(items,category);
+  const grouped=groupExpenses(rollupItems,()=>category);
+  const row=grouped[0]||{key:category,ars:0,usd:0,arsEquivalent:0,count:0};
+  return {...row,key:category,rollup:categoryHasCrossSubcategories(category)};
+}
 function configuredCategoryRows(items){
-  const grouped=groupExpenses(items,e=>e.category || 'Sin categoría');
-  const map=new Map(grouped.map((row)=>[row.key,row]));
-  const configured=state.categories.map((category)=>map.get(category)||{key:category,ars:0,usd:0,arsEquivalent:0,count:0});
-  const extras=grouped.filter((row)=>!state.categories.includes(row.key));
+  const configured=state.categories.map((category)=>categoryRollupRow(items,category));
+  const extras=groupExpenses(
+    items.filter((e)=>!state.categories.some((category)=>normalizedCategoryName(category)===normalizedCategoryName(e.category))),
+    e=>e.category || 'Sin categoría'
+  );
   return [...configured,...extras];
 }
 function configuredCardRows(items,method){
@@ -606,15 +631,26 @@ function renderReport() {
   document.querySelectorAll('[data-report-kind]').forEach((b) => b.onclick = () => {
     const kind=b.dataset.reportKind, key=b.dataset.reportKey;
     if(kind==='category'){
-      const filtered=items.filter((e)=>(e.category||'Sin categoría')===key);
-      const configuredSubs=subcategoriesFor(key);
-      const groupedSubs=groupExpenses(filtered,e=>e.subcategory || 'Sin subcategoría');
-      const subMap=new Map(groupedSubs.map((row)=>[row.key,row]));
-      const rows=[
-        ...configuredSubs.map((sub)=>subMap.get(sub)||{key:sub,ars:0,usd:0,arsEquivalent:0,count:0}),
-        ...groupedSubs.filter((row)=>!configuredSubs.includes(row.key))
-      ];
-      $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">← Atrás</button></div><p class="muted">Subcategorías</p><div class="report-list">${rows.length?rows.map((row)=>`<div class="report-row static"><span><strong>${escape(row.key)}</strong><small>${integerText(row.count)} movimiento${row.count===1?'':'s'}</small></span><strong>${money(row.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin subcategorías.</div>'}</div>${filtered.length?filtered.map((e)=>expenseHTML(e,true)).join(''):'<div class="empty">Todavía no hay gastos en esta categoría.</div>'}`;
+      const rollup=categoryHasCrossSubcategories(key);
+      const filtered=categoryRollupItems(items,key);
+      let rows=[],detailLabel='Subcategorías';
+      if(rollup){
+        detailLabel='Origen del acumulado';
+        rows=groupExpenses(filtered,(e)=>{
+          const direct=normalizedCategoryName(e.category)===normalizedCategoryName(key);
+          if(direct)return e.subcategory?`${key} → ${e.subcategory}`:`${key} directo`;
+          return `${e.category||'Sin categoría'} → ${e.subcategory||key}`;
+        });
+      }else{
+        const configuredSubs=subcategoriesFor(key);
+        const groupedSubs=groupExpenses(filtered,e=>e.subcategory || 'Sin subcategoría');
+        const subMap=new Map(groupedSubs.map((row)=>[row.key,row]));
+        rows=[
+          ...configuredSubs.map((sub)=>subMap.get(sub)||{key:sub,ars:0,usd:0,arsEquivalent:0,count:0}),
+          ...groupedSubs.filter((row)=>!configuredSubs.includes(row.key))
+        ];
+      }
+      $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">← Atrás</button></div><p class="muted">${detailLabel}${rollup?' · suma de la misma subcategoría usada en distintas categorías':''}</p><div class="report-list">${rows.length?rows.map((row)=>`<div class="report-row static"><span><strong>${escape(row.key)}</strong><small>${integerText(row.count)} movimiento${row.count===1?'':'s'}</small></span><strong>${money(row.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin movimientos.</div>'}</div>${filtered.length?filtered.map((e)=>expenseHTML(e,true)).join(''):'<div class="empty">Todavía no hay gastos en esta categoría.</div>'}`;
     } else if(kind==='method'&&['Débito','Crédito'].includes(key)){
       const filtered=items.filter((e)=>e.method===key);
       const rows=configuredCardRows(items,key);
@@ -1592,8 +1628,13 @@ function consultationRows() {
   const generic=/^(|.*\b(cuanto|cuánto|gaste|gasté|gasto|gastos|pague|pagué|pago|pagos|compra|compras|recupero|recuperos|este mes|mes pasado|hoy|en|de|por|con|que|qué|cuál|cual)\b.*)$/i.test(query);
   return globalSearchRows().filter((row)=>{
     if(!(row.date>=from&&row.date<=to))return false;
-    if(cat&&row.category!==cat)return false;
-    if(sub&&row.subcategory!==sub)return false;
+    if(cat){
+      const target=normalizedCategoryName(cat);
+      const direct=normalizedCategoryName(row.category)===target;
+      const cross=categoryHasCrossSubcategories(cat)&&normalizedCategoryName(row.subcategory)===target;
+      if(!direct&&!cross)return false;
+    }
+    if(sub&&normalizedCategoryName(row.subcategory)!==normalizedCategoryName(sub))return false;
     if(method&&row.method!==method)return false;
     if(currency&&row.currency!==currency)return false;
     if(card&&row.card!==card)return false;
