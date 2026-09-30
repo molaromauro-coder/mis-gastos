@@ -95,6 +95,7 @@ export function parseResaleTable(matrix,existingParties=[],todayYear=new Date().
 export function compareResaleImport(importedRows,existingParties=[]){
   const byParty=new Map(existingParties.map((p)=>[norm(p.name),p]));
   const importedKeys=new Set();
+  const importedPartyKeys=new Set(importedRows.map((r)=>norm(r.partyName)));
   const issues=[],matched=[];
   const keyFor=(name,type,number)=>`${norm(name)}|${norm(type)}|${Number(number)}`;
   importedRows.forEach((row,index)=>{
@@ -113,7 +114,7 @@ export function compareResaleImport(importedRows,existingParties=[]){
     }else matched.push(row);
   });
   for(const party of existingParties)for(const ticket of party.tickets||[]){
-    if(!importedKeys.has(keyFor(party.name,ticket.type,ticket.number))){
+    if(importedPartyKeys.has(norm(party.name))&&!importedKeys.has(keyFor(party.name,ticket.type,ticket.number))){
       issues.push({id:`app-${party.id}-${ticket.id}`,kind:'onlyApp',fields:[],imported:null,partyId:party.id,ticketId:ticket.id,current:{...ticket,partyName:party.name,partyDate:party.date}});
     }
   }
