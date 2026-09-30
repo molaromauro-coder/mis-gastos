@@ -6,6 +6,7 @@
   <strong class="today-ars" id="arsTotal">$ 0</strong>
   <div class="today-usd"><span>🇺🇸 USD hoy</span><strong id="usdTotal">US$ 0</strong></div>
 </div>
+<div class="home-month-net" id="homeMonthlyCard"><div><small>GASTOS DEL MES · NETO</small><strong id="homeMonthlyNet">$ 0</strong></div><div><small>Bruto</small><span id="homeMonthlyGross">$ 0</span></div><div><small>Recuperado</small><span id="homeMonthlyRecovered">$ 0</span></div></div>
 <section class="recent-card"><div class="recent-head"><strong>Últimos movimientos</strong></div><div id="recentMovements" class="recent-list"></div><button id="recentMore" type="button" class="recent-more hidden">＋ Ver más</button></section>
 <div id="paymentReminders" class="hidden"></div><div id="budgetAlert" class="hidden"></div><div id="unusual" class="hidden"></div><div id="expenseList" class="hidden"></div>
 <button id="manualBtn" class="home-action manual-action" type="button"><span class="home-action-icon">✎</span><span><strong>Carga manual</strong><small>Agregá un gasto sin usar la voz</small></span><b>›</b></button>
@@ -37,8 +38,8 @@
 
 <section id="recoveries" class="view"><div class="section-title"><div><small>CONTROL DE RECUPEROS</small><h2>Gastos recuperados</h2></div><button id="addRecovery">＋ Recupero</button></div>
 <label class="compact-label">Mes<input type="month" id="recoveryMonth"></label>
-<div class="report-summary-grid"><article><span>Gasto bruto</span><strong id="recoveryGross">$ 0</strong></article><article><span>Recuperado</span><strong id="recoveryTotal">$ 0</strong></article><article><span>Gasto neto</span><strong id="recoveryNet">$ 0</strong></article></div>
-<p class="muted">Los recuperos se registran aparte. No borran el gasto original ni modifican el presupuesto.</p><div id="recoveryList" class="module-list"></div></section>
+<div class="report-summary-grid"><article><span>Gasto bruto</span><strong id="recoveryGross">$ 0</strong></article><article><span>Recuperado</span><strong id="recoveryTotal">$ 0</strong></article><article><span id="recoveryNetLabel">Gasto neto</span><strong id="recoveryNet">$ 0</strong></article></div>
+<p id="recoveryMonthNote" class="muted"></p><div id="recoveryList" class="module-list"></div></section>
 
 <section id="savings" class="view"><div class="section-title"><div><small>HISTÓRICO MENSUAL</small><h2>Ahorro</h2></div><select id="savingsYear"></select></div>
 <div class="saving-hero"><span>Ahorro acumulado del año</span><strong id="annualSavings">$ 0</strong><small>Presupuesto menos gastos efectivamente pagados</small></div><div id="savingsList" class="module-list"></div></section>
