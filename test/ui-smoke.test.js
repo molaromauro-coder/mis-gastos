@@ -36,3 +36,18 @@ test('los recursos de la página coinciden con la versión del caché PWA',()=>{
   assert.equal(page,cache);
   assert.equal(css,cache);
 });
+
+test('Inicio tiene acceso directo a Categorías además de Carga manual y lupa',()=>{
+  assert.match(html,/id="manualBtn"/);
+  assert.match(html,/id="homeCategoriesBtn"/);
+  assert.match(html,/id="globalSearchBtn"/);
+  assert.match(app,/\$\('#homeCategoriesBtn'\)\.onclick=\(\)=>openCategoryManager\(\)/);
+});
+
+test('el respaldo de seguridad usa PIN de 6 dígitos y permanece opcional',()=>{
+  assert.match(html,/PIN de 6 dígitos/);
+  assert.match(html,/id="securityPin"[^>]*pattern="\[0-9\]\{6\}"[^>]*maxlength="6"/);
+  assert.match(html,/id="unlockPin"[^>]*maxlength="6"/);
+  assert.ok(app.includes('\\d{6}'));
+  assert.ok(app.includes('\\d{4}'));
+});
