@@ -3,6 +3,7 @@ import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, re
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
 import { learnCategoryRule, applyLearnedCategory } from './category-learning.js';
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
+import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot } from './expense-reset.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 const resaleApi = sharedMode ? null : await import('./resale.js');
 const normalizeSplit = resaleApi?.normalizeSplit;
@@ -1480,32 +1481,61 @@ $('#settingsBtn').onclick = () => {
   renderReminderSettings();fillCategories();renderRecurringSettings();renderTrash();renderSecurityStatus();
   $('#settingsDialog').showModal();
 };
-$('#resetExpensesBtn').onclick=()=>{
-  const registered=recentPurchases(state.expenses).length;
-  const trashed=(state.trash||[]).length;
-  $('#resetExpensesSummary').textContent=`Se eliminarán ${integerText(registered)} gasto${registered===1?'':'s'} registrado${registered===1?'':'s'}${trashed?` y ${integerText(trashed)} elemento${trashed===1?'':'s'} de la Papelera`:''}. Esta acción no se puede deshacer.`;
-  $('#resetExpensesDialog').showModal();
-};
-function closeResetExpensesDialog(){if($('#resetExpensesDialog').open)$('#resetExpensesDialog').close();}
-$('#resetExpensesCancel').onclick=closeResetExpensesDialog;
-$('#resetExpensesCancelX').onclick=closeResetExpensesDialog;
-$('#resetExpensesDialog').addEventListener('cancel',(event)=>{event.preventDefault();closeResetExpensesDialog();});
-$('#resetExpensesConfirm').onclick=()=>{
-  state.expenses=[];
-  state.trash=[];
-  pending=[];
-  discarded=null;
+function closeDialogById(id){const dialog=$(id);if(dialog?.open)dialog.close();}
+function refreshAfterExpenseReset(){
   recentHomeLimit=4;
-  if(settingsSnapshot){
-    settingsSnapshot.expenses=[];
-    settingsSnapshot.trash=[];
-  }
-  save();
-  closeResetExpensesDialog();
   if($('#confirmDialog')?.open)$('#confirmDialog').close();
+  save();
   renderTrash();
   render();
-  showToast('✓ Gastos borrados · medios de pago conservados');
+}
+$('#resetCurrentMonthBtn').onclick=()=>{
+  const count=currentMonthExpenseCount(state,new Date());
+  $('#resetCurrentMonthSummary').textContent=count
+    ?`Se moverán a Papelera ${integerText(count)} movimiento${count===1?'':'s'} del mes en curso.`
+    :'No hay movimientos del mes en curso para borrar.';
+  $('#resetCurrentMonthConfirm').disabled=count===0;
+  $('#resetCurrentMonthDialog').showModal();
+};
+$('#resetCurrentMonthCancel').onclick=()=>closeDialogById('#resetCurrentMonthDialog');
+$('#resetCurrentMonthCancelX').onclick=()=>closeDialogById('#resetCurrentMonthDialog');
+$('#resetCurrentMonthDialog').addEventListener('cancel',(event)=>{event.preventDefault();closeDialogById('#resetCurrentMonthDialog');});
+$('#resetCurrentMonthConfirm').onclick=()=>{
+  const result=moveCurrentMonthExpensesToTrash(state,new Date());
+  pending=[];
+  discarded=null;
+  mirrorResetIntoSnapshot(settingsSnapshot,state);
+  closeDialogById('#resetCurrentMonthDialog');
+  refreshAfterExpenseReset();
+  showToast(result.removed?`✓ ${integerText(result.removed)} movimiento${result.removed===1?'':'s'} enviado${result.removed===1?'':'s'} a Papelera`:'No había movimientos para borrar');
+};
+$('#resetPreviousMonthsBtn').onclick=()=>{
+  const count=previousMonthExpenseCount(state,new Date());
+  const trashOld=(state.trash||[]).reduce((sum,record)=>sum+(record.items||[]).filter((item)=>{
+    const d=new Date(item.purchaseDate||item.date||0);
+    const start=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+    return Number.isFinite(d.getTime())&&d<start;
+  }).length,0);
+  $('#resetPreviousMonthsSummary').textContent=`Se eliminarán definitivamente ${integerText(count)} movimiento${count===1?'':'s'} activo${count===1?'':'s'} de meses anteriores${trashOld?` y ${integerText(trashOld)} movimiento${trashOld===1?'':'s'} que ya está${trashOld===1?'':'n'} en Papelera`:''}.`;
+  $('#resetPreviousMonthsFirstConfirm').disabled=(count+trashOld)===0;
+  $('#resetPreviousMonthsDialog').showModal();
+};
+$('#resetPreviousMonthsCancel').onclick=()=>closeDialogById('#resetPreviousMonthsDialog');
+$('#resetPreviousMonthsCancelX').onclick=()=>closeDialogById('#resetPreviousMonthsDialog');
+$('#resetPreviousMonthsDialog').addEventListener('cancel',(event)=>{event.preventDefault();closeDialogById('#resetPreviousMonthsDialog');});
+$('#resetPreviousMonthsFirstConfirm').onclick=()=>{
+  closeDialogById('#resetPreviousMonthsDialog');
+  $('#resetPreviousMonthsFinalDialog').showModal();
+};
+$('#resetPreviousMonthsFinalCancel').onclick=()=>closeDialogById('#resetPreviousMonthsFinalDialog');
+$('#resetPreviousMonthsFinalCancelX').onclick=()=>closeDialogById('#resetPreviousMonthsFinalDialog');
+$('#resetPreviousMonthsFinalDialog').addEventListener('cancel',(event)=>{event.preventDefault();closeDialogById('#resetPreviousMonthsFinalDialog');});
+$('#resetPreviousMonthsFinalConfirm').onclick=()=>{
+  const result=permanentlyDeletePreviousMonths(state,new Date());
+  mirrorResetIntoSnapshot(settingsSnapshot,state);
+  closeDialogById('#resetPreviousMonthsFinalDialog');
+  refreshAfterExpenseReset();
+  showToast(result.totalRemoved?`✓ ${integerText(result.totalRemoved)} movimiento${result.totalRemoved===1?'':'s'} eliminado${result.totalRemoved===1?'':'s'} definitivamente`:'No había movimientos anteriores para borrar');
 };
 $('#settingsBack').onclick=()=>{
   if(activeSettingsCategory){activeSettingsCategory='';fillCategories();return;}
