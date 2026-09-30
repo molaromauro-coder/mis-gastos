@@ -1,4 +1,4 @@
-<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#eaf4ff"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Mis Gastos"><title>Mis Gastos</title><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><link rel="icon" href="icons/apple-touch-icon.png"><link rel="stylesheet" href="styles.css?v=56"></head>
+<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#eaf4ff"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Mis Gastos"><title>Mis Gastos</title><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><link rel="icon" href="icons/apple-touch-icon.png"><link rel="stylesheet" href="styles.css?v=57"></head>
 <body><div class="app"><header class="home-header"><div><small id="homeDate">Sáb, 26 de septiembre</small><h1>Mis Gastos</h1></div><div class="header-actions"><button class="icon-btn" id="settingsBtn" aria-label="Configuración">⚙</button></div></header><main>
 <section id="home" class="view active">
 <div class="today-card">
@@ -19,7 +19,7 @@
 <div id="customRange" class="hidden form-row"><input type="date" id="fromDate"><input type="date" id="toDate"></div>
 <h3 id="reportTitle"></h3>
 <div class="report-summary-grid"><article><span>Total ARS</span><strong id="reportArs">$ 0</strong></article><article><span>Total USD</span><strong id="reportUsd">US$ 0</strong></article><article><span>Equivalente total</span><strong id="reportCombinedArs">$ 0</strong></article><article><span>Vs. período anterior</span><strong id="reportComparison">—</strong></article></div>
-<h3 class="report-section-title">Distribución por categoría</h3><div id="reportChart" class="report-chart"></div>
+<div class="report-chart-head"><h3 class="report-section-title">Distribución por categoría</h3><div class="report-chart-toggle" role="group" aria-label="Tipo de gráfico"><button type="button" data-report-chart="bar" class="selected">Barras</button><button type="button" data-report-chart="pie">Torta</button></div></div><div id="reportChart" class="report-chart"></div>
 <h3 class="report-section-title">Por categoría</h3><div id="reportCategories" class="report-list"></div>
 <h3 class="report-section-title">Por medio de pago</h3><div id="reportMethods" class="report-list"></div>
 <h3 class="report-section-title">Mayores gastos</h3><div id="reportTop" class="report-list"></div>
@@ -120,4 +120,4 @@
 <dialog id="recoveryDialog"><form id="recoveryForm"><div class="dialog-head"><div><small>NUEVO RECUPERO</small><h2>Registrar dinero recuperado</h2></div><button type="button" class="close">×</button></div>
 <div class="form-row"><label>Importe<input id="recoveryAmount" type="text" inputmode="decimal" data-local-number="2" required></label><label>Moneda<select id="recoveryCurrency"><option>ARS</option><option>USD</option></select></label></div>
 <label>Concepto / nota<input id="recoveryConcept" placeholder="Ej. Comida con Juan"></label><label>Fecha<input id="recoveryDate" type="date" required></label><button class="primary">Guardar recupero</button></form></dialog>
-<div id="toast" class="toast" role="status"></div><script type="module" src="app.js?v=56"></script></body></html>
+<div id="toast" class="toast" role="status"></div><script type="module" src="app.js?v=57"></script></body></html>
