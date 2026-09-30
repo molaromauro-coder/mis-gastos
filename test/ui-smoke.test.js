@@ -59,3 +59,13 @@ test('v69 mantiene Menú principal completamente visible en iPhone',()=>{
   assert.match(css,/width:min\(calc\(100% - 40px\),390px\)/);
   assert.match(css,/height:58px/);
 });
+
+test('Últimos movimientos es un botón navegable a Historial',()=>{
+  assert.match(html,/id="recentOpenHistory"/);
+  assert.match(app,/\$\('#recentOpenHistory'\)\.onclick=\(\)=>goView\('history'\)/);
+});
+
+test('Papelera ofrece selección múltiple y eliminar todos',()=>{
+  for(const id of ['trashBulkActions','trashSelectAll','deleteSelectedTrash','deleteAllTrash']) assert.ok(html.includes(`id="${id}"`),`falta ${id}`);
+  assert.match(app,/permanentlyDeleteTrashRecords/);
+});

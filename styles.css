@@ -447,3 +447,17 @@ img,svg,canvas,video{
     line-height:1;
   }
 }
+
+.recent-open-history{width:100%;border:0;background:none;padding:3px 0 6px;cursor:pointer;text-align:left}
+.recent-open-history span{font-size:24px;line-height:1;color:#8ca7bb}
+.recent-open-history:active{opacity:.65}
+.trash-bulk-actions{display:grid;gap:9px;margin-top:12px;padding:10px;border-radius:13px;background:#f8faf9;border:1px solid #e2e9e5}
+.trash-bulk-actions>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.trash-bulk-actions button{min-height:40px;border-radius:10px;font-size:11px;font-weight:800}
+.trash-select-all{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:#314b43}
+.trash-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto}
+.trash-check{display:grid;place-items:center;width:28px;height:36px}
+.trash-check input{width:18px;height:18px}
+.trash-copy{min-width:0}
+.trash-copy strong,.trash-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:430px){.trash-item{grid-template-columns:auto 1fr}.trash-item .mini-actions{grid-column:2}.trash-bulk-actions>div{grid-template-columns:1fr}}

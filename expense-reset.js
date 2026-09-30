@@ -36,6 +36,22 @@ export function previousMonthExpenseCount(state,now=new Date()){
   }).length;
 }
 
+export function previousMonthTrashItemCount(state,now=new Date()){
+  const {start}=monthBounds(now);
+  let count=0;
+  for(const record of state?.trash||[]){
+    for(const item of record.items||[]){
+      const d=purchaseDate(item);
+      if(d&&d<start)count++;
+    }
+  }
+  return count;
+}
+
+export function previousMonthDeletableCount(state,now=new Date()){
+  return previousMonthExpenseCount(state,now)+previousMonthTrashItemCount(state,now);
+}
+
 export function moveCurrentMonthExpensesToTrash(state,now=new Date()){
   const {start,next}=monthBounds(now);
   const removed=[],kept=[];
@@ -81,6 +97,19 @@ export function permanentlyDeletePreviousMonths(state,now=new Date()){
   state.trash=nextTrash;
 
   return {removedActive,removedTrashItems,totalRemoved:removedActive+removedTrashItems};
+}
+
+export function permanentlyDeleteTrashRecords(state,ids=[]){
+  const selected=new Set(ids);
+  if(!selected.size)return {removedRecords:0,removedItems:0};
+  let removedRecords=0,removedItems=0;
+  state.trash=(state.trash||[]).filter((record)=>{
+    if(!selected.has(record.id))return true;
+    removedRecords++;
+    removedItems+=(record.items||[]).length;
+    return false;
+  });
+  return {removedRecords,removedItems};
 }
 
 export function mirrorResetIntoSnapshot(snapshot,state){
