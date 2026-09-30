@@ -378,3 +378,13 @@ img,svg,canvas,video{
 .report-pie-legend strong{font-size:11px}
 .report-pie-note{display:block;margin-top:12px;color:var(--muted);letter-spacing:0}
 @media(max-width:520px){.report-pie-layout{grid-template-columns:1fr}.report-pie-chart{width:160px}}
+
+.resale-import-list{display:grid;gap:10px;max-height:52vh;overflow:auto;margin:14px 0;padding:2px}
+.resale-import-row{background:#fff;border:1px solid #e0e8e4;border-radius:14px;padding:12px;display:grid;gap:6px;font-size:12px}
+.resale-import-row strong{font-size:13px}
+.resale-import-row small{color:#587569}
+.resale-import-row select{margin-top:5px}
+.resale-import-warnings{background:#fff4df;border-radius:12px;padding:10px;font-size:12px}
+.resale-import-warnings:empty{display:none}
+.resale-import-actions{display:flex;gap:10px}
+.resale-import-actions button{flex:1}
