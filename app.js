@@ -1438,7 +1438,7 @@ function renderStock() {
   const totalValue=rows.reduce((s,x)=>s+x.m.remainingValue,0);
   $('#stockSummary').textContent=`${integerText(totalRemaining)} unidades disponibles · ${money(totalValue,'ARS')} aprox.`;
   $('#stockList').innerHTML=rows.length ? rows.map(({p,m})=>`<article class="stock-card" data-stock-id="${escape(p.id)}">
-    <div class="stock-head"><div><strong>${escape(p.product)}</strong><small>${escape(p.category || 'Sin categoría')} · pagado ${new Date(p.paidDate+'T12:00:00').toLocaleDateString('es-AR')}</small></div><span class="stock-money">${p.currency==='USD' ? money(p.totalAmount,'USD') : money(p.totalAmount,'ARS')}</span></div>
+    <div class="stock-head"><div><strong>${escape(p.product)}</strong><small>${escape([p.category,p.subcategory].filter(Boolean).join(' · ') || 'Sin categoría')} · pagado ${new Date(p.paidDate+'T12:00:00').toLocaleDateString('es-AR')}</small></div><span class="stock-money">${p.currency==='USD' ? money(p.totalAmount,'USD') : money(p.totalAmount,'ARS')}</span></div>
     <div class="stock-stats"><div><span>Comprado</span><strong>${numberText(m.qty)}</strong></div><div><span>Consumido</span><strong>${numberText(m.consumed)}</strong></div><div><span>Disponible</span><strong>${numberText(m.remaining)}</strong></div></div>
     <div class="stock-actions"><button class="consume">Consumir</button><button class="adjust">Ajustar</button></div></article>`).join('') : '<div class="empty">Todavía no cargaste compras de stock.</div>';
   document.querySelectorAll('.stock-card').forEach((card)=>{
@@ -1450,7 +1450,7 @@ function renderStock() {
 }
 
 async function addStockPurchase(data) {
-  let item={id:uid(),product:data.product,category:data.category,quantity:data.quantity,months:data.months,totalAmount:data.totalAmount,currency:data.currency,paidDate:data.paidDate,consumptions:[]};
+  let item={id:uid(),product:data.product,category:data.category,subcategory:data.subcategory||'',quantity:data.quantity,months:data.months,totalAmount:data.totalAmount,currency:data.currency,paidDate:data.paidDate,consumptions:[]};
   if(item.currency==='USD'){
     const rate=await ensureUsdRate(false);
     if(rate) Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateSource:rate.source,fxRateUpdatedAt:rate.updatedAt});
@@ -2167,7 +2167,14 @@ $('#fixedEditSubcategory').onclick=()=>editSubcategoryFromSelect('#fixedExpenseC
 
 $('#addRecurring').onclick=()=>openRecurringDialog();
 $('#recurringMethod').onchange=updateRecurringCardField;
-$('#recurringForm').onsubmit=(e)=>{e.preventDefault();const data={concept:$('#recurringConcept').value.trim(),amount:localizedInputNumber('#recurringAmount'),currency:$('#recurringCurrency').value,category:$('#recurringCategory').value.trim(),method:$('#recurringMethod').value,card:$('#recurringMethod').value==='Efectivo'?'':$('#recurringCard').value,day:Number($('#recurringDay').value),active:true};if(!Number.isFinite(data.amount)||data.amount<=0)return showToast('Ingresá un importe válido');if(data.method!=='Efectivo'&&!data.card)return showToast('Elegí una tarjeta');if(editingRecurringId){const r=state.recurring.find((x)=>x.id===editingRecurringId);if(r)Object.assign(r,data);}else state.recurring.push({id:uid(),...data,lastPromptedMonth:null});editingRecurringId=null;save();$('#recurringDialog').close();renderRecurringSettings();showToast('Gasto recurrente guardado');};
+$('#recurringCategory').onchange=()=>fillScopedSubcategories('#recurringCategory','#recurringSubcategory','#recurringSubcategoryWrap');
+$('#recurringQuickCategory').onclick=()=>{const category=createCategoryFromPrompt('#recurringCategory');if(category)fillScopedSubcategories('#recurringCategory','#recurringSubcategory','#recurringSubcategoryWrap');};
+$('#recurringQuickSubcategory').onclick=()=>createSubcategoryFromPrompt('#recurringCategory','#recurringSubcategory','#recurringSubcategoryWrap');
+$('#recurringEditCategory').onclick=()=>editCategoryFromSelect('#recurringCategory');
+$('#recurringEditSubcategory').onclick=()=>editSubcategoryFromSelect('#recurringCategory','#recurringSubcategory','#recurringSubcategoryWrap');
+$('#recurringForm').onsubmit=(e)=>{e.preventDefault();const data={concept:$('#recurringConcept').value.trim(),amount:localizedInputNumber('#recurringAmount'),currency:$('#recurringCurrency').value,category:$('#recurringCategory').value.trim(),subcategory:$('#recurringSubcategory').value.trim(),method:$('#recurringMethod').value,card:$('#recurringMethod').value==='Efectivo'?'':$('#recurringCard').value,day:Number($('#recurringDay').value),active:true};if(!Number.isFinite(data.amount)||data.amount<=0)return showToast('Ingresá un importe válido');if(data.method!=='Efectivo'&&!data.card)return showToast('Elegí una tarjeta');if(editingRecurringId){const r=state.recurring.find((x)=>x.id===editingRecurringId);if(r)Object.assign(r,data);}else state.recurring.push({id:uid(),...data,lastPromptedMonth:null});editingRecurringId=null;save();$('#recurringDialog').close();renderRecurringSettings();showToast('Gasto recurrente guardado');};
+$('#reportManageCategories').onclick=openCategoryManager;
+$('#consultManageCategories').onclick=openCategoryManager;
 $('#consultExportExcel').onclick=exportConsultExcel;
 $('#consultExportPdf').onclick=exportConsultPdf;
 
@@ -2198,15 +2205,11 @@ $('#addStock').onclick=()=>{
   $('#stockPaidDate').value=new Date().toISOString().slice(0,10);
   $('#stockDialog').showModal();
 };
-$('#stockQuickCategory').onclick=()=>{
-  const value=prompt('Nombre de la nueva categoría:')?.trim();
-  if(!value)return;
-  const category=createCategoryEverywhere(value);
-  if(!category)return;
-  fillStockCategoryOptions(category);
-  $('#stockCategory').value=category;
-  showToast('✓ Categoría creada y sincronizada');
-};
+$('#stockCategory').onchange=()=>fillScopedSubcategories('#stockCategory','#stockSubcategory','#stockSubcategoryWrap');
+$('#stockQuickCategory').onclick=()=>{const category=createCategoryFromPrompt('#stockCategory');if(category)fillScopedSubcategories('#stockCategory','#stockSubcategory','#stockSubcategoryWrap');};
+$('#stockQuickSubcategory').onclick=()=>createSubcategoryFromPrompt('#stockCategory','#stockSubcategory','#stockSubcategoryWrap');
+$('#stockEditCategory').onclick=()=>editCategoryFromSelect('#stockCategory');
+$('#stockEditSubcategory').onclick=()=>editSubcategoryFromSelect('#stockCategory','#stockSubcategory','#stockSubcategoryWrap');
 $('#stockForm').onsubmit=async(e)=>{
   e.preventDefault();
   const quantity=stockPresetValue('#stockQtyPreset','#stockQtyManual');
@@ -2215,7 +2218,7 @@ $('#stockForm').onsubmit=async(e)=>{
   if(!months)return showToast('Elegí o ingresá los meses estimados');
   const totalAmount=localizedInputNumber('#stockAmount');
   if(!Number.isFinite(totalAmount)||totalAmount<0)return showToast('Ingresá un importe válido');
-  await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),quantity,months,totalAmount,currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});
+  await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),subcategory:$('#stockSubcategory').value.trim(),quantity,months,totalAmount,currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});
   $('#stockDialog').close();renderStock();renderBudget();renderSavings();showToast('Compra de stock guardada');
 };
 bindHoldToTalk($('#stockVoiceBtn'),{
@@ -2235,7 +2238,8 @@ $('#saveBudget').onclick=()=>{ const key=$('#budgetMonth').value||currentMonthKe
 $('#savingsYear').onchange=renderSavings;
 
 $('#runConsult').onclick=runConsultation;
-['consultFrom','consultTo','consultCategory','consultMethod','consultCurrency','consultCard','consultMin'].forEach((id)=>$('#'+id).onchange=runConsultation);
+['consultFrom','consultTo','consultSubcategory','consultMethod','consultCurrency','consultCard','consultAmount','consultMin'].forEach((id)=>$('#'+id).onchange=runConsultation);
+$('#consultCategory').onchange=()=>{renderConsultationFilters();runConsultation();};
 $('#consultSpeak').onchange=()=>{state.settings.consultSpeak=$('#consultSpeak').checked;save();};
 $('#compareMonths').onclick=compareMonths;
 bindHoldToTalk($('#consultMic'),{
@@ -2281,4 +2285,4 @@ $('#exportResale').onclick = exportResaleCsv;
 window.addEventListener('pagehide',()=>{try{save();}catch{}}); document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){try{save();}catch{}}});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
 bindLocalizedNumberInputs();
-const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#consultFrom').value=todayISO.slice(0,8)+'01'; $('#consultTo').value=todayISO; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
+const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#fixedExpenseMonth').value=monthISO; $('#consultFrom').value=todayISO.slice(0,8)+'01'; $('#consultTo').value=todayISO; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
