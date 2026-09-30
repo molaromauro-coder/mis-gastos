@@ -1,4 +1,4 @@
-const CACHE = 'mis-gastos-v52';
+const CACHE = 'mis-gastos-v53';
 const FILES = ['./', './index.html', './styles.css', './app.js', './parser.js', './reporting.js', './finance.js', './category-learning.js', './numeric-format.js', './expense-reset.js', './manifest.webmanifest', './icons/icon.svg', './icons/apple-touch-icon.png'];
 self.addEventListener('install', (event) => { self.skipWaiting(); event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES))); });
 self.addEventListener('activate', (event) => { event.waitUntil(Promise.all([self.clients.claim(), caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))])); });
