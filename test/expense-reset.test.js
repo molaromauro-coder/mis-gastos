@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot } from '../expense-reset.js';
+import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from '../expense-reset.js';
 import { recentPurchases, groupExpenses } from '../reporting.js';
 
 const now=new Date('2026-09-30T12:00:00-03:00');
@@ -93,4 +93,25 @@ test('ambos borrados conservan medios de pago, categorías, subcategorías y con
   assert.deepEqual(state.categories,categories);
   assert.deepEqual(state.subcategories,subs);
   assert.deepEqual(state.settings,settings);
+});
+
+
+test('verifica que no queden movimientos activos del mes actual',()=>{
+  const state=sampleState();
+  moveCurrentMonthExpensesToTrash(state,now);
+  assert.equal(verifyNoCurrentMonthExpenses(state,now),true);
+});
+
+test('verifica que no queden movimientos activos de meses anteriores',()=>{
+  const state=sampleState();
+  permanentlyDeletePreviousMonths(state,now);
+  assert.equal(verifyNoPreviousMonthExpenses(state,now),true);
+});
+
+test('usa dueDate como respaldo para registros antiguos sin fecha de compra',()=>{
+  const state={expenses:[{id:'legacy',amount:10,dueDate:'2026-09-15T10:00:00-03:00'}],trash:[]};
+  assert.equal(currentMonthExpenseCount(state,now),1);
+  moveCurrentMonthExpensesToTrash(state,now);
+  assert.equal(state.expenses.length,0);
+  assert.equal(verifyNoCurrentMonthExpenses(state,now),true);
 });
