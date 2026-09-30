@@ -304,3 +304,21 @@ test('reconoce subcategoria por voz y asigna su categoria madre',()=>{
   assert.equal(e.category,'Gastos fijos');
   assert.equal(e.subcategory,'Luz');
 });
+
+
+test('separa tres gastos con medios de pago distintos en un mismo audio',()=>{
+  const cards=[
+    {name:'Mercado Pago',type:'Débito'},
+    {name:'Banco Francés',type:'Crédito'}
+  ];
+  const items=parseExpenses('Gasté 30 mil pesos en kiosco, pagué en efectivo, gasté 50 mil pesos en supermercado, pagué con Mercado Pago y gasté 90 mil pesos en combustible, pagué con tarjeta de crédito en 3 cuotas',cards);
+  assert.equal(items.length,3);
+  assert.deepEqual(items.map((x)=>x.amount),[30000,50000,90000]);
+  assert.deepEqual(items.map((x)=>x.method),['Efectivo','Débito','Crédito']);
+  assert.deepEqual(items.map((x)=>x.card),['','Mercado Pago','']);
+  assert.deepEqual(items.map((x)=>x.installments),[1,1,3]);
+  assert.deepEqual(items.map((x)=>x.installmentsSpecified),[false,false,true]);
+  assert.match(items[0].concept,/kiosco/i);
+  assert.match(items[1].concept,/supermercado/i);
+  assert.match(items[2].concept,/combustible/i);
+});

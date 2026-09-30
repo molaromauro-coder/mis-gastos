@@ -1184,7 +1184,7 @@ function launchExpenseRecognitionCycle(){
   if(!voiceHoldActive||voiceCancelled||voiceStopRequested||activeRecognition)return;
   const recognition=new SpeechRecognition();
   activeRecognition=recognition; voiceCycleText='';
-  recognition.lang='es-AR'; recognition.interimResults=true; recognition.continuous=false; recognition.maxAlternatives=1;
+  recognition.lang='es-AR'; recognition.interimResults=true; recognition.continuous=true; recognition.maxAlternatives=1;
   recognition.onstart=()=>{
     $('#micBtn').classList.add('listening');
     $('#voiceZone')?.classList.add('recording');
@@ -1197,10 +1197,10 @@ function launchExpenseRecognitionCycle(){
     if(voiceCycleText){voiceTranscript=[voiceTranscript,voiceCycleText].filter(Boolean).join(' ').trim();}
     activeRecognition=null; voiceCycleText='';
     if(voiceCancelled){finishExpenseVoice();return;}
-    if(voiceHoldActive&&!voiceStopRequested){setTimeout(launchExpenseRecognitionCycle,120);return;}
+    if(voiceHoldActive&&!voiceStopRequested){setTimeout(launchExpenseRecognitionCycle,25);return;}
     finishExpenseVoice();
   };
-  try{recognition.start();}catch{activeRecognition=null;if(voiceHoldActive&&!voiceStopRequested)setTimeout(launchExpenseRecognitionCycle,180);else finishExpenseVoice();}
+  try{recognition.start();}catch{activeRecognition=null;if(voiceHoldActive&&!voiceStopRequested)setTimeout(launchExpenseRecognitionCycle,60);else finishExpenseVoice();}
 }
 function startExpenseVoice() {
   if (activeRecognition||voiceHoldActive) return;
