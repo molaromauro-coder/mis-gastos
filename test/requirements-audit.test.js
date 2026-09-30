@@ -76,7 +76,8 @@ test('auditoría funcional: recuperos, presupuesto, ahorro, stock, papelera y ex
   for(const id of ['recoveries','budget','savings','stock']) assert.ok(html.includes(`id="${id}"`));
   assert.match(app,/renderTrash/);
   assert.match(app,/exportConsultExcel/);
-  assert.match(app,/printConsultation/);
+  assert.match(app,/function exportConsultPdf/);
+  assert.match(app,/window\.print/);
 });
 
 test('auditoría funcional: Reventa es independiente e importa Excel con revisión manual',()=>{
@@ -85,7 +86,8 @@ test('auditoría funcional: Reventa es independiente e importa Excel con revisi�
   for(const marker of ['parseResaleTable','compareResaleImport','applyResaleImport']) assert.ok(resaleImport.includes(marker));
   assert.match(app,/resale-import-decision/);
   assert.match(app,/value="manual"/);
-  assert.match(app,/La Reventa permanece separada de tus gastos personales/);
+  assert.match(app,/const resaleApi = sharedMode \? null : await import/);
+  assert.match(app,/document\.querySelectorAll\('\.owner-only'\)\.forEach/);
 });
 
 test('auditoría funcional: seguridad opcional Face ID + PIN de 6 dígitos',()=>{
