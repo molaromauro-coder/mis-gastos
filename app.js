@@ -1341,7 +1341,7 @@ function renderFixedExpenses(){
   });
 }
 
-function exportRowsForConsultation(){return consultationItems().map((e)=>({Fecha:new Date(e.purchaseDate||e.date).toLocaleString('es-AR'),Concepto:e.concept||'',Categoría:e.category||'',Medio:e.method||'',Tarjeta:e.card||'',Moneda:e.currency,Importe:Number(e.amount||0),Cotización:e.fxRate||'',EquivalenteARS:expenseArsEquivalent(e)}));}
+function exportRowsForConsultation(){return consultationRows().map((row)=>({Tipo:row.type,Fecha:row.date.toLocaleString('es-AR'),Concepto:row.concept||'',Categoría:row.category||'',Subcategoría:row.subcategory||'',Medio:row.method||'',Tarjeta:row.card||'',Moneda:row.currency,Importe:Number(row.amount||0),EquivalenteARS:Number(row.arsEquivalent||0)}));}
 function exportConsultExcel(){
   const rows=exportRowsForConsultation(),headers=Object.keys(rows[0]||{Fecha:'',Concepto:'',Categoría:'',Medio:'',Tarjeta:'',Moneda:'',Importe:'',Cotización:'',EquivalenteARS:''});
   const csv=[headers,...rows.map((r)=>headers.map((h)=>r[h]))].map((row)=>row.map((v)=>`"${String(v??'').replaceAll('"','""')}"`).join(';')).join('\n');
