@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { monthKey, budgetOutcome, stockMetrics, recoveryMonthMetrics, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from '../finance.js';
+import { monthKey, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from '../finance.js';
 
 test('presupuesto mensual usa cuotas por vencimiento',()=>{
   const expenses=[{currency:'ARS',amount:100,dueDate:'2026-10-10T12:00:00'}];
@@ -73,4 +73,15 @@ test('proximo vencimiento usa la fecha ancla y luego avanza un mes',()=>{
   const card={closingDate:'2026-10-25',dueDate:'2026-11-12',closingDay:25,dueDay:12};
   assert.equal(nextDueDateForCard(card,new Date('2026-11-01T12:00:00')).toISOString().slice(0,10),'2026-11-12');
   assert.equal(nextDueDateForCard(card,new Date('2026-11-13T12:00:00')).toISOString().slice(0,10),'2026-12-12');
+});
+
+test('recuperos del mes corriente quedan descontados históricamente si fueron aplicados al cargarlos',()=>{
+  const rows=[
+    {amount:300,currency:'ARS',date:'2026-09-15',affectsExpenseMonth:true},
+    {amount:200,currency:'ARS',date:'2026-09-20',affectsExpenseMonth:false},
+    {amount:150,currency:'ARS',date:'2026-09-28'} // dato anterior al agregado del indicador
+  ];
+  assert.equal(recoveryAppliedMonthTotal(rows,'2026-09','2026-09'),450);
+  assert.equal(recoveryAppliedMonthTotal(rows,'2026-09','2026-10'),300);
+  assert.equal(recoveryAppliedMonthTotal(rows,'2026-10','2026-10'),0);
 });

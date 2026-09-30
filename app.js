@@ -1,10 +1,11 @@
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
-import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
+import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
 import { learnCategoryRule, applyLearnedCategory } from './category-learning.js';
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
+import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
 const resaleApi = sharedMode ? null : await import('./resale.js?v=59');
 const normalizeSplit = resaleApi?.normalizeSplit;
@@ -75,6 +76,38 @@ function seedDemoCardsOnce(){
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
 }
 seedDemoCardsOnce();
+
+const USER_CATEGORY_BASE_VERSION=1;
+const USER_CATEGORY_BASE={
+  'GASTOS FIJOS':['LUZ','GAS','EXPENSAS','SEGURO AUTO','SEGURO MOTO','SEGURO BICI','SEGURO HOGAR','IMPUESTOS VARIOS','COMIDA FRODO'],
+  'VIANDAS':[],
+  'SUPERMERCADO':['LIMPIEZA','COMIDA','GASEOSAS','VINOS','OTROS'],
+  'KIOSCO':[],
+  'CARAMELOS / CHOCOLATES':[],
+  'VINOS':[],
+  'HOGAR':['ELECTRODOMESTICOS','MUEBLES','REPARACIONES','ADORNOS','OTROS'],
+  'FARMACIA':['MEDICAMENTOS','PERFUMES','CREMAS'],
+  'SALUD':['PSICOLOGO','PSIQUIATRA','OBRA SOCIAL','TRATAMIENTO PELO'],
+  'ENTRADAS PERSONALES':[]
+};
+function seedUserCategoryBaseOnce(){
+  if(sharedMode || Number(state.settings?.userCategoryBaseVersion||0)>=USER_CATEGORY_BASE_VERSION)return;
+  if(!Array.isArray(state.categories))state.categories=[];
+  if(!state.subcategories||typeof state.subcategories!=='object')state.subcategories={};
+  const findCategory=(name)=>state.categories.find((value)=>String(value||'').trim().toLocaleLowerCase('es-AR')===String(name).trim().toLocaleLowerCase('es-AR'));
+  Object.entries(USER_CATEGORY_BASE).forEach(([category,subs])=>{
+    let actual=findCategory(category);
+    if(!actual){actual=category;state.categories.push(actual);}
+    const current=Array.isArray(state.subcategories[actual])?[...state.subcategories[actual]]:[];
+    subs.forEach((sub)=>{
+      if(!current.some((value)=>String(value||'').trim().toLocaleLowerCase('es-AR')===String(sub).trim().toLocaleLowerCase('es-AR')))current.push(sub);
+    });
+    state.subcategories[actual]=current;
+  });
+  state.settings={...state.settings,userCategoryBaseVersion:USER_CATEGORY_BASE_VERSION};
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+}
+seedUserCategoryBaseOnce();
 
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
 let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
@@ -257,7 +290,7 @@ function renderHomeRecent(){
   }
   $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>4);
 }
-function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
+function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock();renderMonthlyNetSummary(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function subcategoriesFor(category){
   const values=state.subcategories?.[category];
@@ -322,6 +355,7 @@ function renameCategoryEverywhere(oldName,newName){
   state.subcategories[clean]=state.subcategories[oldName]||[];
   delete state.subcategories[oldName];
   state.expenses.forEach((e)=>{if(e.category===oldName)e.category=clean;});
+  state.trash.forEach((entry)=>{(entry.items||[]).forEach((e)=>{if(e.category===oldName)e.category=clean;});});
   state.recurring.forEach((e)=>{if(e.category===oldName)e.category=clean;});
   state.stock.forEach((e)=>{if(e.category===oldName)e.category=clean;});
   state.fixedExpenses.forEach((e)=>{if(e.category===oldName)e.category=clean;});
@@ -334,8 +368,9 @@ function deleteCategoryEverywhere(category){
   const index=state.categories.indexOf(category); if(index<0)return;
   state.categories.splice(index,1);delete state.subcategories[category];
   state.expenses.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';e.categoryStatus='unclassified';}});
+  state.trash.forEach((entry)=>{(entry.items||[]).forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';e.categoryStatus='unclassified';}});});
   state.categoryRules=state.categoryRules.filter((rule)=>rule.category!==category);
-  state.recurring.forEach((e)=>{if(e.category===category)e.category='';});
+  state.recurring.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
   state.stock.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
   state.fixedExpenses.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';}});
   pending.forEach((e)=>{if(e.category===category){e.category='';e.subcategory='';e.categoryStatus='unclassified';}});
@@ -347,7 +382,9 @@ function renameSubcategoryEverywhere(category,oldName,newName){
   if(index<0||!clean||list.some((s)=>s!==oldName&&s.toLowerCase()===clean.toLowerCase()))return false;
   list[index]=clean;state.subcategories[category]=list;
   state.expenses.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
+  state.trash.forEach((entry)=>{(entry.items||[]).forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});});
   state.stock.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
+  state.recurring.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.fixedExpenses.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   pending.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.categoryRules.forEach((rule)=>{if(rule.category===category&&rule.subcategory===oldName)rule.subcategory=clean;});
@@ -442,6 +479,7 @@ function fillCategories() {
         if(!confirm(`¿Eliminar la subcategoría ${removed}?`))return;
         state.subcategories[active]=current.filter((_,i)=>i!==index);
         state.expenses.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
+        state.trash.forEach((entry)=>{(entry.items||[]).forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});});
         state.stock.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
         state.recurring.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
         state.fixedExpenses.forEach((e)=>{if(e.category===active&&e.subcategory===removed)e.subcategory='';});
@@ -533,6 +571,23 @@ function renderReportChart(rows){
   const top=rows.slice(0,6), max=Math.max(...top.map((r)=>r.arsEquivalent),1);
   target.innerHTML=top.length?top.map((r)=>`<div class="report-chart-row"><span>${escape(r.key)}</span><div><i style="width:${Math.max(2,r.arsEquivalent/max*100)}%"></i></div><strong>${money(r.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin datos para graficar.</div>';
 }
+function renderReportPie(items){
+  const target=$('#reportPie'); if(!target)return;
+  const grouped=groupExpenses(items,e=>e.category || 'Sin categoría').filter((r)=>r.arsEquivalent>0).sort((a,b)=>b.arsEquivalent-a.arsEquivalent);
+  const total=grouped.reduce((s,r)=>s+r.arsEquivalent,0);
+  if(!grouped.length||!total){target.innerHTML='<div class="empty">Sin datos para graficar.</div>';return;}
+  const main=grouped.slice(0,7);
+  const rest=grouped.slice(7).reduce((s,r)=>s+r.arsEquivalent,0);
+  const rows=rest>0?[...main,{key:'Resto',arsEquivalent:rest,count:0}]:main;
+  let cursor=0;
+  const slices=rows.map((row,index)=>{
+    const start=cursor, percent=row.arsEquivalent/total*100; cursor+=percent;
+    const color=`hsl(${(index*47+156)%360} 38% 55%)`;
+    return {...row,start,end:cursor,percent,color};
+  });
+  const gradient=slices.map((row)=>`${row.color} ${row.start}% ${row.end}%`).join(',');
+  target.innerHTML=`<div class="report-pie-layout"><div class="report-pie-chart" style="background:conic-gradient(${gradient})" role="img" aria-label="Distribución porcentual por categoría"></div><div class="report-pie-legend">${slices.map((row)=>`<div><i style="background:${row.color}"></i><span>${escape(row.key)}</span><strong>${row.percent.toLocaleString('es-AR',{maximumFractionDigits:1})}%</strong></div>`).join('')}</div></div><small class="report-pie-note">La torta muestra categorías de origen sin duplicar acumuladores transversales.</small>`;
+}
 function normalizedCategoryName(value){return String(value||'').trim().toLocaleLowerCase('es-AR');}
 function categoryHasCrossSubcategories(category){
   const target=normalizedCategoryName(category);
@@ -589,6 +644,7 @@ function renderReport() {
   $('#reportComparison').textContent = diff == null ? 'Sin período previo' : `${diff >= 0 ? '+' : ''}${diff.toLocaleString('es-AR',{maximumFractionDigits:1})}%`;
   const categoryRows=configuredCategoryRows(items);
   renderReportChart(categoryRows.filter((r)=>r.arsEquivalent>0));
+  renderReportPie(items);
   renderReportRows($('#reportCategories'),categoryRows,'category');
   renderReportRows($('#reportMethods'),groupExpenses(items,e=>e.method || 'Sin definir'),'method');
   const top = items.slice().sort((a,b)=>expenseArsEquivalent(b)-expenseArsEquivalent(a)).slice(0,8);
@@ -704,8 +760,22 @@ function softTapFeedback(){
   } catch {}
 }
 document.addEventListener('pointerdown',(event)=>{const button=event.target.closest?.('button');if(!button||button.disabled)return;softTapFeedback();},{passive:true});
-function setManualStep(step) { manualStep = step; document.querySelectorAll('.step').forEach((e) => e.classList.toggle('active', Number(e.dataset.step) === step)); $('#stepLabel').textContent = `PASO ${step} DE 3`; $('#expenseDialogTitle').textContent = ['¿Cuánto gastaste?', 'Elegí una categoría', '¿Cómo pagaste?'][step - 1]; $('#prevStep').classList.toggle('hidden', step === 1); $('#nextStep').classList.toggle('hidden', step === 3); $('#saveExpense').classList.toggle('hidden', step !== 3); }
-function openExpense(data = {}) { $('#expenseForm').reset(); setLocalizedInput('#amount',data.amount||'',2); $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || ''; const voiceNeedsMethod=data.source==='voice'&&needsPaymentMethod(data); $('#method').value = voiceNeedsMethod ? '' : data.method || 'Efectivo'; $('#installments').value = data.installments || 1; document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true; fillCategories(); $('#category').value = data.category || ''; fillSubcategories(data.subcategory || ''); const firstMissingStep=!Number(data.amount)?1:(!data.category&&data.categoryStatus==='unclassified'?2:(voiceNeedsMethod?3:1)); setManualStep(firstMissingStep); updatePaymentFields(); $('#expenseCard').value = data.card || ''; updateInstallmentPreview(); $('#expenseDialog').showModal(); }
+function openExpense(data = {}) {
+  $('#expenseForm').reset();
+  setLocalizedInput('#amount',data.amount||'',2);
+  $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || '';
+  const voiceNeedsMethod=data.source==='voice'&&needsPaymentMethod(data);
+  $('#method').value = voiceNeedsMethod ? '' : data.method || '';
+  $('#installments').value = data.installments || 1;
+  document.querySelector(`[name=currency][value=${data.currency || 'ARS'}]`).checked = true;
+  fillCategories();
+  $('#category').value = data.category || '';
+  fillSubcategories(data.subcategory || '');
+  updatePaymentFields();
+  $('#expenseCard').value = data.card || '';
+  updateInstallmentPreview();
+  $('#expenseDialog').showModal();
+}
 function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', !method || method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
 function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value && c.type === $('#method').value), count = Number($('#installments').value || 1), amount = localizedInputNumber('#amount'); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${integerText(count)} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${integerText(card.dueDay)} de cada mes.</span>`; }
 function pendingCreditDetail(e){
@@ -1215,6 +1285,83 @@ function addResaleBatch({ name, date, type, qty, cost }) {
   const sameType = party.tickets.filter((t) => t.type.toLowerCase() === type.toLowerCase()).length;
   for (let i = 1; i <= qty; i++) party.tickets.push({ id: uid(), type, number: sameType + i, cost, salePrice: 0, status: 'Disponible' });
 }
+let pendingResaleImport=null;
+async function ensureExcelReader(){
+  if(window.XLSX)return window.XLSX;
+  const sources=[
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
+  ];
+  for(const source of sources){
+    try {
+      await new Promise((resolve,reject)=>{
+        const script=document.createElement('script');
+        script.src=source;script.onload=resolve;script.onerror=()=>{script.remove();reject(new Error('Sin conexión al lector Excel'));};
+        document.head.append(script);
+      });
+      if(window.XLSX)return window.XLSX;
+    }catch{}
+  }
+  throw new Error('No se pudo cargar el lector de Excel. Revisá la conexión a Internet.');
+}
+function resaleImportTicketLabel(row){
+  if(!row)return 'No figura';
+  return `${row.partyName?row.partyName+' · ':''}${row.type} #${row.number} · Costo ${money(row.cost,'ARS')} · Venta ${money(row.salePrice,'ARS')} · ${row.status}`;
+}
+function showResaleImportReview(fileName,parsed,comparison){
+  pendingResaleImport={fileName,parsed,comparison};
+  $('#resaleImportSummary').textContent=`${integerText(parsed.rows.length)} entradas leídas · ${integerText(comparison.matched)} coinciden · ${integerText(comparison.issues.length)} diferencias para revisar.`;
+  $('#resaleImportWarnings').innerHTML=parsed.warnings.length?
+    `<strong>Advertencias del archivo</strong>${parsed.warnings.map((warning)=>`<p>${escape(warning)}</p>`).join('')}`:'';
+  $('#resaleImportDifferences').innerHTML=comparison.issues.length?
+    comparison.issues.map((issue)=>{
+      const source=issue.imported;
+      const current=issue.current?{...issue.current,partyName:issue.current.partyName||source?.partyName||''}:null;
+      const label=issue.kind==='new'?'Entrada nueva en Excel':issue.kind==='onlyApp'?'Sólo existe en la app':'Datos diferentes';
+      const selected=issue.kind==='new'?'excel':'app';
+      const choices=issue.kind==='onlyApp'?
+        '<option value="app">Mantener en la app</option><option value="remove">Eliminar de la app</option>':
+        issue.kind==='new'?
+        '<option value="excel">Agregar desde Excel</option><option value="app">No importar esta entrada</option><option value="manual">Corregir manualmente</option>':
+        '<option value="app">Conservar datos de la app</option><option value="excel">Usar datos del Excel</option><option value="manual">Corregir manualmente</option>';
+      return `<article class="resale-import-row"><strong>${escape(source?.partyName||current?.partyName||'')} · ${escape(source?.type||current?.type||'')} #${integerText(source?.number||current?.number||0)}</strong>
+        <small>${label}${issue.fields.length?' · Cambian: '+escape(issue.fields.join(', ')):''}</small>
+        <div>App: ${escape(resaleImportTicketLabel(current))}</div>
+        <div>Excel: ${escape(resaleImportTicketLabel(source))}</div>
+        <select class="resale-import-decision" data-import-id="${escape(issue.id)}" aria-label="Resolver diferencia">${choices}</select>
+        ${source?`<div class="resale-import-manual hidden" data-manual-import-id="${escape(issue.id)}">
+          <label>Costo compra<input class="import-cost" inputmode="decimal" data-local-number="2" value="${formatNumericInputValue(source.cost,{maximumFractionDigits:2})}"></label>
+          <label>Precio venta<input class="import-sale" inputmode="decimal" data-local-number="2" value="${formatNumericInputValue(source.salePrice,{maximumFractionDigits:2})}"></label>
+          <label>Estado<select class="import-status">${['Disponible','Vendida','Uso personal'].map((s)=>`<option ${s===source.status?'selected':''}>${s}</option>`).join('')}</select></label>
+        </div>`:''}
+      </article>`;
+    }).join(''):'<div class="empty">No hay diferencias con lo que ya está cargado en la app.</div>';
+  $('#resaleImportDifferences').querySelectorAll('.resale-import-decision').forEach((select)=>{
+    select.onchange=()=>{
+      const manual=$('#resaleImportDifferences').querySelector(`[data-manual-import-id="${select.dataset.importId}"]`);
+      manual?.classList.toggle('hidden',select.value!=='manual');
+    };
+  });
+  bindLocalizedNumberInputs($('#resaleImportDifferences'));
+  $('#resaleImportReview').showModal();
+}
+async function readResaleExcelFile(file){
+  if(!file)return;
+  try{
+    $('#importResaleExcel').disabled=true;
+    const XLSX=await ensureExcelReader();
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
+    const sheetName=wb.SheetNames.find((name)=>/ventas?/i.test(name))||wb.SheetNames[0];
+    if(!sheetName)throw new Error('El archivo no contiene hojas.');
+    const matrix=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:true});
+    const parsed=parseResaleTable(matrix,state.resale.parties);
+    if(!parsed.rows.length)throw new Error(parsed.warnings.join(' ')||'No pude encontrar entradas en la planilla.');
+    const comparison=compareResaleImport(parsed.rows,state.resale.parties);
+    showResaleImportReview(file.name,parsed,comparison);
+  }catch(error){showToast(error.message||'No pude leer el archivo.');}
+  finally{$('#importResaleExcel').disabled=false;$('#resaleImportFile').value='';}
+}
+
 function exportResaleCsv() {
   const split = resaleSplit();
   const rows = [['Fiesta','Fecha','Tipo','N°','Costo compra','Precio venta','Estado','Costo recuperado','Ganancia neta','% ganancia','Ganancia Mauro','Ganancia vendedor']];
@@ -1425,7 +1572,22 @@ async function showAppLock(){
 }
 function currentMonthKey() { return monthKey(new Date()); }
 function budgetFor(key) { return state.budgets[key] || { amount: 0, reason: '', history: [] }; }
-function budgetMetrics(key) { return budgetOutcome(budgetFor(key).amount, state.expenses, state.stock, key); }
+function recoveredForCurrentMonth(key){
+  return recoveryAppliedMonthTotal(state.recoveries,key,currentMonthKey());
+}
+function budgetMetrics(key) {
+  const base=budgetOutcome(budgetFor(key).amount,state.expenses,state.stock,key);
+  const spent=Math.max(0,base.spent-recoveredForCurrentMonth(key));
+  return {...base,spent,available:Math.max(base.budget-spent,0),saving:base.budget>0?Math.max(base.budget-spent,0):0,excess:base.budget>0?Math.max(spent-base.budget,0):0,percent:base.budget>0?spent/base.budget*100:0};
+}
+function renderMonthlyNetSummary(){
+  if(!$('#homeMonthlyNet'))return;
+  const m=recoveryMonthMetrics(state.recoveries,state.expenses,currentMonthKey());
+  $('#homeMonthlyGross').textContent=money(m.gross,'ARS');
+  const applied=recoveryAppliedMonthTotal(state.recoveries,currentMonthKey(),currentMonthKey());
+  $('#homeMonthlyRecovered').textContent=money(applied,'ARS');
+  $('#homeMonthlyNet').textContent=money(Math.max(m.gross-applied,0),'ARS');
+}
 
 function renderBudgetHomeAlert() {
   if (!$('#budgetAlert')) return;
@@ -1474,7 +1636,14 @@ function renderRecoveries() {
   const m=recoveryMonthMetrics(state.recoveries,state.expenses,key);
   $('#recoveryGross').textContent=money(m.gross,'ARS');
   $('#recoveryTotal').textContent=money(m.recovered,'ARS');
-  $('#recoveryNet').textContent=money(m.net,'ARS');
+  const applied=recoveryAppliedMonthTotal(state.recoveries,key,currentMonthKey());
+  const informational=Math.max(m.recovered-applied,0);
+  $('#recoveryNet').textContent=money(Math.max(m.gross-applied,0),'ARS');
+  $('#recoveryNetLabel').textContent=applied>0?'Gasto neto':'Gasto sin descuentos';
+  const explanation=[];
+  if(applied>0)explanation.push(`${money(applied,'ARS')} descontados por haberse registrado dentro del mes correspondiente.`);
+  if(informational>0)explanation.push(`${money(informational,'ARS')} de recuperos históricos informativos que no descuentan gastos de ese mes.`);
+  $('#recoveryMonthNote').textContent=explanation.join(' ')||'Los recuperos se conservan en el historial y no borran el gasto original.';
   const rows=state.recoveries.filter((r)=>monthKey(new Date(r.date+'T12:00:00'))===key).sort((a,b)=>b.date.localeCompare(a.date));
   $('#recoveryList').innerHTML=rows.length ? rows.map((r)=>`<article class="recovery-card"><div><strong>${escape(r.concept || 'Recupero')}</strong><span>${new Date(r.date+'T12:00:00').toLocaleDateString('es-AR')}</span><small>${r.currency==='USD' && r.fxRate ? `Cotización ${money(r.fxRate,'ARS')}` : ''}</small></div><strong>${money(r.amount,r.currency)}</strong></article>`).join('') : '<div class="empty">No hay recuperos en este mes.</div>';
 }
@@ -1591,7 +1760,9 @@ function consultationRows() {
   const cat=$('#consultCategory').value, sub=$('#consultSubcategory')?.value||'', method=$('#consultMethod').value, currency=$('#consultCurrency').value, card=$('#consultCard').value;
   const min=localizedInputNumber('#consultMin'), exact=localizedInputNumber('#consultAmount');
   const query=String($('#consultQuery').value||'').toLowerCase().trim();
-  const generic=/^(|.*\b(cuanto|cuánto|gaste|gasté|gasto|gastos|pague|pagué|pago|pagos|compra|compras|recupero|recuperos|este mes|mes pasado|hoy|en|de|por|con|que|qué|cuál|cual)\b.*)$/i.test(query);
+  const normalizeSearch=(value)=>String(value||'').toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const stopWords=new Set(['cuanto','gaste','gasto','gastos','pague','pago','pagos','compra','compras','recupero','recuperos','busca','buscar','buscame','mostra','mostrar','mostrame','dame','de','del','la','las','el','los','en','por','con','que','cual','cuando','este','esta','mes','pasado','hoy','ayer','entre','desde','hasta','mis','mi','un','una','al','para','ars','usd','pesos','peso','dolares','dolar','tarjeta','efectivo','debito','credito','categoria','subcategoria']);
+  const tokens=normalizeSearch(query).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter((token)=>token.length>2&&!stopWords.has(token));
   return globalSearchRows().filter((row)=>{
     if(!(row.date>=from&&row.date<=to))return false;
     if(cat){
@@ -1606,10 +1777,9 @@ function consultationRows() {
     if(card&&row.card!==card)return false;
     if(Number.isFinite(min)&&min>0&&row.arsEquivalent<min)return false;
     if(Number.isFinite(exact)&&exact>0&&Math.abs(row.arsEquivalent-exact)>0.01)return false;
-    if(query&&!generic){
-      const haystack=[row.type,row.concept,row.category,row.subcategory,row.method,row.card].join(' ').toLowerCase();
-      const tokens=query.replace(/[^a-záéíóúüñ0-9 ]/gi,' ').split(/\s+/).filter((t)=>t.length>2);
-      if(tokens.length&&!tokens.every((token)=>haystack.includes(token)))return false;
+    if(tokens.length){
+      const haystack=normalizeSearch([row.type,row.concept,row.category,row.subcategory,row.method,row.card].join(' '));
+      if(!tokens.every((token)=>haystack.includes(token)))return false;
     }
     return true;
   });
@@ -1789,7 +1959,6 @@ async function confirmPending(index, card) {
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
 $('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit+=5;renderHomeRecent();}; $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
-$('#nextStep').onclick = () => { if (manualStep === 1 && !$('#amount').value) return $('#amount').reportValidity(); setManualStep(manualStep + 1); }; $('#prevStep').onclick = () => setManualStep(manualStep - 1);
 $('#method').onchange = updatePaymentFields; $('#category').onchange = () => fillSubcategories(); $('#subcategory').onchange=()=>$('#editSelectedSubcategory')?.classList.toggle('hidden',!$('#subcategory').value); $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = ()=>{formatLocalizedInputElement($('#amount'));updateInstallmentPreview();}; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
 $('#expenseForm').onsubmit = async (event) => {
   event.preventDefault();
@@ -2251,8 +2420,8 @@ bindHoldToTalk($('#stockVoiceBtn'),{
   errorText:'No pude escuchar el consumo'
 });
 
-$('#addRecovery').onclick=()=>{ $('#recoveryForm').reset(); $('#recoveryDate').value=new Date().toISOString().slice(0,10); $('#recoveryDialog').showModal(); };
-$('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:localizedInputNumber('#recoveryAmount'),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value};if(!Number.isFinite(item.amount)||item.amount<=0)return showToast('Ingresá un importe válido');if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();renderRecoveries();showToast('Recupero guardado');};
+$('#addRecovery').onclick=()=>{ $('#recoveryForm').reset(); const today=new Date(); $('#recoveryDate').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`; $('#recoveryDialog').showModal(); };
+$('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:localizedInputNumber('#recoveryAmount'),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value,createdAt:new Date().toISOString(),affectsExpenseMonth:monthKey(new Date($('#recoveryDate').value+'T12:00:00'))===currentMonthKey()};if(!Number.isFinite(item.amount)||item.amount<=0)return showToast('Ingresá un importe válido');if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();render();showToast('Recupero guardado');};
 $('#recoveryMonth').onchange=renderRecoveries;
 
 $('#budgetMonth').onchange=renderBudget;
@@ -2301,6 +2470,34 @@ $('#resaleSplitForm').onsubmit = (event) => {
   save(); $('#resaleSplitDialog').close(); renderResale(); showToast('Reparto actualizado en toda Reventa');
 };
 $('#exportResale').onclick = exportResaleCsv;
+$('#importResaleExcel').onclick=()=>$('#resaleImportFile').click();
+$('#resaleImportFile').onchange=(event)=>readResaleExcelFile(event.target.files?.[0]);
+$('#applyResaleImport').onclick=()=>{
+  if(!pendingResaleImport)return;
+  const issues=pendingResaleImport.comparison.issues.map((issue)=>({...issue,imported:issue.imported?{...issue.imported}:null}));
+  const decisions={};
+  for(const select of $('#resaleImportDifferences').querySelectorAll('.resale-import-decision')){
+    const id=select.dataset.importId;
+    const issue=issues.find((item)=>item.id===id);
+    if(!issue)continue;
+    decisions[id]=select.value;
+    if(select.value!=='manual')continue;
+    const row=select.closest('.resale-import-row');
+    const cost=parseLocalizedNumber(row.querySelector('.import-cost')?.value||'');
+    const sale=parseLocalizedNumber(row.querySelector('.import-sale')?.value||'');
+    const status=row.querySelector('.import-status')?.value;
+    if(!Number.isFinite(cost)||cost<0||!Number.isFinite(sale)||sale<0||!['Disponible','Vendida','Uso personal'].includes(status)){
+      return showToast('Revisá costo, precio y estado de la entrada corregida.');
+    }
+    if(!issue.imported)return showToast('Esa entrada sólo existe en la app; elegí conservarla o eliminarla.');
+    issue.imported={...issue.imported,cost,salePrice:sale,status};
+  }
+  const applied=issues.filter((issue)=>['excel','manual','remove'].includes(decisions[issue.id])).length;
+  state.resale.parties=applyResaleImport(state.resale.parties,issues,decisions,uid);
+  save();renderResale();$('#resaleImportReview').close();pendingResaleImport=null;
+  showToast(`Reventa actualizada: ${integerText(applied)} diferencias resueltas`);
+};
+$('#cancelResaleImport').onclick=()=>{pendingResaleImport=null;$('#resaleImportReview').close();};
 }
 
 

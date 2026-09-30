@@ -107,7 +107,15 @@ export function stockMetrics(purchase) {
   return {qty,consumed,remaining,total,unitCost,consumedValue:consumed*unitCost,remainingValue:remaining*unitCost};
 }
 export function recoveryMonthMetrics(recoveries = [], expenses = [], key) {
-  const recovered=recoveries.filter((r)=>monthKey(new Date(r.date))===key).reduce((s,r)=>s+itemArsEquivalent(r),0);
+  const recovered=recoveries.filter((r)=>{const raw=String(r.date||'');const d=/^\d{4}-\d{2}-\d{2}$/.test(raw)?new Date(raw+'T12:00:00'):new Date(raw);return monthKey(d)===key;}).reduce((s,r)=>s+itemArsEquivalent(r),0);
   const gross=monthExpenseTotal(expenses,key);
   return {gross,recovered,net:Math.max(gross-recovered,0)};
+}
+
+export function recoveryAppliedMonthTotal(recoveries = [], key, currentKey = monthKey(new Date())) {
+  return recoveries.filter((r)=>{
+    const raw=String(r.date||'');
+    const date=/^\d{4}-\d{2}-\d{2}$/.test(raw)?new Date(raw+'T12:00:00'):new Date(raw);
+    return monthKey(date)===key&&(r.affectsExpenseMonth===true||(r.affectsExpenseMonth==null&&key===currentKey));
+  }).reduce((sum,r)=>sum+itemArsEquivalent(r),0);
 }
