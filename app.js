@@ -1,6 +1,6 @@
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
-import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
+import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
 import { learnCategoryRule, applyLearnedCategory } from './category-learning.js';
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
@@ -1573,8 +1573,7 @@ async function showAppLock(){
 function currentMonthKey() { return monthKey(new Date()); }
 function budgetFor(key) { return state.budgets[key] || { amount: 0, reason: '', history: [] }; }
 function recoveredForCurrentMonth(key){
-  if(key!==currentMonthKey())return 0;
-  return recoveryMonthMetrics(state.recoveries,state.expenses,key).recovered;
+  return recoveryAppliedMonthTotal(state.recoveries,key,currentMonthKey());
 }
 function budgetMetrics(key) {
   const base=budgetOutcome(budgetFor(key).amount,state.expenses,state.stock,key);
@@ -1585,8 +1584,9 @@ function renderMonthlyNetSummary(){
   if(!$('#homeMonthlyNet'))return;
   const m=recoveryMonthMetrics(state.recoveries,state.expenses,currentMonthKey());
   $('#homeMonthlyGross').textContent=money(m.gross,'ARS');
-  $('#homeMonthlyRecovered').textContent=money(m.recovered,'ARS');
-  $('#homeMonthlyNet').textContent=money(m.net,'ARS');
+  const applied=recoveryAppliedMonthTotal(state.recoveries,currentMonthKey(),currentMonthKey());
+  $('#homeMonthlyRecovered').textContent=money(applied,'ARS');
+  $('#homeMonthlyNet').textContent=money(Math.max(m.gross-applied,0),'ARS');
 }
 
 function renderBudgetHomeAlert() {
@@ -1636,12 +1636,14 @@ function renderRecoveries() {
   const m=recoveryMonthMetrics(state.recoveries,state.expenses,key);
   $('#recoveryGross').textContent=money(m.gross,'ARS');
   $('#recoveryTotal').textContent=money(m.recovered,'ARS');
-  const isCurrent=key===currentMonthKey();
-  $('#recoveryNet').textContent=money(isCurrent?m.net:m.gross,'ARS');
-  $('#recoveryNetLabel').textContent=isCurrent?'Gasto neto':'Gasto histórico sin descontar';
-  $('#recoveryMonthNote').textContent=isCurrent
-    ?'Los recuperos del mes en curso se descuentan del gasto neto mensual y del presupuesto. El gasto original queda registrado.'
-    :`Recuperos correspondientes a ${new Date(key+'-01T12:00:00').toLocaleDateString('es-AR',{month:'long',year:'numeric'})}: quedan en el historial sin modificar el gasto de ese mes.`;
+  const applied=recoveryAppliedMonthTotal(state.recoveries,key,currentMonthKey());
+  const informational=Math.max(m.recovered-applied,0);
+  $('#recoveryNet').textContent=money(Math.max(m.gross-applied,0),'ARS');
+  $('#recoveryNetLabel').textContent=applied>0?'Gasto neto':'Gasto sin descuentos';
+  const explanation=[];
+  if(applied>0)explanation.push(`${money(applied,'ARS')} descontados por haberse registrado dentro del mes correspondiente.`);
+  if(informational>0)explanation.push(`${money(informational,'ARS')} de recuperos históricos informativos que no descuentan gastos de ese mes.`);
+  $('#recoveryMonthNote').textContent=explanation.join(' ')||'Los recuperos se conservan en el historial y no borran el gasto original.';
   const rows=state.recoveries.filter((r)=>monthKey(new Date(r.date+'T12:00:00'))===key).sort((a,b)=>b.date.localeCompare(a.date));
   $('#recoveryList').innerHTML=rows.length ? rows.map((r)=>`<article class="recovery-card"><div><strong>${escape(r.concept || 'Recupero')}</strong><span>${new Date(r.date+'T12:00:00').toLocaleDateString('es-AR')}</span><small>${r.currency==='USD' && r.fxRate ? `Cotización ${money(r.fxRate,'ARS')}` : ''}</small></div><strong>${money(r.amount,r.currency)}</strong></article>`).join('') : '<div class="empty">No hay recuperos en este mes.</div>';
 }
@@ -2418,8 +2420,8 @@ bindHoldToTalk($('#stockVoiceBtn'),{
   errorText:'No pude escuchar el consumo'
 });
 
-$('#addRecovery').onclick=()=>{ $('#recoveryForm').reset(); $('#recoveryDate').value=new Date().toISOString().slice(0,10); $('#recoveryDialog').showModal(); };
-$('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:localizedInputNumber('#recoveryAmount'),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value};if(!Number.isFinite(item.amount)||item.amount<=0)return showToast('Ingresá un importe válido');if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();render();showToast('Recupero guardado');};
+$('#addRecovery').onclick=()=>{ $('#recoveryForm').reset(); const today=new Date(); $('#recoveryDate').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`; $('#recoveryDialog').showModal(); };
+$('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:localizedInputNumber('#recoveryAmount'),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value,createdAt:new Date().toISOString(),affectsExpenseMonth:monthKey(new Date($('#recoveryDate').value+'T12:00:00'))===currentMonthKey()};if(!Number.isFinite(item.amount)||item.amount<=0)return showToast('Ingresá un importe válido');if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();render();showToast('Recupero guardado');};
 $('#recoveryMonth').onchange=renderRecoveries;
 
 $('#budgetMonth').onchange=renderBudget;
