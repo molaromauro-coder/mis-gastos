@@ -20,8 +20,8 @@ test('el borrado histórico exige segunda confirmación irreversible',()=>{
 });
 
 test('la interfaz llama a las dos funciones de borrado y vuelve a renderizar todo',()=>{
-  assert.ok(app.includes('moveCurrentMonthExpensesToTrash(state,new Date())'));
-  assert.ok(app.includes('permanentlyDeletePreviousMonths(state,new Date())'));
+  assert.ok(app.includes('moveCurrentMonthExpensesToTrash(state,now)'));
+  assert.ok(app.includes('permanentlyDeletePreviousMonths(state,now)'));
   assert.ok(app.includes('renderTrash();'));
   assert.ok(app.includes('render();'));
   assert.ok(app.includes('mirrorResetIntoSnapshot(settingsSnapshot,state)'));
