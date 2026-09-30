@@ -1,5 +1,5 @@
 const RESALE_STORAGE_KEY = 'mis-gastos-v1';
-const RESALE_WORKBOOK_VERSION = 1;
+const RESALE_WORKBOOK_VERSION = 2;
 
 function seedTicketBatch(partyId, type, cost, count, sales = [], status = 'Disponible') {
   const slug = String(type).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -25,8 +25,8 @@ export const INITIAL_RESALE_PARTIES = [
   {
     id: 'seed-nacho-scoppa', name: 'NACHO SCOPPA', date: '2026-09-26',
     tickets: [
-      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 1', 26450, 4),
-      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 2', 28750, 4)
+      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 1', 26450, 4, [40000, 45000, 45000, 45000]),
+      ...seedTicketBatch('seed-nacho-scoppa', 'GRAL 2', 28750, 4, [42500, 42500, 45000, 45000])
     ]
   },
   {
@@ -71,7 +71,26 @@ function seedInitialResaleData() {
     const resale = state.resale || {};
     if (Number(resale.initialWorkbookVersion || 0) >= RESALE_WORKBOOK_VERSION) return;
 
-    const existing = Array.isArray(resale.parties) ? resale.parties : [];
+    let existing = Array.isArray(resale.parties) ? resale.parties : [];
+    const canonicalNacho = INITIAL_RESALE_PARTIES.find((p) => p.name === 'NACHO SCOPPA');
+    if (canonicalNacho && Number(resale.initialWorkbookVersion || 0) < 2) {
+      const index = existing.findIndex((p) => String(p?.name || '').trim().toLowerCase() === 'nacho scoppa');
+      if (index >= 0) {
+        const current = existing[index] || {};
+        const partyId = current.id || canonicalNacho.id;
+        existing = existing.slice();
+        existing[index] = {
+          ...current,
+          id: partyId,
+          name: canonicalNacho.name,
+          date: canonicalNacho.date,
+          tickets: [
+            ...seedTicketBatch(partyId, 'GRAL 1', 26450, 4, [40000, 45000, 45000, 45000]),
+            ...seedTicketBatch(partyId, 'GRAL 2', 28750, 4, [42500, 42500, 45000, 45000])
+          ]
+        };
+      }
+    }
     const existingNames = new Set(existing.map((p) => String(p?.name || '').trim().toLowerCase()).filter(Boolean));
     const missing = INITIAL_RESALE_PARTIES.filter((p) => !existingNames.has(p.name.toLowerCase()));
 
