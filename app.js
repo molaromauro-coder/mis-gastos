@@ -1392,6 +1392,7 @@ $('#expenseForm').onsubmit = async (event) => {
   if (method !== 'Efectivo' && !$('#expenseCard').value) return showToast('Elegí una tarjeta configurada');
   const now=new Date().toISOString();
   let expense={ id:crypto.randomUUID(), amount:localizedInputNumber('#amount'), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#subcategory')?.value || $('#category').value || 'Sin detalle', category:$('#category').value, subcategory:$('#subcategory')?.value || '', categoryStatus:$('#category').value?'manual':'unclassified', method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
+  if(!Number.isFinite(expense.amount)||expense.amount<=0)return showToast('Ingresá un importe válido');
   expense=await stampUsdExpense(expense);
   state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render(); if(pending.length) setTimeout(showPending,180);
 };
@@ -1658,7 +1659,7 @@ $('#lockDialog').addEventListener('cancel',(e)=>e.preventDefault());
 $('#privacyBtn').onclick=()=>{state.settings.hideAmounts=!state.settings.hideAmounts;document.body.classList.toggle('hide-amounts',state.settings.hideAmounts);$('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁';save();};
 $('#addRecurring').onclick=()=>openRecurringDialog();
 $('#recurringMethod').onchange=updateRecurringCardField;
-$('#recurringForm').onsubmit=(e)=>{e.preventDefault();const data={concept:$('#recurringConcept').value.trim(),amount:localizedInputNumber('#recurringAmount'),currency:$('#recurringCurrency').value,category:$('#recurringCategory').value.trim(),method:$('#recurringMethod').value,card:$('#recurringMethod').value==='Efectivo'?'':$('#recurringCard').value,day:Number($('#recurringDay').value),active:true};if(data.method!=='Efectivo'&&!data.card)return showToast('Elegí una tarjeta');if(editingRecurringId){const r=state.recurring.find((x)=>x.id===editingRecurringId);if(r)Object.assign(r,data);}else state.recurring.push({id:uid(),...data,lastPromptedMonth:null});editingRecurringId=null;save();$('#recurringDialog').close();renderRecurringSettings();showToast('Gasto recurrente guardado');};
+$('#recurringForm').onsubmit=(e)=>{e.preventDefault();const data={concept:$('#recurringConcept').value.trim(),amount:localizedInputNumber('#recurringAmount'),currency:$('#recurringCurrency').value,category:$('#recurringCategory').value.trim(),method:$('#recurringMethod').value,card:$('#recurringMethod').value==='Efectivo'?'':$('#recurringCard').value,day:Number($('#recurringDay').value),active:true};if(!Number.isFinite(data.amount)||data.amount<=0)return showToast('Ingresá un importe válido');if(data.method!=='Efectivo'&&!data.card)return showToast('Elegí una tarjeta');if(editingRecurringId){const r=state.recurring.find((x)=>x.id===editingRecurringId);if(r)Object.assign(r,data);}else state.recurring.push({id:uid(),...data,lastPromptedMonth:null});editingRecurringId=null;save();$('#recurringDialog').close();renderRecurringSettings();showToast('Gasto recurrente guardado');};
 $('#consultExportExcel').onclick=exportConsultExcel;
 $('#consultExportPdf').onclick=exportConsultPdf;
 
@@ -1704,7 +1705,9 @@ $('#stockForm').onsubmit=async(e)=>{
   const months=stockPresetValue('#stockMonthsPreset','#stockMonthsManual');
   if(!quantity)return showToast('Elegí o ingresá una cantidad válida');
   if(!months)return showToast('Elegí o ingresá los meses estimados');
-  await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),quantity,months,totalAmount:localizedInputNumber('#stockAmount'),currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});
+  const totalAmount=localizedInputNumber('#stockAmount');
+  if(!Number.isFinite(totalAmount)||totalAmount<0)return showToast('Ingresá un importe válido');
+  await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),quantity,months,totalAmount,currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});
   $('#stockDialog').close();renderStock();renderBudget();renderSavings();showToast('Compra de stock guardada');
 };
 bindHoldToTalk($('#stockVoiceBtn'),{
@@ -1716,7 +1719,7 @@ bindHoldToTalk($('#stockVoiceBtn'),{
 });
 
 $('#addRecovery').onclick=()=>{ $('#recoveryForm').reset(); $('#recoveryDate').value=new Date().toISOString().slice(0,10); $('#recoveryDialog').showModal(); };
-$('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:localizedInputNumber('#recoveryAmount'),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value};if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();renderRecoveries();showToast('Recupero guardado');};
+$('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:localizedInputNumber('#recoveryAmount'),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value};if(!Number.isFinite(item.amount)||item.amount<=0)return showToast('Ingresá un importe válido');if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();renderRecoveries();showToast('Recupero guardado');};
 $('#recoveryMonth').onchange=renderRecoveries;
 
 $('#budgetMonth').onchange=renderBudget;
@@ -1742,12 +1745,14 @@ if(!sharedMode && resaleApi){
 $('#addResaleParty').onclick = () => $('#resalePartyDialog').showModal();
 $('#resalePartyForm').onsubmit = (event) => {
   event.preventDefault();
+  const resaleCost=localizedInputNumber('#resaleCost');
+  if(!Number.isFinite(resaleCost)||resaleCost<0)return showToast('Ingresá un costo válido');
   addResaleBatch({
     name: $('#resalePartyName').value.trim(),
     date: $('#resalePartyDate').value,
     type: $('#resaleTicketType').value.trim(),
     qty: Number($('#resaleQty').value || 1),
-    cost: localizedInputNumber('#resaleCost')
+    cost: resaleCost
   });
   save(); event.target.reset(); $('#resaleQty').value = 1; $('#resalePartyDialog').close(); renderResale(); showToast('Compra agregada');
 };
