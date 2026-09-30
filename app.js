@@ -705,7 +705,7 @@ function launchPendingPaymentVoiceCycle(){
   const rec=new SR();
   pendingVoiceRecognition=rec;
   session.cycle='';
-  rec.lang='es-AR';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
+  rec.lang='es-AR';rec.interimResults=true;rec.continuous=true;rec.maxAlternatives=1;
   rec.onstart=()=>{
     session.button?.classList.add('listening');
     if(session.button)session.button.textContent='🎙 Escuchando… soltá para terminar';
@@ -727,12 +727,12 @@ function launchPendingPaymentVoiceCycle(){
       current.transcript=[current.transcript,current.cycle].filter(Boolean).join(' ').trim();
       current.cycle='';
     }
-    if(current.pressed){setTimeout(launchPendingPaymentVoiceCycle,100);return;}
+    if(current.pressed){setTimeout(launchPendingPaymentVoiceCycle,25);return;}
     finishPendingPaymentVoice();
   };
   try{rec.start();}catch{
     pendingVoiceRecognition=null;
-    if(session.pressed)setTimeout(launchPendingPaymentVoiceCycle,150);
+    if(session.pressed)setTimeout(launchPendingPaymentVoiceCycle,60);
     else finishPendingPaymentVoice();
   }
 }
@@ -762,7 +762,12 @@ function stopPendingPaymentVoice(){
   if(!session)return;
   session.pressed=false;
   if(pendingVoiceRecognition){
-    try{pendingVoiceRecognition.stop();}catch{pendingVoiceRecognition=null;finishPendingPaymentVoice();}
+    try{pendingVoiceRecognition.stop();}catch{pendingVoiceRecognition=null;finishPendingPaymentVoice();return;}
+    setTimeout(()=>{
+      if(pendingVoiceSession!==session)return;
+      if(pendingVoiceRecognition){try{pendingVoiceRecognition.abort();}catch{}pendingVoiceRecognition=null;}
+      finishPendingPaymentVoice();
+    },900);
   }else finishPendingPaymentVoice();
 }
 function showPending() {
@@ -1211,11 +1216,105 @@ function compareMonths() {
   $('#compareResult').innerHTML=`<strong>${b}: ${money(bv,'ARS')}</strong><p class="muted">${pctDiff==null?'Sin base para comparar':(pctDiff>=0?'+':'')+pctDiff.toLocaleString('es-AR',{maximumFractionDigits:1})+'% frente a '+a}</p><div class="compare-bars"><div class="compare-bar"><span>${a}</span><i style="width:${av/max*100}%"></i><strong>${money(av,'ARS')}</strong></div><div class="compare-bar"><span>${b}</span><i style="width:${bv/max*100}%"></i><strong>${money(bv,'ARS')}</strong></div></div>`;
 }
 
-function startStockVoice() {
+function processStockVoice(phrase){
+  const q=String(phrase||'').toLowerCase();
+  const product=state.stock.find((p)=>q.includes(String(p.product||'').toLowerCase()));
+  const parsed=Number(parseAmount(q));
+  const n=Number.isFinite(parsed)&&parsed>0?parsed:1;
+  if(!product)return showToast('No reconocí el producto del stock');
+  const m=stockMetrics(product);
+  if(n>m.remaining)return showToast('No hay suficiente stock');
+  product.consumptions ||= [];
+  product.consumptions.push({id:uid(),quantity:n,date:new Date().toISOString(),source:'voice'});
+  save();renderStock();showToast(`Consumo: ${n} de ${product.product}`);
+}
+
+function bindHoldToTalk(button,{process,fallbackPrompt,idleText,listeningText,errorText}){
+  if(!button||button.dataset.holdVoiceBound==='1')return;
+  button.dataset.holdVoiceBound='1';
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  const process=(phrase)=>{ const q=phrase.toLowerCase(); const product=state.stock.find((p)=>q.includes(p.product.toLowerCase())); const n=Number((q.match(/\d+(?:[.,]\d+)?/)||[])[0]?.replace(',','.')||1); if(!product)return showToast('No reconocí el producto del stock'); const m=stockMetrics(product); if(n>m.remaining)return showToast('No hay suficiente stock'); product.consumptions ||= []; product.consumptions.push({id:uid(),quantity:n,date:new Date().toISOString(),source:'voice'}); save(); renderStock(); showToast(`Consumo: ${n} de ${product.product}`); };
-  if(!SR){ const p=prompt('Decí/escribí, por ejemplo: consumí 2 cafés'); if(p)process(p); return; }
-  const rec=new SR();rec.lang='es-AR';rec.interimResults=false;rec.continuous=false;let phrase='';rec.onresult=(e)=>phrase=e.results[e.resultIndex][0].transcript.trim();rec.onend=()=>{if(phrase)process(phrase)};rec.onerror=()=>showToast('No pude escuchar el consumo');rec.start();
+  let rec=null,held=false,stopping=false,finished=true,transcript='',cycle='',finishTimer=null;
+  const reset=()=>{
+    button.classList.remove('listening');
+    if(idleText!=null)button.textContent=idleText;
+  };
+  const finish=()=>{
+    if(finished)return;
+    finished=true;
+    if(finishTimer){clearTimeout(finishTimer);finishTimer=null;}
+    held=false;stopping=false;
+    const phrase=[transcript,cycle].filter(Boolean).join(' ').trim();
+    transcript='';cycle='';rec=null;reset();
+    if(phrase)process(phrase);
+    else showToast('No escuché nada. Mantené presionado y hablá');
+  };
+  const launch=()=>{
+    if(!held||stopping||finished||rec)return;
+    const recognition=new SR();rec=recognition;cycle='';
+    recognition.lang='es-AR';recognition.interimResults=true;recognition.continuous=true;recognition.maxAlternatives=1;
+    recognition.onstart=()=>{
+      button.classList.add('listening');
+      if(listeningText!=null)button.textContent=listeningText;
+    };
+    recognition.onresult=(event)=>{
+      let text='';
+      for(let i=0;i<event.results.length;i++)text+=' '+(event.results[i][0]?.transcript||'');
+      cycle=text.trim();
+    };
+    recognition.onerror=(event)=>{
+      if(event.error==='not-allowed')showToast('Activá el permiso del micrófono');
+      else if(!['aborted','no-speech'].includes(event.error))showToast(errorText||'No pude escuchar');
+    };
+    recognition.onend=()=>{
+      if(finished){rec=null;cycle='';return;}
+      if(cycle){transcript=[transcript,cycle].filter(Boolean).join(' ').trim();cycle='';}
+      rec=null;
+      if(held&&!stopping){setTimeout(launch,25);return;}
+      finish();
+    };
+    try{recognition.start();}
+    catch{rec=null;if(held&&!stopping)setTimeout(launch,60);else finish();}
+  };
+  const start=(event)=>{
+    event?.preventDefault?.();
+    if(held||rec)return;
+    window.getSelection?.()?.removeAllRanges?.();
+    if(!SR){
+      const phrase=prompt(fallbackPrompt||'Escribí lo que querías decir:');
+      if(phrase)process(phrase);
+      return;
+    }
+    held=true;stopping=false;finished=false;transcript='';cycle='';
+    button.classList.add('listening');
+    if(listeningText!=null)button.textContent=listeningText;
+    pendingVoiceStartCue();
+    launch();
+  };
+  const stop=(event)=>{
+    event?.preventDefault?.();
+    if(!held&&!rec)return;
+    held=false;stopping=true;
+    if(rec){
+      try{rec.stop();}catch{rec=null;finish();return;}
+      finishTimer=setTimeout(()=>{
+        if(finished)return;
+        if(rec){try{rec.abort();}catch{}rec=null;}
+        finish();
+      },900);
+    }else finish();
+  };
+  button.onclick=(event)=>event.preventDefault();
+  button.oncontextmenu=(event)=>event.preventDefault();
+  button.onselectstart=(event)=>event.preventDefault();
+  if('ontouchstart' in window){
+    button.addEventListener('touchstart',start,{passive:false});
+    button.addEventListener('touchend',stop,{passive:false});
+    button.addEventListener('touchcancel',stop,{passive:false});
+  }else{
+    button.onpointerdown=(event)=>{button.setPointerCapture?.(event.pointerId);start(event);};
+    button.onpointerup=stop;
+    button.onpointercancel=stop;
+  }
 }
 function goView(view) {
   document.querySelectorAll('.view, nav button').forEach((e) => e.classList.remove('active'));
@@ -1503,7 +1602,13 @@ $('#consultExportPdf').onclick=exportConsultPdf;
 
 $('#addStock').onclick=()=>{ $('#stockForm').reset(); fillStockCategoryOptions(); $('#stockQty').value=1; $('#stockMonths').value=1; $('#stockPaidDate').value=new Date().toISOString().slice(0,10); $('#stockDialog').showModal(); };
 $('#stockForm').onsubmit=async(e)=>{e.preventDefault();await addStockPurchase({product:$('#stockProduct').value.trim(),category:$('#stockCategory').value.trim(),quantity:Number($('#stockQty').value),months:Number($('#stockMonths').value),totalAmount:Number($('#stockAmount').value),currency:$('#stockCurrency').value,paidDate:$('#stockPaidDate').value});$('#stockDialog').close();renderStock();renderBudget();renderSavings();showToast('Compra de stock guardada');};
-$('#stockVoiceBtn').onclick=startStockVoice;
+bindHoldToTalk($('#stockVoiceBtn'),{
+  process:processStockVoice,
+  fallbackPrompt:'Decí o escribí, por ejemplo: consumí 2 cafés',
+  idleText:'🎙 Registrar consumo',
+  listeningText:'🎙 Escuchando… soltá para terminar',
+  errorText:'No pude escuchar el consumo'
+});
 
 $('#addRecovery').onclick=()=>{ $('#recoveryForm').reset(); $('#recoveryDate').value=new Date().toISOString().slice(0,10); $('#recoveryDialog').showModal(); };
 $('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:Number($('#recoveryAmount').value),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value};if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();renderRecoveries();showToast('Recupero guardado');};
@@ -1517,7 +1622,13 @@ $('#runConsult').onclick=runConsultation;
 ['consultFrom','consultTo','consultCategory','consultMethod','consultCurrency','consultCard','consultMin'].forEach((id)=>$('#'+id).onchange=runConsultation);
 $('#consultSpeak').onchange=()=>{state.settings.consultSpeak=$('#consultSpeak').checked;save();};
 $('#compareMonths').onclick=compareMonths;
-$('#consultMic').onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const process=(p)=>{$('#consultQuery').value=p;runConsultation();};if(!SR){const p=prompt('Escribí tu consulta:');if(p)process(p);return;}const rec=new SR();rec.lang='es-AR';rec.interimResults=false;rec.continuous=false;let p='';rec.onresult=(e)=>p=e.results[e.resultIndex][0].transcript.trim();rec.onend=()=>{if(p)process(p)};rec.onerror=()=>showToast('No pude escuchar la consulta');rec.start();};
+bindHoldToTalk($('#consultMic'),{
+  process:(phrase)=>{$('#consultQuery').value=phrase;runConsultation();},
+  fallbackPrompt:'Escribí tu consulta:',
+  idleText:'🎙',
+  listeningText:'🎙 Escuchando…',
+  errorText:'No pude escuchar la consulta'
+});
 
 
 document.querySelectorAll('[data-menu-view]').forEach((button) => { button.onclick = () => { $('#menuDialog').close(); goView(button.dataset.menuView); }; });
