@@ -461,3 +461,20 @@ img,svg,canvas,video{
 .trash-copy{min-width:0}
 .trash-copy strong,.trash-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:430px){.trash-item{grid-template-columns:auto 1fr}.trash-item .mini-actions{grid-column:2}.trash-bulk-actions>div{grid-template-columns:1fr}}
+
+/* Escritorio: conservar formato de app móvil centrada */
+@media(min-width:700px){
+  body{background:#dfeaf3!important;overflow:auto!important}
+  .app{
+    width:min(430px,calc(100vw - 40px))!important;
+    max-width:430px!important;
+    height:calc(100dvh - 40px)!important;
+    min-height:calc(100dvh - 40px)!important;
+    max-height:calc(100dvh - 40px)!important;
+    margin:20px auto!important;
+    border-radius:35px!important;
+    box-shadow:0 10px 50px #0002!important;
+    overflow:hidden!important;
+  }
+  .app>main{width:100%!important;max-width:100%!important}
+}
