@@ -954,6 +954,7 @@ function renderResale() {
   state.resale.ownerPercent = split.ownerPercent;
   state.resale.sellerPercent = split.sellerPercent;
   const total = withPortfolioPercent(portfolioMetrics(state.resale.parties, split));
+  $('#resaleInvestment').textContent = money(total.investment, 'ARS');
   $('#resaleRecovered').textContent = money(total.recovered, 'ARS');
   $('#resaleSales').textContent = money(total.sales, 'ARS');
   $('#resaleNet').textContent = money(total.netGain, 'ARS');
