@@ -38,7 +38,7 @@ function seedDemoCardsOnce(){
 }
 seedDemoCardsOnce();
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
-let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
+let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4, budgetEditing = false;
 const $ = (s) => document.querySelector(s);
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
 const numberText=(n,maximumFractionDigits=2)=>formatLocalizedNumber(n,{maximumFractionDigits});
@@ -1190,9 +1190,16 @@ function renderRecoveries() {
 function renderBudget() {
   if (!$('#budgetMonth')) return;
   const key=$('#budgetMonth').value || currentMonthKey();
+  const hasEntry=Object.prototype.hasOwnProperty.call(state.budgets,key);
   const entry=budgetFor(key), m=budgetMetrics(key);
   if(document.activeElement !== $('#budgetAmount')) setLocalizedInput('#budgetAmount',entry.amount||'',2);
   if(document.activeElement !== $('#budgetReason')) $('#budgetReason').value=entry.reason || '';
+  $('#budgetAmount').disabled=hasEntry&&!budgetEditing;
+  $('#budgetReason').disabled=hasEntry&&!budgetEditing;
+  $('#editBudget').classList.toggle('hidden',!hasEntry||budgetEditing);
+  $('#cancelBudgetEdit').classList.toggle('hidden',!hasEntry||!budgetEditing);
+  $('#saveBudget').classList.toggle('hidden',hasEntry&&!budgetEditing);
+  $('#saveBudget').textContent=hasEntry?'Guardar cambios':'Guardar presupuesto';
   $('#budgetCurrent').textContent=money(m.budget,'ARS');
   $('#budgetSpent').textContent=money(m.spent,'ARS');
   $('#budgetAvailable').textContent=money(m.available,'ARS');
@@ -1763,8 +1770,19 @@ $('#addRecovery').onclick=()=>{ $('#recoveryForm').reset(); $('#recoveryDate').v
 $('#recoveryForm').onsubmit=async(e)=>{e.preventDefault();let item={id:uid(),amount:localizedInputNumber('#recoveryAmount'),currency:$('#recoveryCurrency').value,concept:$('#recoveryConcept').value.trim(),date:$('#recoveryDate').value};if(!Number.isFinite(item.amount)||item.amount<=0)return showToast('Ingresá un importe válido');if(item.currency==='USD'){const rate=await ensureUsdRate(false);if(rate)Object.assign(item,{fxRate:rate.rate,fxRateName:rate.name,fxRateUpdatedAt:rate.updatedAt});}state.recoveries.push(item);save();$('#recoveryDialog').close();renderRecoveries();showToast('Recupero guardado');};
 $('#recoveryMonth').onchange=renderRecoveries;
 
-$('#budgetMonth').onchange=renderBudget;
-$('#saveBudget').onclick=()=>{ const key=$('#budgetMonth').value||currentMonthKey(), amount=localizedInputNumber('#budgetAmount'), reason=$('#budgetReason').value.trim(); const current=budgetFor(key); const history=[...(current.history||[]),{date:new Date().toISOString(),amount,reason}]; state.budgets[key]={amount,reason,history}; save(); renderBudget(); renderSavings(); renderBudgetHomeAlert(); showToast('Presupuesto guardado'); };
+$('#budgetMonth').onchange=()=>{budgetEditing=false;renderBudget();};
+$('#editBudget').onclick=()=>{budgetEditing=true;renderBudget();$('#budgetAmount').focus();};
+$('#cancelBudgetEdit').onclick=()=>{budgetEditing=false;renderBudget();};
+$('#saveBudget').onclick=()=>{
+  const key=$('#budgetMonth').value||currentMonthKey(), amount=localizedInputNumber('#budgetAmount'), reason=$('#budgetReason').value.trim();
+  const existed=Object.prototype.hasOwnProperty.call(state.budgets,key);
+  const current=budgetFor(key);
+  const history=[...(current.history||[]),{date:new Date().toISOString(),amount,reason,previousAmount:existed?Number(current.amount||0):null,action:existed?'edit':'create'}];
+  state.budgets[key]={amount,reason,history};
+  budgetEditing=false;
+  save();renderBudget();renderSavings();renderBudgetHomeAlert();
+  showToast(existed?'Presupuesto actualizado':'Presupuesto guardado');
+};
 $('#savingsYear').onchange=renderSavings;
 
 $('#runConsult').onclick=runConsultation;
