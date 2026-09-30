@@ -490,6 +490,10 @@ function pendingDatePrompt(e,i){
   const choices=Array.isArray(e.dateChoices)?e.dateChoices:[];
   return `<div class="pending-payment-question"><strong>¿Qué fecha quisiste decir?</strong>${choices.length?`<div class="pending-payment-actions">${choices.map((choice,choiceIndex)=>`<button type="button" data-pending-date-choice="${choiceIndex}" data-index="${i}">${escape(choice.label)}</button>`).join('')}</div>`:'<small class="muted">La fecha quedó ambigua. Corregila antes de confirmar.</small>'}</div>`;
 }
+function pendingAmountPrompt(e,i){
+  if(e.amount)return '';
+  return `<div class="pending-payment-question pending-amount-question"><strong>¿Cuánto pagaste?</strong><div class="pending-amount-row"><input class="pending-amount-input" data-index="${i}" inputmode="decimal" autocomplete="off" placeholder="Ej. 50.000"><button type="button" data-pending-amount-save="${i}">Guardar importe</button></div><button type="button" class="voice-pay" data-pending-amount-voice="${i}">🎙 Mantener para responder</button><small class="muted">Falta el importe: no se puede confirmar hasta completarlo.</small></div>`;
+}
 function pendingPaymentPrompt(e,i){
   const needsMethod=e.method==='Sin definir';
   const needsCard=['Débito','Crédito'].includes(e.method)&&!e.card;
@@ -505,6 +509,13 @@ function pendingPaymentPrompt(e,i){
     return `<div class="pending-payment-question"><strong>¿En cuántas cuotas?</strong><select class="pending-installments-select" data-index="${i}"><option value="">Elegí la cantidad</option>${Array.from({length:36},(_,n)=>n+1).map((n)=>`<option value="${n}">${n} cuota${n===1?'':'s'}</option>`).join('')}</select><div class="pending-payment-actions"><button type="button" class="secondary pending-back" data-pending-back="card" data-index="${i}">← Atrás</button><button type="button" class="voice-pay" data-pending-pay-voice="${i}">🎙 Mantener para responder</button></div></div>`;
   }
   return '';
+}
+function applyPendingAmountVoice(index,phrase){
+  const item=pending[index];if(!item)return;
+  const amount=Number(parseAmount(phrase));
+  if(!Number.isFinite(amount)||amount<=0){showToast('No pude reconocer el importe. Decilo de nuevo o escribilo');return;}
+  item.amount=amount;
+  showPending();
 }
 function paymentVoiceAlias(name){
   return normVoiceChoice(name)
@@ -584,8 +595,10 @@ function finishPendingPaymentVoice(){
   pendingVoiceSession=null;
   pendingVoiceRecognition=null;
   restorePendingVoiceButton(button);
-  if(phrase) applyPendingPaymentVoice(session.index,phrase);
-  else showToast('No escuché una respuesta. Mantené presionado y hablá');
+  if(phrase){
+    if(session.mode==='amount')applyPendingAmountVoice(session.index,phrase);
+    else applyPendingPaymentVoice(session.index,phrase);
+  } else showToast('No escuché una respuesta. Mantené presionado y hablá');
 }
 function launchPendingPaymentVoiceCycle(){
   const session=pendingVoiceSession;
@@ -626,15 +639,18 @@ function launchPendingPaymentVoiceCycle(){
     else finishPendingPaymentVoice();
   }
 }
-function startPendingPaymentVoice(index,button){
+function startPendingPaymentVoice(index,button,mode='payment'){
   if(pendingVoiceSession)return;
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){
-    const phrase=prompt('Decí o escribí el medio, la tarjeta o la cantidad de cuotas.');
-    if(phrase)applyPendingPaymentVoice(index,phrase);
+    const phrase=prompt(mode==='amount'?'Decí o escribí cuánto pagaste.':'Decí o escribí el medio, la tarjeta o la cantidad de cuotas.');
+    if(phrase){
+      if(mode==='amount')applyPendingAmountVoice(index,phrase);
+      else applyPendingPaymentVoice(index,phrase);
+    }
     return;
   }
-  pendingVoiceSession={index,button,pressed:true,transcript:'',cycle:''};
+  pendingVoiceSession={index,button,mode,pressed:true,transcript:'',cycle:''};
   if(button){
     button.classList.add('listening');
     button.textContent='🎙 Escuchando… soltá para terminar';
@@ -662,7 +678,7 @@ function showPending() {
     const whenLabel=needsDate?'Fecha pendiente':(e.dateSpecified&&!e.timeSpecified?when.toLocaleDateString('es-AR'):when.toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}));
     const installmentLabel=e.method==='Crédito'?(needsInstallments?'Cuotas pendientes':`${Math.max(1,Number(e.installments||1))} cuota${Number(e.installments||1)===1?'':'s'}`):'';
     const meta=[whenLabel,e.category,methodLabel,e.card,installmentLabel].filter(Boolean).join(' · ');
-    return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape(meta)}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingCreditDetail(e)}${pendingDatePrompt(e,i)}${pendingPaymentPrompt(e,i)}<div class="actions"><button class="edit">Corregir</button><button class="confirm" ${!e.amount || needsMethod || needsCard || needsInstallments || needsDate ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
+    return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape(meta)}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingAmountPrompt(e,i)}${pendingCreditDetail(e)}${pendingDatePrompt(e,i)}${pendingPaymentPrompt(e,i)}<div class="actions"><button class="edit">Corregir</button><button class="confirm" ${!e.amount || needsMethod || needsCard || needsInstallments || needsDate ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
   }).join('');
   if (!$('#confirmDialog').open) $('#confirmDialog').showModal();
   document.querySelectorAll('[data-pending-method]').forEach((button)=>{
@@ -697,6 +713,32 @@ function showPending() {
       const choice=item.dateChoices?.[Number(button.dataset.pendingDateChoice)];if(!choice)return;
       item.date=choice.date;item.purchaseDate=choice.date;item.dateSpecified=true;item.dateAmbiguous=false;showPending();
     };
+  });
+  const savePendingAmount=(index)=>{
+    const input=document.querySelector(`.pending-amount-input[data-index="${index}"]`);
+    const item=pending[index];if(!input||!item)return;
+    const amount=Number(parseAmount(input.value));
+    if(!Number.isFinite(amount)||amount<=0)return showToast('Ingresá un importe válido');
+    item.amount=amount;showPending();
+  };
+  document.querySelectorAll('[data-pending-amount-save]').forEach((button)=>{
+    button.onclick=()=>savePendingAmount(Number(button.dataset.pendingAmountSave));
+  });
+  document.querySelectorAll('.pending-amount-input').forEach((input)=>{
+    input.onkeydown=(event)=>{if(event.key==='Enter'){event.preventDefault();savePendingAmount(Number(input.dataset.index));}};
+  });
+  document.querySelectorAll('[data-pending-amount-voice]').forEach((button)=>{
+    const index=Number(button.dataset.pendingAmountVoice);
+    button.onclick=(event)=>event.preventDefault();
+    button.oncontextmenu=(event)=>event.preventDefault();
+    button.onpointerdown=(event)=>{
+      event.preventDefault();
+      button.setPointerCapture?.(event.pointerId);
+      startPendingPaymentVoice(index,button,'amount');
+    };
+    button.onpointerup=(event)=>{event.preventDefault();stopPendingPaymentVoice();};
+    button.onpointercancel=(event)=>{event.preventDefault();stopPendingPaymentVoice();};
+    button.onpointerleave=(event)=>{if(event.buttons===0)stopPendingPaymentVoice();};
   });
   document.querySelectorAll('[data-pending-pay-voice]').forEach((button)=>{
     const index=Number(button.dataset.pendingPayVoice);
@@ -1054,6 +1096,7 @@ function goView(view) {
 
 async function confirmPending(index, card) {
   const current=pending[index]; if(!current)return;
+  if(!Number(current.amount))return showToast('Completá cuánto pagaste antes de confirmar');
   if(current.dateAmbiguous)return showToast('AclarÁ la fecha antes de confirmar');
   if(current.method==='Sin definir')return showToast('Elegí o decí con qué pagaste');
   if(['Débito','Crédito'].includes(current.method)&&!current.card)return showToast('Elegí o decí qué tarjeta o cuenta usaste');
