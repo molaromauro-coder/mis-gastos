@@ -101,3 +101,9 @@ test('Gastos fijos permiten seleccionar un elemento y moverlo arriba o abajo',()
   assert.match(app,/moveFixedExpenseInList/);
   assert.match(app,/fixed-order-picker/);
 });
+
+test('el primer acceso del menú principal se llama Gastos fijos',()=>{
+  const menu=html.match(/<dialog id="menuDialog"[\s\S]*?<\/dialog>/)?.[0]||'';
+  assert.match(menu,/id="functionsMenuBtn"[\s\S]*?<strong>Gastos fijos<\/strong>/);
+  assert.equal(menu.includes('<strong>Funciones</strong>'),false);
+});
