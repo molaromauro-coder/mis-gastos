@@ -69,3 +69,19 @@ test('Papelera ofrece selección múltiple y eliminar todos',()=>{
   for(const id of ['trashBulkActions','trashSelectAll','deleteSelectedTrash','deleteAllTrash']) assert.ok(html.includes(`id="${id}"`),`falta ${id}`);
   assert.match(app,/permanentlyDeleteTrashRecords/);
 });
+
+test('Papelera está en Menú principal como anteúltima opción y no dentro de Configuración',()=>{
+  const menu=html.match(/<dialog id="menuDialog"[\s\S]*?<\/dialog>/)?.[0]||'';
+  const buttons=[...menu.matchAll(/data-menu-view="([^"]+)"/g)].map(m=>m[1]);
+  assert.equal(buttons.at(-2),'trash');
+  assert.equal(buttons.at(-1),'consultations');
+  assert.ok(html.includes('<section id="trash" class="view">'));
+  const settings=html.match(/<dialog id="settingsDialog"[\s\S]*?<\/dialog>/)?.[0]||'';
+  assert.equal(settings.includes('<h3>Papelera</h3>'),false);
+});
+
+test('en escritorio la app conserva ancho móvil centrado',()=>{
+  const css=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+  assert.match(css,/@media\(min-width:700px\)[\s\S]*?\.app\{[\s\S]*?max-width:430px!important/);
+  assert.match(css,/width:min\(430px,calc\(100vw - 40px\)\)!important/);
+});
