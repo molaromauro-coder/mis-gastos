@@ -430,3 +430,22 @@ test('peluquería y barbería son sinónimos para categoría Barbería',()=>{
   const e=parseExpense('Gasté 21 mil pesos en peluquería',[],['Barbería'],{subcategories:{},now:new Date('2026-10-01T10:00:00-03:00')});
   assert.equal(e.category,'Barbería');
 });
+
+test('distingue limpieza del hogar de productos de limpieza',()=>{
+  const categories=['SUPERMERCADO','HOGAR'];
+  const options={subcategories:{SUPERMERCADO:['LIMPIEZA','COMIDA'],HOGAR:['REPARACIONES','ADORNOS']}};
+  const casa=parseExpense('Gasté 20 mil pesos en limpieza del hogar en efectivo',[],categories,options);
+  assert.equal(casa.category,'HOGAR');
+  assert.equal(casa.subcategory,'');
+  const productos=parseExpense('Gasté 20 mil pesos en productos de limpieza en efectivo',[],categories,options);
+  assert.equal(productos.category,'SUPERMERCADO');
+  assert.equal(productos.subcategory,'LIMPIEZA');
+});
+
+test('servicio de limpieza de casa se clasifica como HOGAR',()=>{
+  const categories=['SUPERMERCADO','HOGAR'];
+  const options={subcategories:{SUPERMERCADO:['LIMPIEZA'],HOGAR:[]}};
+  const e=parseExpense('Pagué 35 mil por servicio de limpieza de casa en efectivo',[],categories,options);
+  assert.equal(e.category,'HOGAR');
+  assert.equal(e.subcategory,'');
+});
