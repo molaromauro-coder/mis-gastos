@@ -157,3 +157,10 @@ test('confirmación no elimina el pendiente hasta después de guardar el movimie
   assert.match(fn,/Gasto confirmado y guardado/);
   assert.match(fn,/No pude guardar el gasto/);
 });
+
+test('Confirmar usa pointerup/click robusto en iPhone y muestra Guardando',()=>{
+  assert.match(app,/confirmButton\.addEventListener\('pointerup',confirmAction/);
+  assert.match(app,/confirmButton\.onclick=confirmAction/);
+  assert.match(app,/confirmButton\.textContent='Guardando…'/);
+  assert.equal(app.includes("confirmButton.addEventListener('touchend',confirmAction"),false);
+});
