@@ -145,8 +145,8 @@ test('Carga manual muestra validación visible dentro del diálogo cuando falta 
 
 test('Confirmar gasto detectado es botón normal y tiene soporte táctil directo en iPhone',()=>{
   assert.match(app,/type="button" class="confirm"/);
-  assert.match(app,/confirmButton\.addEventListener\('touchend',confirmAction,\{passive:false\}\)/);
-  assert.match(app,/confirmButton\.addEventListener\('touchstart'/);
+  assert.match(app,/confirmButton\.addEventListener\('pointerup',confirmAction,\{passive:false\}\)/);
+  assert.match(app,/confirmButton\.onclick=confirmAction/);
   assert.match(app,/dataset\.confirming/);
 });
 
