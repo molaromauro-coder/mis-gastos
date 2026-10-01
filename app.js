@@ -1060,7 +1060,7 @@ function showPending() {
     const categoryLabel=needsCategory?'Sin clasificar':e.category;
     const meta=[whenLabel,categoryLabel,methodLabel,e.card,installmentLabel].filter(Boolean).join(' · ');
     const incomplete=!e.amount||needsMethod||needsCard||needsInstallments||needsDate;
-    return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape(meta)}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingAmountPrompt(e,i)}${pendingDatePrompt(e,i)}${pendingPaymentPrompt(e,i)}${pendingCategoryPrompt(e,i)}${pendingSubcategoryPrompt(e,i)}${pendingCreditDetail(e)}<div class="actions"><button class="edit">${incomplete?'✎ Corregir / completar':'Corregir'}</button><button class="confirm" ${incomplete ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
+    return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape(meta)}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingAmountPrompt(e,i)}${pendingDatePrompt(e,i)}${pendingPaymentPrompt(e,i)}${pendingCategoryPrompt(e,i)}${pendingSubcategoryPrompt(e,i)}${pendingCreditDetail(e)}<div class="actions"><button type="button" class="edit">${incomplete?'✎ Corregir / completar':'Corregir'}</button><button type="button" class="confirm" ${incomplete ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
   }).join('');
   if (!$('#confirmDialog').open) $('#confirmDialog').showModal();
   document.querySelectorAll('[data-pending-method]').forEach((button)=>{
@@ -1195,8 +1195,31 @@ function showPending() {
   });
   document.querySelectorAll('.pending').forEach((card) => {
     const index = Number(card.dataset.index);
-    card.querySelector('.confirm').onclick = () => confirmPending(index, card);
-    card.querySelector('.edit').onclick = () => { const item = pending.splice(index, 1)[0]; $('#confirmDialog').close(); openExpense(item); };
+    const confirmButton=card.querySelector('.confirm');
+    const editButton=card.querySelector('.edit');
+    let lastTouchAction=0;
+    const confirmAction=(event)=>{
+      event?.stopPropagation?.();
+      const now=Date.now();
+      if(event?.type==='click'&&now-lastTouchAction<700)return;
+      if(event?.type==='touchend'){event.preventDefault();lastTouchAction=now;}
+      confirmPending(index,card);
+    };
+    const editAction=(event)=>{
+      event?.stopPropagation?.();
+      const now=Date.now();
+      if(event?.type==='click'&&now-lastTouchAction<700)return;
+      if(event?.type==='touchend'){event.preventDefault();lastTouchAction=now;}
+      const item=pending.splice(index,1)[0];
+      $('#confirmDialog').close();
+      openExpense(item);
+    };
+    confirmButton.onclick=confirmAction;
+    editButton.onclick=editAction;
+    confirmButton.addEventListener('touchend',confirmAction,{passive:false});
+    editButton.addEventListener('touchend',editAction,{passive:false});
+    confirmButton.addEventListener('touchstart',(event)=>event.stopPropagation(),{passive:true});
+    editButton.addEventListener('touchstart',(event)=>event.stopPropagation(),{passive:true});
     let startY = 0, ignoreSwipe = false;
     card.ontouchstart = (ev) => {
       ignoreSwipe=!!ev.target.closest?.('button,select,input,label');
@@ -2064,6 +2087,7 @@ function goView(view) {
 
 async function confirmPending(index, card) {
   const current=pending[index]; if(!current)return;
+  if(card?.dataset.confirming==='1')return;
   const visibleCategory=card?.querySelector('.pending-category-select')?.value;
   const visibleSubcategory=card?.querySelector('.pending-subcategory-select')?.value;
   if(visibleCategory){
@@ -2080,16 +2104,35 @@ async function confirmPending(index, card) {
   if(needsPaymentMethod(current))return showToast('Elegí o decí con qué pagaste');
   if(['Débito','Crédito'].includes(current.method)&&!current.card)return showToast('Elegí o decí qué tarjeta o cuenta usaste');
   if(current.method==='Crédito'&&current.installmentsSpecified===false)return showToast('Elegí en cuántas cuotas pagaste');
-  if(current.learnCategory&&current.category)learnFromExpense(current,current.category,current.subcategory||'');
+
   const confirmButton=card?.querySelector('.confirm');
+  if(card)card.dataset.confirming='1';
   if(confirmButton)confirmButton.disabled=true;
-  card.classList.add('confirmed');
-  let item=pending.splice(index,1)[0];
-  item.purchaseDate ||= item.date;
-  item=await stampUsdExpense(item);
-  state.expenses.push(...installmentExpenses(item));
-  save(); feedback(true); showToast('✓ Gasto confirmado');
-  setTimeout(()=>{showPending();render();},180);
+
+  try{
+    let item={...current};
+    item.purchaseDate ||= item.date;
+    if(current.learnCategory&&current.category)learnFromExpense(current,current.category,current.subcategory||'');
+    item=await stampUsdExpense(item);
+    const created=installmentExpenses(item);
+    if(!created.length)throw new Error('No se generó el movimiento');
+    state.expenses.push(...created);
+    save();
+
+    const storedIds=new Set(state.expenses.map((expense)=>expense.id));
+    if(!created.every((expense)=>storedIds.has(expense.id)))throw new Error('El movimiento no quedó guardado');
+
+    pending.splice(index,1);
+    card?.classList.add('confirmed');
+    feedback(true);
+    showToast('✓ Gasto confirmado y guardado');
+    setTimeout(()=>{showPending();render();},180);
+  }catch(error){
+    if(card)delete card.dataset.confirming;
+    if(confirmButton)confirmButton.disabled=false;
+    console.error('No se pudo guardar el gasto detectado',error);
+    showToast('No pude guardar el gasto. Probá Confirmar nuevamente.');
+  }
 }
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });

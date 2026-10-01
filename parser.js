@@ -330,9 +330,34 @@ export function parseExpense(text,cards=[],categories=[],options={}){
 
   let category=categoryFor(raw,categories),subcategory='';
   const subMap=options?.subcategories||{};
-  outer: for(const [parent,values] of Object.entries(subMap)){
-    for(const value of Array.isArray(values)?values:[]){
-      if(value&&phraseMentioned(lower,value)){category=parent;subcategory=value;break outer;}
+  const categoryByName=(wanted)=>categories.find((item)=>{
+    const name=typeof item==='string'?item:item?.name;
+    return normalized(name)===normalized(wanted);
+  });
+  const householdCleaning=/\b(?:limpieza\s+(?:del?|de\s+la)\s+(?:hogar|casa)|servicio\s+de\s+limpieza|limpiar\s+(?:el\s+)?(?:hogar|casa))\b/.test(lower);
+  const cleaningProducts=/\b(?:productos?|articulos?|insumos?)\s+de\s+limpieza\b|\b(?:detergente|lavandina|desinfectante|limpiador)\b/.test(lower);
+
+  if(householdCleaning){
+    const hogar=categoryByName('HOGAR');
+    if(hogar){
+      category=typeof hogar==='string'?hogar:hogar.name;
+      const hogarSubs=Array.isArray(subMap?.[category])?subMap[category]:[];
+      const specific=hogarSubs.find((value)=>['limpieza de hogar','limpieza hogar','limpieza'].includes(normalized(value)));
+      subcategory=specific||'';
+    }
+  }else{
+    outer: for(const [parent,values] of Object.entries(subMap)){
+      for(const value of Array.isArray(values)?values:[]){
+        if(value&&phraseMentioned(lower,value)){category=parent;subcategory=value;break outer;}
+      }
+    }
+    if(cleaningProducts){
+      const superCategory=categoryByName('SUPERMERCADO');
+      if(superCategory){
+        category=typeof superCategory==='string'?superCategory:superCategory.name;
+        const values=Array.isArray(subMap?.[category])?subMap[category]:[];
+        subcategory=values.find((value)=>normalized(value)==='limpieza')||subcategory;
+      }
     }
   }
 
