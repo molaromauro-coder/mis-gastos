@@ -1197,29 +1197,33 @@ function showPending() {
     const index = Number(card.dataset.index);
     const confirmButton=card.querySelector('.confirm');
     const editButton=card.querySelector('.edit');
-    let lastTouchAction=0;
+    let lastPointerAction=0;
     const confirmAction=(event)=>{
       event?.stopPropagation?.();
       const now=Date.now();
-      if(event?.type==='click'&&now-lastTouchAction<700)return;
-      if(event?.type==='touchend'){event.preventDefault();lastTouchAction=now;}
+      if(event?.type==='click'&&now-lastPointerAction<700)return;
+      if(event?.type==='pointerup'){
+        event.preventDefault();
+        lastPointerAction=now;
+      }
       confirmPending(index,card);
     };
     const editAction=(event)=>{
       event?.stopPropagation?.();
       const now=Date.now();
-      if(event?.type==='click'&&now-lastTouchAction<700)return;
-      if(event?.type==='touchend'){event.preventDefault();lastTouchAction=now;}
+      if(event?.type==='click'&&now-lastPointerAction<700)return;
+      if(event?.type==='pointerup'){
+        event.preventDefault();
+        lastPointerAction=now;
+      }
       const item=pending.splice(index,1)[0];
       $('#confirmDialog').close();
       openExpense(item);
     };
+    confirmButton.addEventListener('pointerup',confirmAction,{passive:false});
+    editButton.addEventListener('pointerup',editAction,{passive:false});
     confirmButton.onclick=confirmAction;
     editButton.onclick=editAction;
-    confirmButton.addEventListener('touchend',confirmAction,{passive:false});
-    editButton.addEventListener('touchend',editAction,{passive:false});
-    confirmButton.addEventListener('touchstart',(event)=>event.stopPropagation(),{passive:true});
-    editButton.addEventListener('touchstart',(event)=>event.stopPropagation(),{passive:true});
     let startY = 0, ignoreSwipe = false;
     card.ontouchstart = (ev) => {
       ignoreSwipe=!!ev.target.closest?.('button,select,input,label');
@@ -2107,7 +2111,10 @@ async function confirmPending(index, card) {
 
   const confirmButton=card?.querySelector('.confirm');
   if(card)card.dataset.confirming='1';
-  if(confirmButton)confirmButton.disabled=true;
+  if(confirmButton){
+    confirmButton.disabled=true;
+    confirmButton.textContent='Guardando…';
+  }
 
   try{
     let item={...current};
@@ -2129,7 +2136,10 @@ async function confirmPending(index, card) {
     setTimeout(()=>{showPending();render();},180);
   }catch(error){
     if(card)delete card.dataset.confirming;
-    if(confirmButton)confirmButton.disabled=false;
+    if(confirmButton){
+      confirmButton.disabled=false;
+      confirmButton.textContent='✓ Confirmar';
+    }
     console.error('No se pudo guardar el gasto detectado',error);
     showToast('No pude guardar el gasto. Probá Confirmar nuevamente.');
   }
