@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeSplit, ticketMetrics, partyMetrics, portfolioMetrics, withPortfolioPercent, INITIAL_RESALE_PARTIES } from '../resale.js';
+import { normalizeSplit, ticketMetrics, partyMetrics, portfolioMetrics, withPortfolioPercent, INITIAL_RESALE_PARTIES, orderResalePartiesByDate } from '../resale.js';
 
 test('reparto editable siempre suma 100', () => {
   assert.deepEqual(normalizeSplit(80, 20), { ownerPercent: 80, sellerPercent: 20 });
@@ -120,4 +120,16 @@ test('porcentaje global usa sólo costo recuperado de ventas realizadas', () => 
   assert.equal(m.recovered, 100);
   assert.equal(m.netGain, 60);
   assert.equal(m.gainPercent, 60);
+});
+
+test('fiestas se ordenan con próximas primero, luego pasadas recientes y sin fecha al final',()=>{
+  const parties=[
+    {name:'PASADA LEJANA',date:'2026-09-11'},
+    {name:'LEJANA',date:'2026-11-27'},
+    {name:'PROXIMA',date:'2026-10-09'},
+    {name:'PASADA RECIENTE',date:'2026-09-26'},
+    {name:'SIN FECHA',date:''}
+  ];
+  const ordered=orderResalePartiesByDate(parties,new Date('2026-10-01T12:00:00-03:00'));
+  assert.deepEqual(ordered.map((p)=>p.name),['PROXIMA','LEJANA','PASADA RECIENTE','PASADA LEJANA','SIN FECHA']);
 });

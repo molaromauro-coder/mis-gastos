@@ -125,3 +125,13 @@ test('una subcategoría nueva de GASTOS FIJOS se sincroniza con la lista de gast
   assert.match(app,/ensureFixedExpenseForSubcategory\(category,clean\)/);
   assert.match(app,/e\.concept=clean/);
 });
+
+test('Reventa permite crear una fiesta y muestra su fecha junto al nombre',()=>{
+  assert.ok(html.includes('id="addResaleEvent"'));
+  assert.ok(html.includes('id="resaleEventDialog"'));
+  assert.ok(html.includes('id="resaleEventName"'));
+  assert.ok(html.includes('id="resaleEventDate"'));
+  assert.match(app,/resale-party-date/);
+  assert.match(app,/orderResalePartiesByDate/);
+  assert.match(app,/resale-add-tickets/);
+});

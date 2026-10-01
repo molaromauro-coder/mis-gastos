@@ -1,4 +1,4 @@
-<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#eaf4ff"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Mis Gastos"><title>Mis Gastos</title><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><link rel="icon" href="icons/apple-touch-icon.png"><link rel="stylesheet" href="styles.css?v=77"></head>
+<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#eaf4ff"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Mis Gastos"><title>Mis Gastos</title><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><link rel="icon" href="icons/apple-touch-icon.png"><link rel="stylesheet" href="styles.css?v=78"></head>
 <body><div class="app"><header class="home-header"><div><small id="homeDate">Sáb, 26 de septiembre</small><h1>Mis Gastos</h1></div><div class="header-actions"><button class="icon-btn" id="globalSearchBtn" aria-label="Buscar en Mis Gastos">🔍</button><button class="icon-btn" id="settingsBtn" aria-label="Configuración">⚙</button></div></header><main>
 <section id="home" class="view active">
 <div class="today-card">
@@ -77,7 +77,7 @@
 <h3 class="resale-balance-title">Ganancia mensual</h3><div class="resale-balance-wrap"><table class="resale-balance-table"><thead><tr><th>Mes</th><th>Inversión</th><th>Costo recuperado</th><th>Ventas</th><th>Ganancia neta</th><th>% ganancia</th></tr></thead><tbody id="resaleMonthlyBody"></tbody></table></div>
 <div class="resale-tools"><button id="exportResale">Exportar CSV</button><button id="importResaleExcel" type="button">Importar Excel</button><input id="resaleImportFile" type="file" accept=".xlsx,.xls,.csv" class="hidden" aria-label="Seleccionar Excel de Reventa"><span id="resaleStock"></span></div>
 <h3 class="resale-balance-title">Balance general</h3><div class="resale-balance-wrap"><table class="resale-balance-table"><thead><tr><th>Fiesta</th><th>Inversión</th><th>Costo recuperado</th><th>Ventas</th><th>Total Mauro</th><th>Ganancia neta</th><th>% ganancia</th><th id="resaleOwnerHead">Ganancia Mauro</th><th id="resaleSellerHead">Total vendedor</th></tr></thead><tbody id="resaleBalanceBody"></tbody><tfoot id="resaleBalanceTotal"></tfoot></table></div>
-<h3 class="resale-balance-title">Detalle por fiesta</h3><div id="resaleList"></div></section>
+<div class="resale-detail-heading"><h3 class="resale-balance-title">Detalle por fiesta</h3><button id="addResaleEvent" type="button">＋ Nueva fiesta</button></div><div id="resaleList"></div></section>
 </main></div>
 <dialog id="resaleImportReview" class="owner-only"><div class="dialog-head"><div><small>REVENTA · COMPARACIÓN CONTROLADA</small><h2>Revisar importación</h2></div><button type="button" class="close">×</button></div><p id="resaleImportSummary" class="muted"></p><p class="muted">Nada se modifica hasta que elijas qué hacer con las diferencias y confirmes. La Reventa permanece separada de tus gastos personales.</p><div id="resaleImportWarnings" class="resale-import-warnings"></div><div id="resaleImportDifferences" class="resale-import-list"></div><div class="resale-import-actions"><button id="cancelResaleImport" type="button" class="secondary">Cancelar</button><button id="applyResaleImport" type="button" class="primary">Aplicar selección</button></div></dialog>
 
@@ -130,6 +130,11 @@
 <label>Tipo de entrada<input id="resaleTicketType" required placeholder="Ej. GRAL 1, VIP, EARLY"></label>
 <div class="form-row"><label>Cantidad<input id="resaleQty" type="number" min="1" max="200" required value="1"></label><label>Costo por entrada<span class="resale-money-input"><b>$</b><input id="resaleCost" type="text" inputmode="decimal" data-local-number="2" required></span></label></div>
 <button class="primary">Agregar compra</button></form></dialog>
+<dialog id="resaleEventDialog"><form id="resaleEventForm"><div class="dialog-head"><div><small>REVENTA</small><h2>Nueva fiesta</h2></div><button type="button" class="close">×</button></div>
+<label>Nombre de la fiesta<input id="resaleEventName" required placeholder="Ej. CAMELPHAT"></label>
+<label>Fecha de la fiesta<input id="resaleEventDate" type="date" required></label>
+<p class="muted">Después podés entrar a la fiesta y tocar “＋ Agregar entradas”.</p>
+<button class="primary" type="submit">Guardar fiesta</button></form></dialog>
 <dialog id="resaleSplitDialog"><form id="resaleSplitForm"><div class="dialog-head"><div><small>CONFIGURACIÓN ÚNICA</small><h2>Reparto de ganancia</h2></div><button type="button" class="close">×</button></div>
 <p class="muted">Al cambiar estos porcentajes se recalculan automáticamente todas las ventas, fiestas y el balance general.</p>
 <div class="form-row"><label>% Mauro<input id="ownerPercent" type="number" min="0" max="100" step="1" required></label><label>% Vendedor<input id="sellerPercent" type="number" min="0" max="100" step="1" required></label></div>
@@ -167,4 +172,4 @@
 <dialog id="recoveryDialog"><form id="recoveryForm"><div class="dialog-head"><div><small>NUEVO RECUPERO</small><h2>Registrar dinero recuperado</h2></div><button type="button" class="close">×</button></div>
 <div class="form-row"><label>Importe<input id="recoveryAmount" type="text" inputmode="decimal" data-local-number="2" required></label><label>Moneda<select id="recoveryCurrency"><option>ARS</option><option>USD</option></select></label></div>
 <label>Concepto / nota<input id="recoveryConcept" placeholder="Ej. Comida con Juan"></label><label>Fecha<input id="recoveryDate" type="date" required></label><button class="primary">Guardar recupero</button></form></dialog>
-<div id="toast" class="toast" role="status"></div><script type="module" src="app.js?v=77"></script></body></html>
+<div id="toast" class="toast" role="status"></div><script type="module" src="app.js?v=78"></script></body></html>
