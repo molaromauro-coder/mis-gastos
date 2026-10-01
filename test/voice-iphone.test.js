@@ -19,8 +19,18 @@ test('el micrófono principal conserva mensaje de ayuda y espera resultado final
   assert.match(app,/maxAlternatives=3/);
 });
 
-test('la PWA fuerza recursos v81',()=>{
+test('la PWA fuerza recursos v82',()=>{
   assert.match(html,/styles\.css\?v=81/);
   assert.match(html,/app\.js\?v=81/);
-  assert.match(sw,/mis-gastos-v81/);
+  assert.match(sw,/mis-gastos-v82/);
+});
+
+test('voz principal prioriza frases de gasto, descarta ruido y en toque corto admite varios segmentos',()=>{
+  assert.match(app,/function voiceExpenseSignalScore/);
+  assert.match(app,/function selectBestExpenseTranscript/);
+  assert.match(app,/function looksLikeExpenseVoice/);
+  assert.match(app,/function armTapVoiceSilence/);
+  assert.match(app,/voiceCycleText=looksLikeExpenseVoice\(candidate\)\?candidate:''/);
+  assert.match(app,/\(voiceHoldActive\|\|voiceTapMode\)&&!voiceStopRequested/);
+  assert.match(app,/priorizo tu voz y descarto ruido/);
 });
