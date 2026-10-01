@@ -10,6 +10,8 @@ export function normalizeCategoryConcept(value){
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/[^a-z0-9\s]/g,' ')
     .replace(/\bgimnasios?\b/g,'gym')
+    .replace(/\b(?:casa|casas|hogar)\b/g,'hogar')
+    .replace(/\b(?:peluqueria|peluquerias|barberia|barberias)\b/g,'barberia')
     .replace(/\s+/g,' ')
     .trim();
 }

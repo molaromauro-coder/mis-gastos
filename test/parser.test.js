@@ -420,3 +420,13 @@ test('gimnasio y Gym son sinónimos y conserva el medio de pago',()=>{
   assert.equal(result.subcategory,'Gym');
   assert.equal(result.method,'Efectivo');
 });
+
+test('casa y hogar son sinónimos para categoría HOGAR',()=>{
+  const e=parseExpense('Gasté 40 mil pesos en casa',[],['HOGAR'],{subcategories:{},now:new Date('2026-10-01T10:00:00-03:00')});
+  assert.equal(e.category,'HOGAR');
+});
+
+test('peluquería y barbería son sinónimos para categoría Barbería',()=>{
+  const e=parseExpense('Gasté 21 mil pesos en peluquería',[],['Barbería'],{subcategories:{},now:new Date('2026-10-01T10:00:00-03:00')});
+  assert.equal(e.category,'Barbería');
+});

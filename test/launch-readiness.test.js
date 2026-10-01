@@ -106,7 +106,23 @@ test('lanzamiento: no hay IDs HTML duplicados ni vistas del menú inexistentes',
 });
 
 test('lanzamiento: versión PWA auditada es coherente',()=>{
-  assert.equal(html.match(/app\.js\?v=(\d+)/)?.[1],'81');
-  assert.equal(html.match(/styles\.css\?v=(\d+)/)?.[1],'81');
-  assert.equal(sw.match(/mis-gastos-v(\d+)/)?.[1],'81');
+  assert.equal(html.match(/app\.js\?v=(\d+)/)?.[1],'82');
+  assert.equal(html.match(/styles\.css\?v=(\d+)/)?.[1],'82');
+  assert.equal(sw.match(/mis-gastos-v(\d+)/)?.[1],'82');
+});
+
+test('lanzamiento: sinónimos casa/hogar y peluquería/barbería',()=>{
+  const casa=parseExpense('Gasté 45 mil en casa',cards,['HOGAR'],{subcategories:{}});
+  assert.equal(casa.category,'HOGAR');
+  const pelu=parseExpense('Gasté 21 mil en peluquería en efectivo',cards,['Barbería'],{subcategories:{}});
+  assert.equal(pelu.category,'Barbería');assert.equal(pelu.method,'Efectivo');
+});
+
+test('lanzamiento: tres gastos seguidos siguen separándose correctamente',()=>{
+  const rows=parseExpenses('Gasté 15 mil en gimnasio en efectivo, gasté 21 mil en peluquería con Mercado Pago y gasté 40 mil en casa en efectivo',cards,['GASTOS VARIOS','Barbería','HOGAR'],{subcategories:{'GASTOS VARIOS':['Gym']}});
+  assert.equal(rows.length,3);
+  assert.deepEqual(rows.map(r=>r.amount),[15000,21000,40000]);
+  assert.equal(rows[0].subcategory,'Gym');
+  assert.equal(rows[1].category,'Barbería');
+  assert.equal(rows[2].category,'HOGAR');
 });

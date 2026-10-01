@@ -18,6 +18,8 @@ const PHRASE_STOPWORDS=new Set(['de','del','la','el','las','los','un','una']);
 function categorySpeechToken(word){
   const value=String(word||'');
   if(['gym','gimnasio','gimnasios'].includes(value))return 'gym';
+  if(['casa','casas','hogar'].includes(value))return 'hogar';
+  if(['peluqueria','peluquerias','barberia','barberias'].includes(value))return 'barberia';
   return value;
 }
 function meaningfulWords(text){
