@@ -1125,7 +1125,10 @@ function showPending() {
   document.querySelectorAll('.pending-subcategory-select').forEach((select)=>{
     select.onchange=()=>{
       const item=pending[Number(select.dataset.index)];if(!item)return;
-      item.subcategory=select.value||'';showPending();
+      item.subcategory=select.value||'';
+      item.categoryStatus=item.category?'manual':'unclassified';
+      item.learnCategory=!!item.category;
+      showPending();
     };
   });
   document.querySelectorAll('[data-pending-uncategorized]').forEach((button)=>{
@@ -1191,9 +1194,17 @@ function showPending() {
     const index = Number(card.dataset.index);
     card.querySelector('.confirm').onclick = () => confirmPending(index, card);
     card.querySelector('.edit').onclick = () => { const item = pending.splice(index, 1)[0]; $('#confirmDialog').close(); openExpense(item); };
-    let startY = 0;
-    card.ontouchstart = (ev) => { startY = ev.touches[0].clientY; };
-    card.ontouchend = (ev) => { if (startY - ev.changedTouches[0].clientY < 65) return; card.classList.add('removing'); setTimeout(() => { discarded = { item: pending.splice(index, 1)[0], index }; feedback(false); showPending(); showToast('Gasto descartado', true); }, 180); };
+    let startY = 0, ignoreSwipe = false;
+    card.ontouchstart = (ev) => {
+      ignoreSwipe=!!ev.target.closest?.('button,select,input,label');
+      startY = ev.touches[0].clientY;
+    };
+    card.ontouchend = (ev) => {
+      if(ignoreSwipe)return;
+      if (startY - ev.changedTouches[0].clientY < 65) return;
+      card.classList.add('removing');
+      setTimeout(() => { discarded = { item: pending.splice(index, 1)[0], index }; feedback(false); showPending(); showToast('Gasto descartado', true); }, 180);
+    };
   });
 }
 const uid = () => crypto.randomUUID?.() || ('id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
@@ -2038,12 +2049,25 @@ function goView(view) {
 
 async function confirmPending(index, card) {
   const current=pending[index]; if(!current)return;
+  const visibleCategory=card?.querySelector('.pending-category-select')?.value;
+  const visibleSubcategory=card?.querySelector('.pending-subcategory-select')?.value;
+  if(visibleCategory){
+    current.category=visibleCategory;
+    current.categoryStatus='manual';
+    current.learnCategory=true;
+  }
+  if(visibleSubcategory!==undefined){
+    current.subcategory=visibleSubcategory||'';
+    if(current.category){current.categoryStatus='manual';current.learnCategory=true;}
+  }
   if(!Number(current.amount))return showToast('Completá cuánto pagaste antes de confirmar');
   if(current.dateAmbiguous)return showToast('AclarÁ la fecha antes de confirmar');
   if(needsPaymentMethod(current))return showToast('Elegí o decí con qué pagaste');
   if(['Débito','Crédito'].includes(current.method)&&!current.card)return showToast('Elegí o decí qué tarjeta o cuenta usaste');
   if(current.method==='Crédito'&&current.installmentsSpecified===false)return showToast('Elegí en cuántas cuotas pagaste');
   if(current.learnCategory&&current.category)learnFromExpense(current,current.category,current.subcategory||'');
+  const confirmButton=card?.querySelector('.confirm');
+  if(confirmButton)confirmButton.disabled=true;
   card.classList.add('confirmed');
   let item=pending.splice(index,1)[0];
   item.purchaseDate ||= item.date;
