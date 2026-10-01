@@ -102,10 +102,11 @@ test('Gastos fijos permiten seleccionar un elemento y moverlo arriba o abajo',()
   assert.match(app,/fixed-order-picker/);
 });
 
-test('el primer acceso del menú principal se llama Gastos fijos',()=>{
+test('el primer acceso del menú principal se llama Gastos fijos y abre directamente su vista',()=>{
   const menu=html.match(/<dialog id="menuDialog"[\s\S]*?<\/dialog>/)?.[0]||'';
-  assert.match(menu,/id="functionsMenuBtn"[\s\S]*?<strong>Gastos fijos<\/strong>/);
-  assert.equal(menu.includes('<strong>Funciones</strong>'),false);
+  assert.match(menu,/id="functionsMenuBtn"[^>]*data-menu-view="fixedExpenses"[\s\S]*?<strong>Gastos fijos<\/strong>/);
+  assert.equal(html.includes('id="functionsDialog"'),false);
+  assert.equal(app.includes("$('#functionsDialog').showModal()"),false);
 });
 
 test('confirmar gasto por voz conserva una subcategoría recién elegida y el gesto de descarte no interfiere',()=>{
@@ -116,4 +117,11 @@ test('confirmar gasto por voz conserva una subcategoría recién elegida y el ge
 
 test('voz trata gimnasio como sinónimo de Gym al elegir categoría o subcategoría',()=>{
   assert.match(app,/replace\(\/\\bgimnasios\?\\b\/g,'gym'\)/);
+});
+
+test('una subcategoría nueva de GASTOS FIJOS se sincroniza con la lista de gastos fijos',()=>{
+  assert.match(app,/function ensureFixedExpenseForSubcategory/);
+  assert.match(app,/function syncFixedExpenseDefinitionsFromCategories/);
+  assert.match(app,/ensureFixedExpenseForSubcategory\(category,clean\)/);
+  assert.match(app,/e\.concept=clean/);
 });

@@ -203,11 +203,6 @@ document.querySelectorAll('main > .view:not(#home)').forEach((view)=>{
   const button=document.createElement('button');
   button.type='button';button.className='view-back';button.textContent='← Atrás';button.setAttribute('aria-label','Volver a la pantalla anterior');
   button.onclick=()=>{
-    if(view.id==='fixedExpenses'){
-      goView('home');
-      setTimeout(()=>{const dialog=$('#functionsDialog');if(dialog&&!dialog.open)dialog.showModal();},0);
-      return;
-    }
     if(menuViewIds.has(view.id)){
       returnToMainMenu();
       return;
@@ -366,7 +361,9 @@ function reclassifyUncategorizedExpenses(){
   return changed;
 }
 function syncCategoryConsumers(){
-  if(reclassifyUncategorizedExpenses())save();
+  let changed=reclassifyUncategorizedExpenses();
+  if(syncFixedExpenseDefinitionsFromCategories())changed=true;
+  if(changed)save();
   fillCategories();
   fillSubcategories();
   fillRecurringCategoryOptions();
@@ -415,7 +412,12 @@ function renameSubcategoryEverywhere(category,oldName,newName){
   state.trash.forEach((entry)=>{(entry.items||[]).forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});});
   state.stock.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.recurring.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
-  state.fixedExpenses.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
+  state.fixedExpenses.forEach((e)=>{
+    if(e.category===category&&e.subcategory===oldName){
+      e.subcategory=clean;
+      if(isFixedExpenseMasterCategory(category)&&normalizedCategoryName(e.concept)===normalizedCategoryName(oldName))e.concept=clean;
+    }
+  });
   pending.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.categoryRules.forEach((rule)=>{if(rule.category===category&&rule.subcategory===oldName)rule.subcategory=clean;});
   save();syncCategoryConsumers();return true;
@@ -2139,7 +2141,38 @@ function addCategory() {
   if(created&&input)input.value='';
   return created;
 }
-function addSubcategory(category,value){ const clean=String(value||'').trim(); if(!category||!clean)return false; const list=subcategoriesFor(category); if(list.some((s)=>s.toLowerCase()===clean.toLowerCase()))return false; state.subcategories[category]=[...list,clean]; save(); syncCategoryConsumers(); return true; }
+function isFixedExpenseMasterCategory(category){return normalizedCategoryName(category)===normalizedCategoryName('GASTOS FIJOS');}
+function ensureFixedExpenseForSubcategory(category,subcategory){
+  if(!isFixedExpenseMasterCategory(category)||!subcategory)return false;
+  if(!Array.isArray(state.fixedExpenses))state.fixedExpenses=[];
+  const exists=state.fixedExpenses.some((item)=>
+    normalizedCategoryName(item.category)===normalizedCategoryName(category)&&
+    (normalizedCategoryName(item.subcategory)===normalizedCategoryName(subcategory)||
+     normalizedCategoryName(item.concept)===normalizedCategoryName(subcategory))
+  );
+  if(exists)return false;
+  state.fixedExpenses.push({
+    id:uid(),concept:subcategory,currency:'ARS',category,subcategory,
+    method:'Efectivo',card:'',day:10,active:true
+  });
+  return true;
+}
+function syncFixedExpenseDefinitionsFromCategories(){
+  const category=state.categories.find((value)=>isFixedExpenseMasterCategory(value));
+  if(!category)return false;
+  let changed=false;
+  subcategoriesFor(category).forEach((subcategory)=>{if(ensureFixedExpenseForSubcategory(category,subcategory))changed=true;});
+  return changed;
+}
+function addSubcategory(category,value){
+  const clean=String(value||'').trim();
+  if(!category||!clean)return false;
+  const list=subcategoriesFor(category);
+  if(list.some((s)=>s.toLowerCase()===clean.toLowerCase()))return false;
+  state.subcategories[category]=[...list,clean];
+  ensureFixedExpenseForSubcategory(category,clean);
+  save();syncCategoryConsumers();return true;
+}
 function createCategoryFromPrompt(selectSelector){
   const value=prompt('Nombre de la nueva categoría:')?.trim();
   if(!value)return '';
@@ -2443,7 +2476,6 @@ $('#lockDialog').addEventListener('cancel',(e)=>e.preventDefault());
 $('#privacyBtn').onclick=()=>{state.settings.hideAmounts=!state.settings.hideAmounts;document.body.classList.toggle('hide-amounts',state.settings.hideAmounts);$('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁';save();};
 $('#globalSearchBtn').onclick=()=>{goView('consultations');setTimeout(()=>$('#consultQuery')?.focus(),0);};
 $('#homeCategoriesBtn').onclick=()=>openCategoryManager();
-$('#functionsMenuBtn').onclick=()=>{if($('#menuDialog')?.open)$('#menuDialog').close();$('#functionsDialog').showModal();};
 $('#addFixedExpense').onclick=()=>openFixedExpenseDialog();
 $('#fixedMoveUp').onclick=()=>moveFixedExpenseInList(-1);
 $('#fixedMoveDown').onclick=()=>moveFixedExpenseInList(1);
