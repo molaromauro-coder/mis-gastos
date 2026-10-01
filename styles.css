@@ -490,3 +490,15 @@ img,svg,canvas,video{
 .fixed-order-picker input{width:auto;margin:0}
 .fixed-expense-order-row small{font-size:10px;color:var(--muted);letter-spacing:0}
 .fixed-expense-card.order-selected{outline:2px solid #58a18d;box-shadow:0 0 0 4px #58a18d18}
+
+.resale-header-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.resale-header-actions button{white-space:nowrap}
+.resale-party summary{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.resale-party-title{display:flex;align-items:baseline;gap:10px;min-width:0}
+.resale-party-title strong{min-width:0}
+.resale-party-title small{font-size:12px;color:var(--muted);font-weight:800;letter-spacing:0;white-space:nowrap}
+@media(max-width:390px){
+  .resale-header-actions{width:100%;justify-content:stretch}
+  .resale-header-actions button{flex:1}
+  .resale-party-title{align-items:flex-start;flex-direction:column;gap:3px}
+}
