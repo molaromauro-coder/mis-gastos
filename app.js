@@ -2094,15 +2094,31 @@ async function confirmPending(index, card) {
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
 $('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit+=5;renderHomeRecent();}; $('#recentOpenHistory').onclick=()=>goView('history'); $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
-$('#method').onchange = updatePaymentFields; $('#category').onchange = () => fillSubcategories(); $('#subcategory').onchange=()=>$('#editSelectedSubcategory')?.classList.toggle('hidden',!$('#subcategory').value); $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = ()=>{formatLocalizedInputElement($('#amount'));updateInstallmentPreview();}; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
+function clearExpenseValidation(){
+  const box=$('#expenseValidation');
+  if(box){box.textContent='';box.classList.add('hidden');}
+  ['#amount','#method','#expenseCard'].forEach((selector)=>$(selector)?.classList.remove('field-error'));
+}
+function showExpenseValidation(message,selector){
+  const box=$('#expenseValidation');
+  if(box){box.textContent=message;box.classList.remove('hidden');}
+  const field=$(selector);
+  if(field){
+    field.classList.add('field-error');
+    try{field.focus({preventScroll:true});}catch{field.focus?.();}
+    field.scrollIntoView?.({behavior:'smooth',block:'center'});
+  }
+}
+$('#method').onchange = ()=>{clearExpenseValidation();updatePaymentFields();}; $('#category').onchange = () => fillSubcategories(); $('#subcategory').onchange=()=>$('#editSelectedSubcategory')?.classList.toggle('hidden',!$('#subcategory').value); $('#expenseCard').onchange = ()=>{clearExpenseValidation();updateInstallmentPreview();}; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = ()=>{clearExpenseValidation();formatLocalizedInputElement($('#amount'));updateInstallmentPreview();}; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
 $('#expenseForm').onsubmit = async (event) => {
   event.preventDefault();
+  clearExpenseValidation();
   const method=$('#method').value;
-  if (!method) return showToast('Elegí el medio de pago');
-  if (method !== 'Efectivo' && !$('#expenseCard').value) return showToast('Elegí una tarjeta configurada');
+  if (!method) return showExpenseValidation('Falta elegir el medio de pago para guardar este gasto.','#method');
+  if (method !== 'Efectivo' && !$('#expenseCard').value) return showExpenseValidation('Falta elegir la tarjeta o cuenta usada.','#expenseCard');
   const now=new Date().toISOString();
   let expense={ id:crypto.randomUUID(), amount:localizedInputNumber('#amount'), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#subcategory')?.value || $('#category').value || 'Sin detalle', category:$('#category').value, subcategory:$('#subcategory')?.value || '', categoryStatus:$('#category').value?'manual':'unclassified', method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
-  if(!Number.isFinite(expense.amount)||expense.amount<=0)return showToast('Ingresá un importe válido');
+  if(!Number.isFinite(expense.amount)||expense.amount<=0)return showExpenseValidation('Ingresá un importe mayor a cero.','#amount');
   expense=await stampUsdExpense(expense);
   state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render(); if(pending.length) setTimeout(showPending,180);
 };

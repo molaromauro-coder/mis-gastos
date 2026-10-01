@@ -135,3 +135,10 @@ test('Reventa permite crear una fiesta y muestra su fecha junto al nombre',()=>{
   assert.match(app,/orderResalePartiesByDate/);
   assert.match(app,/resale-add-tickets/);
 });
+
+test('Carga manual muestra validación visible dentro del diálogo cuando falta medio de pago',()=>{
+  assert.ok(html.includes('id="expenseValidation"'));
+  assert.match(app,/showExpenseValidation\('Falta elegir el medio de pago/);
+  assert.match(app,/showExpenseValidation\('Falta elegir la tarjeta o cuenta usada/);
+  assert.match(app,/field-error/);
+});

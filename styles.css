@@ -507,3 +507,6 @@ img,svg,canvas,video{
   .resale-party summary>span{grid-column:2;grid-row:1 / span 2}
   .resale-party summary .resale-party-date{grid-column:1;grid-row:2}
 }
+
+.form-validation{margin:12px 0 0;padding:11px 13px;border-radius:12px;background:#fff0c9;border:1px solid #e7c66b;color:#5d4a12;font-weight:800;line-height:1.35}
+.field-error{outline:3px solid #d96c5f!important;outline-offset:2px}
