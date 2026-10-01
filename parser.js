@@ -15,8 +15,13 @@ function normalized(text) {
 }
 
 const PHRASE_STOPWORDS=new Set(['de','del','la','el','las','los','un','una']);
+function categorySpeechToken(word){
+  const value=String(word||'');
+  if(['gym','gimnasio','gimnasios'].includes(value))return 'gym';
+  return value;
+}
 function meaningfulWords(text){
-  return (normalized(text).match(/[a-z0-9]+/g)||[]).filter((word)=>!PHRASE_STOPWORDS.has(word));
+  return (normalized(text).match(/[a-z0-9]+/g)||[]).map(categorySpeechToken).filter((word)=>!PHRASE_STOPWORDS.has(word));
 }
 function phraseMentioned(text,phrase){
   const hay=meaningfulWords(text), target=meaningfulWords(phrase);
