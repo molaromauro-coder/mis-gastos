@@ -31,3 +31,10 @@ test('reconoce concepto similar solo cuando conserva las palabras aprendidas',()
   assert.equal(matchCategoryRule(rules,'cargué nafta shell premium').category,'Transporte');
   assert.equal(matchCategoryRule(rules,'peaje autopista'),null);
 });
+
+test('reglas aprendidas consideran Gym y gimnasio como el mismo concepto',()=>{
+  const rules=learnCategoryRule([],'gimnasio','GASTOS VARIOS','Gym');
+  const match=matchCategoryRule(rules,'gym');
+  assert.equal(match?.category,'GASTOS VARIOS');
+  assert.equal(match?.subcategory,'Gym');
+});

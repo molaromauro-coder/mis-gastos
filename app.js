@@ -815,7 +815,7 @@ function pendingCreditDetail(e){
   const due=firstDueDateForCard(card,new Date(e.purchaseDate||e.date));
   return `<div class="pending-credit-detail"><span>${integerText(count)} cuota${count===1?'':'s'} de <strong>${money(Number(e.amount)/count,e.currency)}</strong></span><span>Primera cuota: <strong>${due.toLocaleDateString('es-AR')}</strong></span></div>`;
 }
-function normVoiceChoice(text){return String(text||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+function normVoiceChoice(text){return String(text||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\bgimnasios?\b/g,'gym');}
 function pendingDatePrompt(e,i){
   if(!e.dateAmbiguous)return '';
   const choices=Array.isArray(e.dateChoices)?e.dateChoices:[];

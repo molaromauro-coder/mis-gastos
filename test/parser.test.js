@@ -407,3 +407,16 @@ test('voz: tolera que iPhone transcriba Brubank como Pro Bank',()=>{
   assert.equal(e.method,'Débito');
   assert.equal(e.card,'Brubank');
 });
+
+test('gimnasio y Gym son sinónimos y conserva el medio de pago',()=>{
+  const result=parseExpenses(
+    'Gasté 15 mil pesos en el gimnasio, pagué en efectivo',
+    [],
+    ['GASTOS VARIOS'],
+    {subcategories:{'GASTOS VARIOS':['Gym']},now:new Date('2026-09-30T23:20:00-03:00')}
+  )[0];
+  assert.equal(result.amount,15000);
+  assert.equal(result.category,'GASTOS VARIOS');
+  assert.equal(result.subcategory,'Gym');
+  assert.equal(result.method,'Efectivo');
+});
