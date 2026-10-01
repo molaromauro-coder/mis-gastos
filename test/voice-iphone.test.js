@@ -10,7 +10,7 @@ test('voz principal de iPhone acepta toque corto además de mantener presionado'
   assert.match(app,/heldMs<450&&activeRecognition/);
   assert.match(app,/voiceTapMode=true/);
   assert.match(app,/8000/);
-  assert.match(app,/Hablá ahora · termina solo al detectar silencio/);
+  assert.match(app,/Hablá ahora · priorizo tu voz y descarto ruido/);
 });
 
 test('el micrófono principal conserva mensaje de ayuda y espera resultado final',()=>{
