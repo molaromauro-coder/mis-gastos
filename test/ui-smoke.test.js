@@ -142,3 +142,18 @@ test('Carga manual muestra validación visible dentro del diálogo cuando falta 
   assert.match(app,/showExpenseValidation\('Falta elegir la tarjeta o cuenta usada/);
   assert.match(app,/field-error/);
 });
+
+test('Confirmar gasto detectado es botón normal y tiene soporte táctil directo en iPhone',()=>{
+  assert.match(app,/type="button" class="confirm"/);
+  assert.match(app,/confirmButton\.addEventListener\('touchend',confirmAction,\{passive:false\}\)/);
+  assert.match(app,/confirmButton\.addEventListener\('touchstart'/);
+  assert.match(app,/dataset\.confirming/);
+});
+
+test('confirmación no elimina el pendiente hasta después de guardar el movimiento',()=>{
+  const fn=app.slice(app.indexOf('async function confirmPending'),app.indexOf("document.querySelectorAll('nav button')"));
+  assert.ok(fn.indexOf('state.expenses.push') < fn.indexOf('pending.splice(index,1)'));
+  assert.ok(fn.indexOf('save();') < fn.indexOf('pending.splice(index,1)'));
+  assert.match(fn,/Gasto confirmado y guardado/);
+  assert.match(fn,/No pude guardar el gasto/);
+});
