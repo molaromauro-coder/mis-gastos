@@ -507,3 +507,6 @@ img,svg,canvas,video{
   .resale-party summary>span{grid-column:2;grid-row:1 / span 2}
   .resale-party summary .resale-party-date{grid-column:1;grid-row:2}
 }
+
+.expense-validation{margin:12px 0 0;padding:11px 12px;border-radius:11px;background:#fff0ca;color:#6d5817;font-weight:800;font-size:12px;line-height:1.4}
+.expense-validation.hidden{display:none}

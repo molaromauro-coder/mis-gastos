@@ -135,3 +135,11 @@ test('Reventa permite crear una fiesta y muestra su fecha junto al nombre',()=>{
   assert.match(app,/orderResalePartiesByDate/);
   assert.match(app,/resale-add-tickets/);
 });
+
+test('carga manual explica por qué no puede confirmar y autoselecciona una única tarjeta',()=>{
+  assert.ok(html.includes('id="expenseValidation"'));
+  assert.match(app,/manualExpenseValidationMessage/);
+  assert.match(app,/Elegí qué tarjeta o cuenta usaste/);
+  assert.match(app,/else if\(cards\.length===1\)select\.value=cards\[0\]\.name/);
+  assert.match(app,/refreshManualExpenseValidation\(true\)/);
+});
