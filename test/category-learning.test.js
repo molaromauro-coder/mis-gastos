@@ -38,3 +38,10 @@ test('reglas aprendidas consideran Gym y gimnasio como el mismo concepto',()=>{
   assert.equal(match?.category,'GASTOS VARIOS');
   assert.equal(match?.subcategory,'Gym');
 });
+
+test('aprendizaje trata casa como hogar y peluquería como barbería',()=>{
+  const hogar=learnCategoryRule([], 'hogar', 'HOGAR');
+  assert.equal(applyLearnedCategory({concept:'casa'},hogar).category,'HOGAR');
+  const barberia=learnCategoryRule([], 'barbería', 'Barbería');
+  assert.equal(applyLearnedCategory({concept:'peluquería'},barberia).category,'Barbería');
+});
