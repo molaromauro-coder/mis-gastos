@@ -547,7 +547,16 @@ function fillCategories() {
   }
   fillSubcategories();
 }
-function fillCardSelect() { const method = $('#method').value; const cards = state.cards.filter((c) => c.type === method); $('#expenseCard').innerHTML = '<option value="">Elegí una tarjeta</option>' + cards.map((c) => `<option value="${escape(c.name)}">${escape(c.name)}</option>`).join(''); $('#noCardsHint').classList.toggle('hidden', method === 'Efectivo' || cards.length > 0); }
+function fillCardSelect(preferred='') {
+  const method=$('#method').value;
+  const cards=state.cards.filter((c)=>c.type===method);
+  const select=$('#expenseCard');
+  const previous=preferred||select.value||'';
+  select.innerHTML='<option value="">Elegí una tarjeta o cuenta</option>'+cards.map((c)=>`<option value="${escape(c.name)}">${escape(c.name)}</option>`).join('');
+  if(previous&&cards.some((c)=>c.name===previous))select.value=previous;
+  else if(cards.length===1)select.value=cards[0].name;
+  $('#noCardsHint').classList.toggle('hidden',method==='Efectivo'||cards.length>0);
+}
 function monthlyCardTotal(card, date) { return state.expenses.filter((e) => e.card === card.name && e.method === card.type && effectiveDate(e).getFullYear() === date.getFullYear() && effectiveDate(e).getMonth() === date.getMonth()); }
 function dateInputValue(value){const d=value instanceof Date?value:new Date(value);if(Number.isNaN(d.getTime()))return '';return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function dateFromInput(value){const match=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return match?dateWithCardDay(Number(match[1]),Number(match[2])-1,Number(match[3])):null;}
@@ -805,11 +814,40 @@ function openExpense(data = {}) {
   $('#category').value = data.category || '';
   fillSubcategories(data.subcategory || '');
   updatePaymentFields();
-  $('#expenseCard').value = data.card || '';
+  if(data.card)fillCardSelect(data.card);
   updateInstallmentPreview();
+  refreshManualExpenseValidation(false);
   $('#expenseDialog').showModal();
 }
-function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', !method || method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
+function manualExpenseValidationMessage(){
+  const amount=localizedInputNumber('#amount');
+  const method=$('#method').value;
+  if(!Number.isFinite(amount)||amount<=0)return 'Ingresá el importe del gasto.';
+  if(!method)return 'Elegí el medio de pago.';
+  if(method!=='Efectivo'&&!$('#expenseCard').value){
+    const cards=state.cards.filter((c)=>c.type===method);
+    return cards.length?'Elegí qué tarjeta o cuenta usaste.':'Primero agregá una tarjeta o cuenta de '+method.toLowerCase()+'.';
+  }
+  return '';
+}
+function refreshManualExpenseValidation(show=false){
+  const message=manualExpenseValidationMessage();
+  const box=$('#expenseValidation');
+  if(box){
+    box.textContent=message;
+    box.classList.toggle('hidden',!show||!message);
+  }
+  return message;
+}
+function updatePaymentFields() {
+  const method=$('#method').value;
+  const previous=$('#expenseCard').value;
+  $('#cardFields').classList.toggle('hidden',!method||method==='Efectivo');
+  $('#creditFields').classList.toggle('hidden',method!=='Crédito');
+  fillCardSelect(previous);
+  updateInstallmentPreview();
+  refreshManualExpenseValidation(false);
+}
 function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value && c.type === $('#method').value), count = Number($('#installments').value || 1), amount = localizedInputNumber('#amount'); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${integerText(count)} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${integerText(card.dueDay)} de cada mes.</span>`; }
 function pendingCreditDetail(e){
   if(e.method!=='Crédito'||!e.card||!e.amount||e.installmentsSpecified===false)return '';
@@ -2094,15 +2132,20 @@ async function confirmPending(index, card) {
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
 $('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit+=5;renderHomeRecent();}; $('#recentOpenHistory').onclick=()=>goView('history'); $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
-$('#method').onchange = updatePaymentFields; $('#category').onchange = () => fillSubcategories(); $('#subcategory').onchange=()=>$('#editSelectedSubcategory')?.classList.toggle('hidden',!$('#subcategory').value); $('#expenseCard').onchange = updateInstallmentPreview; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = ()=>{formatLocalizedInputElement($('#amount'));updateInstallmentPreview();}; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
+$('#method').onchange = updatePaymentFields; $('#category').onchange = () => fillSubcategories(); $('#subcategory').onchange=()=>$('#editSelectedSubcategory')?.classList.toggle('hidden',!$('#subcategory').value); $('#expenseCard').onchange = ()=>{updateInstallmentPreview();refreshManualExpenseValidation(false);}; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = ()=>{formatLocalizedInputElement($('#amount'));updateInstallmentPreview();refreshManualExpenseValidation(false);}; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
 $('#expenseForm').onsubmit = async (event) => {
   event.preventDefault();
   const method=$('#method').value;
-  if (!method) return showToast('Elegí el medio de pago');
-  if (method !== 'Efectivo' && !$('#expenseCard').value) return showToast('Elegí una tarjeta configurada');
+  const validation=refreshManualExpenseValidation(true);
+  if(validation){
+    showToast(validation);
+    if(!method)$('#method').focus();
+    else if(method!=='Efectivo'&&!$('#expenseCard').value)$('#expenseCard').focus();
+    else $('#amount').focus();
+    return;
+  }
   const now=new Date().toISOString();
   let expense={ id:crypto.randomUUID(), amount:localizedInputNumber('#amount'), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#subcategory')?.value || $('#category').value || 'Sin detalle', category:$('#category').value, subcategory:$('#subcategory')?.value || '', categoryStatus:$('#category').value?'manual':'unclassified', method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
-  if(!Number.isFinite(expense.amount)||expense.amount<=0)return showToast('Ingresá un importe válido');
   expense=await stampUsdExpense(expense);
   state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render(); if(pending.length) setTimeout(showPending,180);
 };
