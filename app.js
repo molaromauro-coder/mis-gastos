@@ -980,7 +980,7 @@ function launchPendingPaymentVoiceCycle(){
   const rec=new SR();
   pendingVoiceRecognition=rec;
   session.cycle='';
-  rec.lang='es-AR';rec.interimResults=true;rec.continuous=true;rec.maxAlternatives=1;
+  rec.lang='es-AR';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
   rec.onstart=()=>{
     session.button?.classList.add('listening');
     if(session.button)session.button.textContent='🎙 Escuchando… soltá para terminar';
@@ -1042,7 +1042,7 @@ function stopPendingPaymentVoice(){
       if(pendingVoiceSession!==session)return;
       if(pendingVoiceRecognition){try{pendingVoiceRecognition.abort();}catch{}pendingVoiceRecognition=null;}
       finishPendingPaymentVoice();
-    },900);
+    },1800);
   }else finishPendingPaymentVoice();
 }
 function showPending() {
@@ -1987,7 +1987,7 @@ function bindHoldToTalk(button,{process,fallbackPrompt,idleText,listeningText,er
   const launch=()=>{
     if(!held||stopping||finished||rec)return;
     const recognition=new SR();rec=recognition;cycle='';
-    recognition.lang='es-AR';recognition.interimResults=true;recognition.continuous=true;recognition.maxAlternatives=1;
+    recognition.lang='es-AR';recognition.interimResults=true;recognition.continuous=false;recognition.maxAlternatives=1;
     recognition.onstart=()=>{
       button.classList.add('listening');
       if(listeningText!=null)button.textContent=listeningText;
@@ -2036,7 +2036,7 @@ function bindHoldToTalk(button,{process,fallbackPrompt,idleText,listeningText,er
         if(finished)return;
         if(rec){try{rec.abort();}catch{}rec=null;}
         finish();
-      },900);
+      },1800);
     }else finish();
   };
   button.onclick=(event)=>event.preventDefault();
@@ -2377,15 +2377,17 @@ function finishExpenseVoice() {
     pending=prepareCategoryLearning(parseExpenses(phrase,state.cards,state.categories,{subcategories:state.subcategories}));
     if (pending.length) showPending();
     else showToast('Escuché el audio, pero no pude interpretar el gasto');
-  } else if (!err) {
-    showToast('No llegué a reconocer lo que dijiste. Probá de nuevo');
+  } else if (err==='not-allowed') {
+    showToast('Activá el permiso del micrófono');
+  } else {
+    showToast('No escuché el gasto. Mantené presionado, hablá y soltá al terminar');
   }
 }
 function launchExpenseRecognitionCycle(){
   if(!voiceHoldActive||voiceCancelled||voiceStopRequested||activeRecognition)return;
   const recognition=new SpeechRecognition();
   activeRecognition=recognition; voiceCycleText='';
-  recognition.lang='es-AR'; recognition.interimResults=true; recognition.continuous=true; recognition.maxAlternatives=1;
+  recognition.lang='es-AR'; recognition.interimResults=true; recognition.continuous=false; recognition.maxAlternatives=1;
   recognition.onstart=()=>{
     $('#micBtn').classList.add('listening');
     $('#voiceZone')?.classList.add('recording');
@@ -2428,7 +2430,7 @@ function stopExpenseVoice() {
       if(voiceSessionFinished)return;
       if(activeRecognition){try{activeRecognition.abort();}catch{}activeRecognition=null;}
       finishExpenseVoice();
-    },900);
+    },1800);
   } else finishExpenseVoice();
 }
 const micBtn=$('#micBtn');
