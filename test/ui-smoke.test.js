@@ -107,3 +107,9 @@ test('el primer acceso del menú principal se llama Gastos fijos',()=>{
   assert.match(menu,/id="functionsMenuBtn"[\s\S]*?<strong>Gastos fijos<\/strong>/);
   assert.equal(menu.includes('<strong>Funciones</strong>'),false);
 });
+
+test('confirmar gasto por voz conserva una subcategoría recién elegida y el gesto de descarte no interfiere',()=>{
+  assert.match(app,/visibleSubcategory=card\?\.querySelector\('\.pending-subcategory-select'\)/);
+  assert.match(app,/item\.learnCategory=!!item\.category/);
+  assert.match(app,/ignoreSwipe=!!ev\.target\.closest\?\.\('button,select,input,label'\)/);
+});
