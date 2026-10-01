@@ -20,8 +20,8 @@ test('el micrófono principal conserva mensaje de ayuda y espera resultado final
 });
 
 test('la PWA fuerza recursos v82',()=>{
-  assert.match(html,/styles\.css\?v=81/);
-  assert.match(html,/app\.js\?v=81/);
+  assert.match(html,/styles\.css\?v=82/);
+  assert.match(html,/app\.js\?v=82/);
   assert.match(sw,/mis-gastos-v82/);
 });
 
