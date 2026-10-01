@@ -2374,6 +2374,7 @@ let voiceFinishTimer = null;
 let voicePressStartedAt = 0;
 let voiceTapMode = false;
 let voiceTapTimeout = null;
+let voiceTapSilenceTimer = null;
 let voiceSessionFinished = true;
 function resetExpenseVoiceUI() {
   $('#micBtn').classList.remove('listening');
@@ -2387,6 +2388,7 @@ function finishExpenseVoice() {
   voiceSessionFinished=true;
   if(voiceFinishTimer){clearTimeout(voiceFinishTimer);voiceFinishTimer=null;}
   if(voiceTapTimeout){clearTimeout(voiceTapTimeout);voiceTapTimeout=null;}
+  if(voiceTapSilenceTimer){clearTimeout(voiceTapSilenceTimer);voiceTapSilenceTimer=null;}
   voiceTapMode=false;
   voicePressStartedAt=0;
   voiceHoldActive=false; voiceStopRequested=false;
@@ -2405,6 +2407,45 @@ function finishExpenseVoice() {
     showToast('No escuché el gasto. Mantené presionado, hablá y soltá al terminar');
   }
 }
+function voiceExpenseSignalScore(text){
+  const value=String(text||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  let score=0;
+  if(/\b(?:gaste|pague|compre|salio|costo)\b/.test(value))score+=6;
+  if(/\b(?:pesos?|dolares?|usd|u\$s|lucas?|palos?)\b/.test(value))score+=4;
+  if(/\b(?:efectivo|debito|credito|cuotas?|mercado pago|brubank|banco)\b/.test(value))score+=3;
+  if(/\b\d{1,3}(?:[.,\s]\d{3})+\b|\b\d{2,}\b/.test(value))score+=4;
+  if(/\b(?:mil|millon|millones|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos)\b/.test(value))score+=3;
+  if(/\b(?:en|de|por)\s+[a-zñ]{3,}\b/.test(value))score+=1;
+  return score;
+}
+function selectBestExpenseTranscript(result){
+  const alternatives=[...Array(result?.length||0)].map((_,index)=>result[index]).filter(Boolean);
+  if(!alternatives.length)return result?.[0]?.transcript||'';
+  return alternatives
+    .map((alt,index)=>({
+      transcript:String(alt?.transcript||'').trim(),
+      confidence:Number.isFinite(Number(alt?.confidence))?Number(alt.confidence):0,
+      index
+    }))
+    .map((entry)=>({...entry,score:voiceExpenseSignalScore(entry.transcript)+(entry.confidence>0?entry.confidence*2:0)}))
+    .sort((a,b)=>b.score-a.score||b.confidence-a.confidence||a.index-b.index)[0]?.transcript||'';
+}
+function looksLikeExpenseVoice(text){
+  return voiceExpenseSignalScore(text)>=4;
+}
+function armTapVoiceSilence(){
+  if(!voiceTapMode)return;
+  if(voiceTapSilenceTimer)clearTimeout(voiceTapSilenceTimer);
+  voiceTapSilenceTimer=setTimeout(()=>{
+    voiceTapSilenceTimer=null;
+    if(!voiceTapMode||voiceSessionFinished)return;
+    voiceHoldActive=false;
+    voiceStopRequested=true;
+    if(activeRecognition){try{activeRecognition.stop();}catch{activeRecognition=null;finishExpenseVoice();}}
+    else finishExpenseVoice();
+  },1400);
+}
+
 function launchExpenseRecognitionCycle(){
   if(!voiceHoldActive||voiceCancelled||voiceStopRequested||activeRecognition)return;
   const recognition=new SpeechRecognition();
@@ -2414,18 +2455,20 @@ function launchExpenseRecognitionCycle(){
     $('#micBtn').classList.add('listening');
     $('#voiceZone')?.classList.add('recording');
     $('#voiceTitle').textContent='Escuchando…';
-    $('#voiceHint').textContent='Seguí hablando · arrastrá al tacho para anular';
+    $('#voiceHint').textContent='Hablá cerca del micrófono · ignoro ruido de fondo';
   };
   recognition.onresult=(event)=>{
     let text='';
     for(let i=0;i<event.results.length;i++){
       const result=event.results[i];
-      const best=[...Array(result.length||0)].map((_,j)=>result[j]).find((alt)=>alt?.transcript)?.transcript||result[0]?.transcript||'';
-      text+=' '+best;
+      const best=selectBestExpenseTranscript(result);
+      if(best)text+=' '+best;
     }
-    voiceCycleText=text.trim();
+    const candidate=text.trim();
+    voiceCycleText=looksLikeExpenseVoice(candidate)?candidate:'';
     if(voiceTapMode&&voiceCycleText){
       $('#voiceHint').textContent='Te escuché · terminá de hablar';
+      armTapVoiceSilence();
     }
   };
   recognition.onerror=(event)=>{voiceError=event.error||'error';if(!['aborted','no-speech'].includes(voiceError))showToast('No pude escuchar. Revisá el permiso del micrófono');};
@@ -2434,7 +2477,7 @@ function launchExpenseRecognitionCycle(){
     if(voiceCycleText){voiceTranscript=[voiceTranscript,voiceCycleText].filter(Boolean).join(' ').trim();}
     activeRecognition=null; voiceCycleText='';
     if(voiceCancelled){finishExpenseVoice();return;}
-    if(voiceHoldActive&&!voiceStopRequested){setTimeout(launchExpenseRecognitionCycle,25);return;}
+    if((voiceHoldActive||voiceTapMode)&&!voiceStopRequested){setTimeout(launchExpenseRecognitionCycle,25);return;}
     finishExpenseVoice();
   };
   try{recognition.start();}catch{activeRecognition=null;if(voiceHoldActive&&!voiceStopRequested)setTimeout(launchExpenseRecognitionCycle,60);else finishExpenseVoice();}
@@ -2493,13 +2536,15 @@ function releaseExpenseVoice(point){
   if(cancel){cancelExpenseVoice();return;}
   if(heldMs<450&&activeRecognition){
     voiceTapMode=true;
-    voiceHoldActive=false;
-    voiceStopRequested=true;
+    voiceHoldActive=true;
+    voiceStopRequested=false;
     $('#voiceTitle').textContent='Escuchando…';
-    $('#voiceHint').textContent='Hablá ahora · termina solo al detectar silencio';
+    $('#voiceHint').textContent='Hablá ahora · priorizo tu voz y descarto ruido';
     if(voiceTapTimeout)clearTimeout(voiceTapTimeout);
     voiceTapTimeout=setTimeout(()=>{
       if(voiceSessionFinished)return;
+      voiceHoldActive=false;
+      voiceStopRequested=true;
       if(activeRecognition){try{activeRecognition.stop();}catch{}}
       else finishExpenseVoice();
     },8000);
@@ -2511,7 +2556,7 @@ if ('ontouchstart' in window) {
   micBtn.addEventListener('touchstart',(e)=>{
     e.preventDefault();
     voiceGestureStartY=e.touches[0]?.clientY??null;
-    if(voiceTapMode&&activeRecognition){stopExpenseVoice();return;}
+    if(voiceTapMode){stopExpenseVoice();return;}
     startExpenseVoice();
   },{passive:false});
   micBtn.addEventListener('touchmove',(e)=>{e.preventDefault();if(e.touches[0])updateVoiceCancelGesture(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
