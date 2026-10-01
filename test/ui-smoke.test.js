@@ -113,3 +113,7 @@ test('confirmar gasto por voz conserva una subcategoría recién elegida y el ge
   assert.match(app,/item\.learnCategory=!!item\.category/);
   assert.match(app,/ignoreSwipe=!!ev\.target\.closest\?\.\('button,select,input,label'\)/);
 });
+
+test('voz trata gimnasio como sinónimo de Gym al elegir categoría o subcategoría',()=>{
+  assert.match(app,/replace\(\/\\bgimnasios\?\\b\/g,'gym'\)/);
+});
