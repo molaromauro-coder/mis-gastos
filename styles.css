@@ -490,3 +490,20 @@ img,svg,canvas,video{
 .fixed-order-picker input{width:auto;margin:0}
 .fixed-expense-order-row small{font-size:10px;color:var(--muted);letter-spacing:0}
 .fixed-expense-card.order-selected{outline:2px solid #58a18d;box-shadow:0 0 0 4px #58a18d18}
+
+.resale-detail-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:20px}
+.resale-detail-heading .resale-balance-title{margin:0}
+#addResaleEvent{border:0;background:#d9eee5;color:#176143;border-radius:12px;padding:10px 12px;font-weight:900;white-space:nowrap}
+.resale-party summary{display:grid!important;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px}
+.resale-party summary .resale-party-date{font-size:12px;color:#71879a;font-weight:800;letter-spacing:0;white-space:nowrap}
+.resale-party-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.resale-party-actions button{border:0;border-radius:11px;padding:10px;font-weight:800}
+.resale-add-tickets{background:#d9eee5;color:#176143}
+.resale-party-actions .delete-party{background:#f7dddd;color:#9b3833}
+@media(max-width:390px){
+  .resale-detail-heading{align-items:flex-start}
+  #addResaleEvent{font-size:11px;padding:9px 10px}
+  .resale-party summary{grid-template-columns:minmax(0,1fr) auto}
+  .resale-party summary>span{grid-column:2;grid-row:1 / span 2}
+  .resale-party summary .resale-party-date{grid-column:1;grid-row:2}
+}
