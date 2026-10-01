@@ -1212,6 +1212,23 @@ function showPending() {
 const uid = () => crypto.randomUUID?.() || ('id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
 const pct = (n) => `${Number(n || 0).toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`;
 function resaleSplit() { return normalizeSplit(state.resale.ownerPercent, state.resale.sellerPercent); }
+function resalePartyDateValue(party){
+  const raw=String(party?.date||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(raw))return Number.POSITIVE_INFINITY;
+  const time=new Date(raw+'T12:00:00').getTime();
+  return Number.isFinite(time)?time:Number.POSITIVE_INFINITY;
+}
+function sortedResaleParties(){
+  return [...(state.resale.parties||[])].sort((a,b)=>{
+    const dateDiff=resalePartyDateValue(a)-resalePartyDateValue(b);
+    if(dateDiff!==0)return dateDiff;
+    return String(a?.name||'').localeCompare(String(b?.name||''),'es-AR',{sensitivity:'base'});
+  });
+}
+function resalePartyDateLabel(party){
+  if(!Number.isFinite(resalePartyDateValue(party)))return 'Sin fecha';
+  return new Date(String(party.date)+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
 function renderResale() {
   if (sharedMode || !$('#resaleList') || !resaleApi) return;
   const split = resaleSplit();
@@ -1248,7 +1265,7 @@ function renderResale() {
   if ($('#resaleOwnerHead')) $('#resaleOwnerHead').textContent = `Ganancia Mauro (${numberText(split.ownerPercent,1)}%)`;
   if ($('#resaleSellerHead')) $('#resaleSellerHead').textContent = `Total vendedor (${numberText(split.sellerPercent,1)}%)`;
   if ($('#resaleBalanceBody')) {
-    $('#resaleBalanceBody').innerHTML = state.resale.parties.map((party) => {
+    $('#resaleBalanceBody').innerHTML = sortedResaleParties().map((party) => {
       const m = partyMetrics(party, split);
       return `<tr><td><strong>${escape(party.name)}</strong></td><td>${money(m.investment,'ARS')}</td><td>${money(m.recovered,'ARS')}</td><td>${money(m.sales,'ARS')}</td><td>${money(m.totalForOwner,'ARS')}</td><td>${money(m.netGain,'ARS')}</td><td>${pct(m.gainPercent)}</td><td>${money(m.ownerGain,'ARS')}</td><td>${money(m.sellerGain,'ARS')}</td></tr>`;
     }).join('');
@@ -1257,10 +1274,10 @@ function renderResale() {
     $('#resaleBalanceTotal').innerHTML = `<tr><th>TOTAL GENERAL</th><th>${money(total.investment,'ARS')}</th><th>${money(total.recovered,'ARS')}</th><th>${money(total.sales,'ARS')}</th><th>${money(total.totalForOwner,'ARS')}</th><th>${money(total.netGain,'ARS')}</th><th>${pct(total.gainPercent)}</th><th>${money(total.ownerGain,'ARS')}</th><th>${money(total.sellerGain,'ARS')}</th></tr>`;
   }
   if (!state.resale.parties.length) {
-    $('#resaleList').innerHTML = '<div class="empty">Todavía no cargaste ninguna fiesta. Tocá “＋ Compra” para empezar.</div>';
+    $('#resaleList').innerHTML = '<div class="empty">Todavía no cargaste ninguna fiesta. Tocá “＋ Nueva fiesta” para empezar.</div>';
     return;
   }
-  $('#resaleList').innerHTML = state.resale.parties.map((party) => {
+  $('#resaleList').innerHTML = sortedResaleParties().map((party) => {
     const m = partyMetrics(party, split);
     const tickets = party.tickets.map((ticket) => {
       const tm = ticketMetrics(ticket, split);
@@ -1273,8 +1290,8 @@ function renderResale() {
         <div class="resale-ticket-result"><span>Recuperado <strong>${money(tm.recovered, 'ARS')}</strong></span><span>Ganancia <strong>${money(tm.netGain, 'ARS')}</strong></span><span>% <strong>${sold ? pct(tm.gainPercent) : '—'}</strong></span><span>Mauro <strong>${money(tm.ownerGain, 'ARS')}</strong></span><span>Vendedor <strong>${money(tm.sellerGain, 'ARS')}</strong></span></div></div>
       </div>`;
     }).join('');
-    return `<details class="resale-party" data-party-id="${escape(party.id)}"><summary><strong>${escape(party.name)}</strong><span>›</span></summary>
-      <div class="resale-party-meta">${party.date ? new Date(party.date + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin fecha'} · ${integerText(m.totalTickets)} entradas</div>
+    return `<details class="resale-party" data-party-id="${escape(party.id)}"><summary><span class="resale-party-title"><strong>${escape(party.name)}</strong><small>${escape(resalePartyDateLabel(party))}</small></span><span>›</span></summary>
+      <div class="resale-party-meta">${resalePartyDateLabel(party)} · ${integerText(m.totalTickets)} entradas</div>
       <div class="resale-metrics"><div><small>Costo recuperado</small><strong>${money(m.recovered,'ARS')}</strong></div><div><small>Ventas</small><strong>${money(m.sales,'ARS')}</strong></div><div class="metric-wide"><small>Ganancia neta</small><strong>${money(m.netGain,'ARS')}</strong><em>${pct(m.gainPercent)} general</em></div><div><small>Total Mauro</small><strong>${money(m.totalForOwner,'ARS')}</strong></div><div><small>Total vendedor</small><strong>${money(m.sellerGain,'ARS')}</strong></div></div>
       <div class="resale-tickets">${tickets}</div><button class="delete-party" type="button">Eliminar fiesta</button></details>`;
   }).join('');
@@ -2619,6 +2636,25 @@ bindHoldToTalk($('#consultMic'),{
 document.querySelectorAll('[data-menu-view]').forEach((button) => { button.onclick = () => { const dialog=button.closest('dialog'); if(dialog?.open)dialog.close(); if($('#menuDialog')?.open)$('#menuDialog').close(); goView(button.dataset.menuView); }; });
 document.querySelectorAll('[data-menu-coming]').forEach((button) => { button.onclick = () => showToast(`${button.dataset.menuComing}: lo terminamos en la siguiente revisión`); });
 if(!sharedMode && resaleApi){
+$('#addResaleEvent').onclick=()=>{
+  $('#resaleEventForm').reset();
+  $('#resaleEventDate').value='';
+  $('#resaleEventDialog').showModal();
+};
+$('#resaleEventForm').onsubmit=(event)=>{
+  event.preventDefault();
+  const name=$('#resaleEventName').value.trim();
+  const date=$('#resaleEventDate').value;
+  if(!name)return showToast('Ingresá el nombre de la fiesta');
+  if(!date)return showToast('Elegí la fecha de la fiesta');
+  const duplicate=state.resale.parties.find((party)=>String(party.name||'').trim().toLocaleLowerCase('es-AR')===name.toLocaleLowerCase('es-AR'));
+  if(duplicate)return showToast('Esa fiesta ya existe. Usá ＋ Compra para agregarle entradas.');
+  state.resale.parties.push({id:uid(),name,date,tickets:[]});
+  save();
+  $('#resaleEventDialog').close();
+  renderResale();
+  showToast('✓ Fiesta agregada');
+};
 $('#addResaleParty').onclick = () => $('#resalePartyDialog').showModal();
 $('#resalePartyForm').onsubmit = (event) => {
   event.preventDefault();
