@@ -141,3 +141,11 @@ test('Reventa muestra fecha junto al nombre y ordena fiestas cronológicamente',
   assert.match(app,/resalePartyDateLabel\(party\)/);
   assert.match(app,/\$\('#resaleList'\)\.innerHTML = sortedResaleParties\(\)\.map/);
 });
+
+test('las fiestas nuevas siempre se integran en la posición cronológica que corresponde',()=>{
+  assert.match(app,/function sortedResaleParties\(\)/);
+  assert.match(app,/return \[\.\.\.\(state\.resale\.parties\|\|\[\]\)\]\.sort/);
+  assert.match(app,/resalePartyDateValue\(a\)-resalePartyDateValue\(b\)/);
+  assert.match(app,/state\.resale\.parties\.push\(\{id:uid\(\),name,date,tickets:\[\]\}\)/);
+  assert.match(app,/renderResale\(\)/);
+});
