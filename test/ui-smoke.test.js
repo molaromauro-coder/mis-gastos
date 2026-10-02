@@ -171,3 +171,18 @@ test('Confirmar gasto detectado usa touchend directo en iPhone y click como resp
   assert.match(app,/button\.type='button'/);
   assert.match(app,/bindPendingTap\(confirmButton,\(\)=>confirmPending\(index,card\)\)/);
 });
+
+test('clasificación por voz pregunta subcategoría cuando la categoría tiene opciones',()=>{
+  assert.match(app,/needsSubcategory=hasSubcategories&&!e\.subcategory&&!e\.allowCategoryOnly/);
+  assert.match(app,/¿En qué subcategoría de/);
+  assert.match(app,/data-pending-category-only/);
+  assert.match(app,/Guardar sólo en/);
+  assert.match(app,/subcategoriesFor\(current\.category\)\.length>0&&!current\.subcategory&&!current\.allowCategoryOnly/);
+});
+
+test('si no hay categoría, el gasto puede quedar sin clasificar y si se reconoce una categoría se mantiene',()=>{
+  assert.match(app,/No estoy seguro de la categoría/);
+  assert.match(app,/Dejar sin clasificar/);
+  assert.match(app,/categoryMatches\.length/);
+  assert.match(app,/item\.category=categoryMatches\[0\]\.category/);
+});
