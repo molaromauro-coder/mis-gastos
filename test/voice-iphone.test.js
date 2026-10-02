@@ -19,10 +19,10 @@ test('el micrófono principal conserva mensaje de ayuda y espera resultado final
   assert.match(app,/maxAlternatives=3/);
 });
 
-test('la PWA fuerza recursos v84',()=>{
-  assert.match(html,/styles\.css\??v=84/);
-  assert.match(html,/app\.js\??v=84/);
-  assert.match(sw,/mis-gastos-v84/);
+test('la PWA fuerza recursos v86',()=>{
+  assert.match(html,/styles\.css\??v=86/);
+  assert.match(html,/app\.js\??v=86/);
+  assert.match(sw,/mis-gastos-v86/);
 });
 
 test('voz principal prioriza frases de gasto, descarta ruido y en toque corto admite varios segmentos',()=>{

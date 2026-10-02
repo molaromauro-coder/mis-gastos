@@ -145,8 +145,8 @@ test('Carga manual muestra validación visible dentro del diálogo cuando falta 
 
 test('Confirmar gasto detectado es botón normal y tiene soporte táctil directo en iPhone',()=>{
   assert.match(app,/type="button" class="confirm"/);
-  assert.match(app,/confirmButton\.addEventListener\('pointerup',confirmAction,\{passive:false\}\)/);
-  assert.match(app,/confirmButton\.onclick=confirmAction/);
+  assert.match(app,/bindPendingTap/);
+  assert.match(app,/addEventListener\('touchend'/);
   assert.match(app,/dataset\.confirming/);
 });
 
@@ -158,9 +158,31 @@ test('confirmación no elimina el pendiente hasta después de guardar el movimie
   assert.match(fn,/No pude guardar el gasto/);
 });
 
-test('Confirmar usa pointerup/click robusto en iPhone y muestra Guardando',()=>{
-  assert.match(app,/confirmButton\.addEventListener\('pointerup',confirmAction/);
-  assert.match(app,/confirmButton\.onclick=confirmAction/);
+test('Confirmar usa touchend/click robusto en iPhone y muestra Guardando',()=>{
+  assert.match(app,/bindPendingTap\(confirmButton,\(\)=>confirmPending\(index,card\)\)/);
+  assert.match(app,/button\.addEventListener\('touchend'/);
+  assert.match(app,/button\.addEventListener\('click'/);
   assert.match(app,/confirmButton\.textContent='Guardando…'/);
-  assert.equal(app.includes("confirmButton.addEventListener('touchend',confirmAction"),false);
+});
+
+test('Confirmar gasto detectado usa touchend directo en iPhone y click como respaldo',()=>{
+  assert.match(app,/bindPendingTap/);
+  assert.match(app,/addEventListener\('touchend'/);
+  assert.match(app,/button\.type='button'/);
+  assert.match(app,/bindPendingTap\(confirmButton,\(\)=>confirmPending\(index,card\)\)/);
+});
+
+test('clasificación por voz pregunta subcategoría cuando la categoría tiene opciones',()=>{
+  assert.match(app,/needsSubcategory=hasSubcategories&&!e\.subcategory&&!e\.allowCategoryOnly/);
+  assert.match(app,/¿En qué subcategoría de/);
+  assert.match(app,/data-pending-category-only/);
+  assert.match(app,/Guardar sólo en/);
+  assert.match(app,/subcategoriesFor\(current\.category\)\.length>0&&!current\.subcategory&&!current\.allowCategoryOnly/);
+});
+
+test('si no hay categoría, el gasto puede quedar sin clasificar y si se reconoce una categoría se mantiene',()=>{
+  assert.match(app,/No estoy seguro de la categoría/);
+  assert.match(app,/Dejar sin clasificar/);
+  assert.match(app,/categoryMatches\.length/);
+  assert.match(app,/item\.category=categoryMatches\[0\]\.category/);
 });
