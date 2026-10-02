@@ -164,3 +164,10 @@ test('Confirmar usa pointerup/click robusto en iPhone y muestra Guardando',()=>{
   assert.match(app,/confirmButton\.textContent='Guardando…'/);
   assert.equal(app.includes("confirmButton.addEventListener('touchend',confirmAction"),false);
 });
+
+test('Confirmar gasto detectado usa touchend directo en iPhone y click como respaldo',()=>{
+  assert.match(app,/bindPendingTap/);
+  assert.match(app,/addEventListener\('touchend'/);
+  assert.match(app,/button\.type='button'/);
+  assert.match(app,/bindPendingTap\(confirmButton,\(\)=>confirmPending\(index,card\)\)/);
+});
