@@ -1197,33 +1197,30 @@ function showPending() {
     const index = Number(card.dataset.index);
     const confirmButton=card.querySelector('.confirm');
     const editButton=card.querySelector('.edit');
-    let lastPointerAction=0;
-    const confirmAction=(event)=>{
-      event?.stopPropagation?.();
-      const now=Date.now();
-      if(event?.type==='click'&&now-lastPointerAction<700)return;
-      if(event?.type==='pointerup'){
+    const bindPendingTap=(button,action)=>{
+      if(!button)return;
+      button.type='button';
+      let touchHandled=false;
+      button.addEventListener('touchend',(event)=>{
         event.preventDefault();
-        lastPointerAction=now;
-      }
-      confirmPending(index,card);
+        event.stopPropagation();
+        touchHandled=true;
+        action();
+        setTimeout(()=>{touchHandled=false;},450);
+      },{passive:false});
+      button.addEventListener('click',(event)=>{
+        event.preventDefault();
+        event.stopPropagation();
+        if(touchHandled)return;
+        action();
+      });
     };
-    const editAction=(event)=>{
-      event?.stopPropagation?.();
-      const now=Date.now();
-      if(event?.type==='click'&&now-lastPointerAction<700)return;
-      if(event?.type==='pointerup'){
-        event.preventDefault();
-        lastPointerAction=now;
-      }
+    bindPendingTap(confirmButton,()=>confirmPending(index,card));
+    bindPendingTap(editButton,()=>{
       const item=pending.splice(index,1)[0];
       $('#confirmDialog').close();
       openExpense(item);
-    };
-    confirmButton.addEventListener('pointerup',confirmAction,{passive:false});
-    editButton.addEventListener('pointerup',editAction,{passive:false});
-    confirmButton.onclick=confirmAction;
-    editButton.onclick=editAction;
+    });
     let startY = 0, ignoreSwipe = false;
     card.ontouchstart = (ev) => {
       ignoreSwipe=!!ev.target.closest?.('button,select,input,label');
