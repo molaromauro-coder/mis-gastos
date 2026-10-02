@@ -837,7 +837,13 @@ function pendingCategoryPrompt(e,i){
 function pendingSubcategoryPrompt(e,i){
   if(!e.category)return '';
   const values=subcategoriesFor(e.category);
-  return `<div class="pending-subcategory-choice"><label>Subcategoría (opcional)${values.length?`<select class="pending-subcategory-select" data-index="${i}"><option value="">Sin subcategoría</option>${values.map((value)=>`<option value="${escape(value)}" ${e.subcategory===value?'selected':''}>${escape(value)}</option>`).join('')}</select>`:'<small class="muted">Todavía no hay subcategorías en esta categoría.</small>'}</label><button type="button" class="category-create-button pending-create-subcategory" data-pending-add-subcategory="${i}">＋ Agregar subcategoría</button></div>`;
+  if(!values.length){
+    return `<div class="pending-subcategory-choice"><small class="muted">La categoría ${escape(e.category)} no tiene subcategorías.</small><button type="button" class="category-create-button pending-create-subcategory" data-pending-add-subcategory="${i}">＋ Agregar subcategoría</button></div>`;
+  }
+  if(e.subcategory){
+    return `<div class="pending-subcategory-choice"><label>Subcategoría<select class="pending-subcategory-select" data-index="${i}"><option value="">Elegí subcategoría</option>${values.map((value)=>`<option value="${escape(value)}" ${e.subcategory===value?'selected':''}>${escape(value)}</option>`).join('')}</select></label><button type="button" class="category-create-button pending-create-subcategory" data-pending-add-subcategory="${i}">＋ Agregar subcategoría</button></div>`;
+  }
+  return `<div class="pending-subcategory-choice pending-subcategory-question"><strong>¿En qué subcategoría de ${escape(e.category)} querés cargarlo?</strong><select class="pending-subcategory-select" data-index="${i}"><option value="">Elegí subcategoría</option>${values.map((value)=>`<option value="${escape(value)}">${escape(value)}</option>`).join('')}</select><div class="pending-category-actions"><button type="button" class="secondary pending-category-only" data-pending-category-only="${i}">Guardar sólo en ${escape(e.category)}</button><button type="button" class="category-create-button pending-create-subcategory" data-pending-add-subcategory="${i}">＋ Agregar subcategoría</button></div></div>`;
 }
 function pendingPaymentPrompt(e,i){
   const needsMethod=needsPaymentMethod(e);
@@ -866,7 +872,7 @@ function applyPendingCategoryVoice(index,phrase){
   const item=pending[index];if(!item)return;
   const spoken=normVoiceChoice(phrase);
   if(/\bsin categoria\b/.test(spoken)){
-    item.category='';item.subcategory='';item.categoryStatus='unclassified';showPending();return;
+    item.category='';item.subcategory='';item.allowCategoryOnly=false;item.categoryStatus='unclassified';showPending();return;
   }
   const subMatches=[];
   for(const [parent,values] of Object.entries(state.subcategories||{})){
@@ -884,7 +890,7 @@ function applyPendingCategoryVoice(index,phrase){
     .filter(({normalized})=>normalized&&spoken.includes(normalized))
     .sort((a,b)=>b.normalized.length-a.normalized.length);
   if(categoryMatches.length){
-    item.category=categoryMatches[0].category;item.subcategory='';item.categoryStatus='manual';item.learnCategory=true;showPending();return;
+    item.category=categoryMatches[0].category;item.subcategory='';item.allowCategoryOnly=false;item.categoryStatus='manual';item.learnCategory=true;showPending();return;
   }
   showToast('No reconocí esa categoría. Elegila de la lista o decí “sin categoría”');
 }
@@ -1053,13 +1059,15 @@ function showPending() {
     const needsInstallments=needsPaymentInstallments(e);
     const needsDate=!!e.dateAmbiguous;
     const needsCategory=!e.category;
+    const hasSubcategories=!!e.category&&subcategoriesFor(e.category).length>0;
+    const needsSubcategory=hasSubcategories&&!e.subcategory&&!e.allowCategoryOnly;
     const methodLabel=needsMethod?'Medio de pago pendiente':e.method;
     const when=new Date(e.purchaseDate||e.date);
     const whenLabel=needsDate?'Fecha pendiente':(e.dateSpecified&&!e.timeSpecified?when.toLocaleDateString('es-AR'):when.toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}));
     const installmentLabel=e.method==='Crédito'?(needsInstallments?'Cuotas pendientes':`${integerText(Math.max(1,Number(e.installments||1)))} cuota${Number(e.installments||1)===1?'':'s'}`):'';
-    const categoryLabel=needsCategory?'Sin clasificar':e.category;
+    const categoryLabel=needsCategory?'Sin clasificar':(needsSubcategory?`${e.category} · Subcategoría pendiente`:e.category);
     const meta=[whenLabel,categoryLabel,methodLabel,e.card,installmentLabel].filter(Boolean).join(' · ');
-    const incomplete=!e.amount||needsMethod||needsCard||needsInstallments||needsDate;
+    const incomplete=!e.amount||needsMethod||needsCard||needsInstallments||needsDate||needsSubcategory;
     return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape(meta)}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingAmountPrompt(e,i)}${pendingDatePrompt(e,i)}${pendingPaymentPrompt(e,i)}${pendingCategoryPrompt(e,i)}${pendingSubcategoryPrompt(e,i)}${pendingCreditDetail(e)}<div class="actions"><button type="button" class="edit">${incomplete?'✎ Corregir / completar':'Corregir'}</button><button type="button" class="confirm" ${incomplete ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
   }).join('');
   if (!$('#confirmDialog').open) $('#confirmDialog').showModal();
@@ -1099,7 +1107,7 @@ function showPending() {
   document.querySelectorAll('.pending-category-select').forEach((select)=>{
     select.onchange=()=>{
       const item=pending[Number(select.dataset.index)];if(!item||!select.value)return;
-      item.category=select.value;item.subcategory='';item.categoryStatus='manual';item.learnCategory=true;showPending();
+      item.category=select.value;item.subcategory='';item.allowCategoryOnly=false;item.categoryStatus='manual';item.learnCategory=true;showPending();
     };
   });
   document.querySelectorAll('[data-pending-add-category]').forEach((button)=>{
@@ -1109,7 +1117,7 @@ function showPending() {
       if(!value)return;
       const category=createCategoryEverywhere(value);
       if(!category)return;
-      item.category=category;item.subcategory='';item.categoryStatus='manual';item.learnCategory=true;showPending();
+      item.category=category;item.subcategory='';item.allowCategoryOnly=false;item.categoryStatus='manual';item.learnCategory=true;showPending();
     };
   });
   document.querySelectorAll('[data-pending-add-subcategory]').forEach((button)=>{
@@ -1122,15 +1130,26 @@ function showPending() {
         if(existing){item.subcategory=existing;showPending();return;}
         return showToast('Esa subcategoría ya existe');
       }
-      item.subcategory=value;item.categoryStatus='manual';item.learnCategory=true;showPending();
+      item.subcategory=value;item.allowCategoryOnly=false;item.categoryStatus='manual';item.learnCategory=true;showPending();
     };
   });
   document.querySelectorAll('.pending-subcategory-select').forEach((select)=>{
     select.onchange=()=>{
       const item=pending[Number(select.dataset.index)];if(!item)return;
       item.subcategory=select.value||'';
+      item.allowCategoryOnly=false;
       item.categoryStatus=item.category?'manual':'unclassified';
       item.learnCategory=!!item.category;
+      showPending();
+    };
+  });
+  document.querySelectorAll('[data-pending-category-only]').forEach((button)=>{
+    button.onclick=()=>{
+      const item=pending[Number(button.dataset.pendingCategoryOnly)];if(!item||!item.category)return;
+      item.subcategory='';
+      item.allowCategoryOnly=true;
+      item.categoryStatus='manual';
+      item.learnCategory=true;
       showPending();
     };
   });
@@ -2105,6 +2124,7 @@ async function confirmPending(index, card) {
   if(needsPaymentMethod(current))return showToast('Elegí o decí con qué pagaste');
   if(['Débito','Crédito'].includes(current.method)&&!current.card)return showToast('Elegí o decí qué tarjeta o cuenta usaste');
   if(current.method==='Crédito'&&current.installmentsSpecified===false)return showToast('Elegí en cuántas cuotas pagaste');
+  if(current.category&&subcategoriesFor(current.category).length>0&&!current.subcategory&&!current.allowCategoryOnly)return showToast('Elegí una subcategoría o tocá “Guardar sólo en '+current.category+'”');
 
   const confirmButton=card?.querySelector('.confirm');
   if(card)card.dataset.confirming='1';
