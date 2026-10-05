@@ -510,3 +510,21 @@ img,svg,canvas,video{
 
 .form-validation{margin:12px 0 0;padding:11px 13px;border-radius:12px;background:#fff0c9;border:1px solid #e7c66b;color:#5d4a12;font-weight:800;line-height:1.35}
 .field-error{outline:3px solid #d96c5f!important;outline-offset:2px}
+
+
+/* v87 · inicio compacto: mes arriba, hoy abajo, micrófono preservado */
+#home .home-month-net{margin:0 0 10px}
+#home .today-card{
+  padding:10px 14px 9px;
+  border-radius:15px;
+}
+#home .today-card-head{align-items:center}
+#home .today-card-head span{font-size:14px}
+#home .today-card-head small{font-size:10px;margin-top:2px}
+#home .eye-btn{width:30px;height:30px;font-size:14px}
+#home .today-ars{font-size:25px;line-height:1.05;margin:5px 0 6px;letter-spacing:-.7px}
+#home .today-usd{padding-top:7px}
+#home .today-usd span{font-size:11px}
+#home .today-usd strong{font-size:14px}
+#home .recent-card{margin-top:10px}
+#home .voice-zone{display:flex;flex-direction:column;align-items:center}
