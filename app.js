@@ -17,12 +17,35 @@ const orderResalePartiesByDate = resaleApi?.orderResalePartiesByDate;
 if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
 const STORAGE_KEY = sharedMode ? 'mis-gastos-shared-v1' : 'mis-gastos-v1';
 const BACKUP_KEY = STORAGE_KEY+'-backup-v1';
+const HISTORY_KEY = STORAGE_KEY+'-history-v2';
+const SAFETY_DB_NAME = 'mis-gastos-safety-v1';
+let destructiveWriteAllowed = false;
+function parseStoredState(raw){try{const value=JSON.parse(raw||'null');return value&&typeof value==='object'?value:null;}catch{return null;}}
+function retainedExpenseCount(snapshot){
+  const active=Array.isArray(snapshot?.expenses)?snapshot.expenses.length:0;
+  const trash=Array.isArray(snapshot?.trash)?snapshot.trash.reduce((sum,record)=>sum+(Array.isArray(record?.items)?record.items.length:0),0):0;
+  return active+trash;
+}
+function localHistorySnapshots(){
+  try{
+    const list=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');
+    return Array.isArray(list)?list.map((item)=>typeof item==='string'?parseStoredState(item):item).filter(Boolean):[];
+  }catch{return [];}
+}
+function bestLocalSnapshot(){
+  const primary=parseStoredState(localStorage.getItem(STORAGE_KEY));
+  const backup=parseStoredState(localStorage.getItem(BACKUP_KEY));
+  const candidates=[primary,backup,...localHistorySnapshots()].filter(Boolean);
+  if(!candidates.length)return {};
+  const best=candidates.slice().sort((a,b)=>retainedExpenseCount(b)-retainedExpenseCount(a))[0];
+  if(primary&&retainedExpenseCount(primary)>0)return primary;
+  return retainedExpenseCount(best)>retainedExpenseCount(primary||{})?best:(primary||best);
+}
+function permitDestructiveWriteOnce(){destructiveWriteAllowed=true;}
 const defaults = { expenses: [], cards: [], categories: [], subcategories: {}, categoryRules: [], stock: [], recoveries: [], budgets: {}, recurring: [], fixedExpenses: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 5 };
 function loadState() {
   try {
-    const primary=localStorage.getItem(STORAGE_KEY);
-    const backup=localStorage.getItem(BACKUP_KEY);
-    const old = JSON.parse(primary || backup || '{}');
+    const old = bestLocalSnapshot();
     const legacyRecurring = Array.isArray(old.recurring) ? old.recurring : [];
     const fixedExpenses = Array.isArray(old.fixedExpenses)
       ? old.fixedExpenses
@@ -212,16 +235,125 @@ function setLocalizedInput(selector,value,max=2){
   input.value=value===''||value===null||value===undefined?'':formatNumericInputValue(value,{maximumFractionDigits:max});
 }
 
+function openSafetyDb(){
+  return new Promise((resolve,reject)=>{
+    if(!('indexedDB' in window))return resolve(null);
+    const request=indexedDB.open(SAFETY_DB_NAME,1);
+    request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains('snapshots'))db.createObjectStore('snapshots',{keyPath:'ts'});};
+    request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
+  });
+}
+async function persistIndexedSnapshot(snapshot){
+  try{
+    const db=await openSafetyDb();if(!db)return;
+    const tx=db.transaction('snapshots','readwrite'),store=tx.objectStore('snapshots');
+    store.put({ts:Date.now(),snapshot});
+    const all=await new Promise((resolve,reject)=>{const req=store.getAllKeys();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);});
+    all.sort((a,b)=>a-b).slice(0,Math.max(0,all.length-20)).forEach((key)=>store.delete(key));
+  }catch{}
+}
+async function latestIndexedSnapshot(){
+  try{
+    const db=await openSafetyDb();if(!db)return null;
+    return await new Promise((resolve,reject)=>{
+      const tx=db.transaction('snapshots','readonly'),req=tx.objectStore('snapshots').openCursor(null,'prev');
+      req.onsuccess=()=>resolve(req.result?.value?.snapshot||null);req.onerror=()=>reject(req.error);
+    });
+  }catch{return null;}
+}
 const save = () => {
-  const previous=localStorage.getItem(STORAGE_KEY);
-  if(previous){
-    try{
-      const parsed=JSON.parse(previous);
-      if(parsed&&typeof parsed==='object')localStorage.setItem(BACKUP_KEY,previous);
-    }catch{}
+  const previousRaw=localStorage.getItem(STORAGE_KEY);
+  const previous=parseStoredState(previousRaw);
+  if(previousRaw&&previous){
+    localStorage.setItem(BACKUP_KEY,previousRaw);
+    const history=localHistorySnapshots();
+    const last=history.at(-1);
+    if(JSON.stringify(last||null)!==previousRaw){
+      history.push(previous);
+      while(history.length>20)history.shift();
+      localStorage.setItem(HISTORY_KEY,JSON.stringify(history));
+    }
   }
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  if(previous&&retainedExpenseCount(previous)>0&&retainedExpenseCount(state)===0&&!destructiveWriteAllowed){
+    state.expenses=structuredClone(previous.expenses||[]);
+    state.trash=structuredClone(previous.trash||[]);
+    window.__misGastosIntegrityBlocked=true;
+  }
+  destructiveWriteAllowed=false;
+  state.settings={...state.settings,lastSafeExpenseCount:retainedExpenseCount(state),lastSafeSaveAt:new Date().toISOString()};
+  const nextRaw=JSON.stringify(state);
+  localStorage.setItem(STORAGE_KEY,nextRaw);
+  void persistIndexedSnapshot(structuredClone(state));
 };
+function normalizedRecoveryText(value){return String(value||'').toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
+function recoverVerifiedOctoberExpensesOnce(){
+  if(sharedMode||Number(state.settings?.verifiedOctoberRecoveryVersion||0)>=1)return;
+  const known=[
+    {amount:50000,concept:'Gasté limpieza pero ahí',category:'SUPERMERCADO',subcategory:'LIMPIEZA',method:'Débito',card:'Mercado Pago',date:'2026-10-01T20:16:00-03:00'},
+    {amount:23000,concept:'Gasté barberí ahí',category:'BARBERIA',subcategory:'',method:'Débito',card:'Mercado Pago',date:'2026-10-01T20:29:00-03:00'},
+    {amount:20000,concept:'Vianda',category:'COMIDA',subcategory:'',method:'',card:'',date:'2026-10-02T12:00:00-03:00'},
+    {amount:75000,concept:'Viandas',category:'COMIDA',subcategory:'',method:'',card:'',date:'2026-10-02T12:01:00-03:00'},
+    {amount:233000,concept:'Obra social',category:'GASTOS FIJOS',subcategory:'Obra social',method:'',card:'',date:'2026-10-02T12:02:00-03:00'},
+    {amount:6000,concept:'otros',category:'CASA / HOGAR',subcategory:'OTROS',method:'',card:'',date:'2026-10-04T12:00:00-03:00'}
+  ];
+  let added=0;
+  for(const item of known){
+    const day=item.date.slice(0,10);
+    const exists=state.expenses.some((expense)=>{
+      const expenseDay=String(expense.purchaseDate||expense.date||'').slice(0,10);
+      return expenseDay===day&&Number(expense.amount||0)===item.amount&&
+        (normalizedRecoveryText(expense.concept)===normalizedRecoveryText(item.concept)||
+         normalizedRecoveryText(expense.category)===normalizedRecoveryText(item.category));
+    });
+    if(exists)continue;
+    state.expenses.push({
+      id:demoCardId(),currency:'ARS',installments:1,purchaseDate:item.date,
+      source:'recovered-screenshot',categoryStatus:item.category?'recovered':'unclassified',...item
+    });
+    added++;
+  }
+  state.settings={...state.settings,verifiedOctoberRecoveryVersion:1,verifiedOctoberRecoveryAdded:added,recoveryReferenceOctoberTotal:897000,recoveryVerifiedTotal:407000};
+  save();
+}
+recoverVerifiedOctoberExpensesOnce();
+
+function exportSafetyBackup(){
+  save();
+  const payload={format:'mis-gastos-backup-v2',createdAt:new Date().toISOString(),state:structuredClone(state)};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='mis-gastos-respaldo-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(url);
+  showToast('✓ Respaldo completo exportado');
+}
+function restoreSnapshot(snapshot,label='respaldo'){
+  if(!snapshot||typeof snapshot!=='object'||!Array.isArray(snapshot.expenses))return showToast('El respaldo no es válido');
+  permitDestructiveWriteOnce();
+  restoreState(snapshot);
+  save();render();
+  showToast('✓ Datos restaurados desde '+label);
+}
+async function restoreBestSafetyBackup(){
+  const local=bestLocalSnapshot(),indexed=await latestIndexedSnapshot();
+  const candidates=[local,indexed].filter(Boolean).sort((a,b)=>retainedExpenseCount(b)-retainedExpenseCount(a));
+  const best=candidates[0];
+  if(!best||retainedExpenseCount(best)===0)return showToast('No encontré un respaldo anterior con gastos');
+  if(!confirm(`Restaurar el respaldo con ${integerText(retainedExpenseCount(best))} movimiento${retainedExpenseCount(best)===1?'':'s'}? Antes se guardará una copia del estado actual.`))return;
+  save();restoreSnapshot(best,'el respaldo más completo');
+}
+async function importSafetyBackup(file){
+  if(!file)return;
+  try{
+    const parsed=JSON.parse(await file.text()),snapshot=parsed?.state||parsed;
+    if(!snapshot||!Array.isArray(snapshot.expenses))throw new Error('invalid');
+    if(!confirm(`Importar respaldo con ${integerText(retainedExpenseCount(snapshot))} movimiento${retainedExpenseCount(snapshot)===1?'':'s'}?`))return;
+    save();restoreSnapshot(snapshot,'archivo');
+  }catch{showToast('No pude leer ese respaldo');}
+}
+async function attemptIndexedRecovery(){
+  if(retainedExpenseCount(state)>0)return;
+  const snapshot=await latestIndexedSnapshot();
+  if(snapshot&&retainedExpenseCount(snapshot)>0){restoreSnapshot(snapshot,'respaldo de seguridad');}
+}
 const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 const escape = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const effectiveDate = (e) => new Date(e.dueDate || e.date);
@@ -1556,6 +1688,7 @@ function updateTrashBulkActions(){
   selectAll.indeterminate=selected.length>0&&selected.length<checks.length;
 }
 function commitTrashDeletion(ids){
+  permitDestructiveWriteOnce();
   const result=permanentlyDeleteTrashRecords(state,ids);
   if(result.removedRecords){
     mirrorResetIntoSnapshot(settingsSnapshot,state);
@@ -1701,6 +1834,7 @@ function fixedExpenseDisplayLabel(concept){
     'SEGURO MOTO':'🛵',
     'SEGURO BICI':'🚲',
     'SEGURO HOGAR':'🏡',
+    'IMPUESTOS VARIOS':'🧾',
     'COMIDA FRODO':'🐶'
   }[key];
   return emoji?raw+' '+emoji:raw;
@@ -2518,6 +2652,7 @@ $('#resetPreviousMonthsFinalCancel').onclick=()=>closeDialogById('#resetPrevious
 $('#resetPreviousMonthsFinalCancelX').onclick=()=>closeDialogById('#resetPreviousMonthsFinalDialog');
 $('#resetPreviousMonthsFinalDialog').addEventListener('cancel',(event)=>{event.preventDefault();closeDialogById('#resetPreviousMonthsFinalDialog');});
 $('#resetPreviousMonthsFinalConfirm').onclick=()=>{
+  permitDestructiveWriteOnce();
   const now=new Date();
   const result=permanentlyDeletePreviousMonths(state,now);
   mirrorResetIntoSnapshot(settingsSnapshot,state);
@@ -2545,6 +2680,11 @@ $('#deleteAllTrash').onclick=()=>{
   const result=commitTrashDeletion(ids);
   if(result.removedRecords)showToast(`✓ Papelera vaciada: ${integerText(result.removedRecords)} gasto${result.removedRecords===1?'':'s'} eliminado${result.removedRecords===1?'':'s'}`);
 };
+$('#exportSafetyBackup').onclick=exportSafetyBackup;
+$('#restoreSafetyBackup').onclick=restoreBestSafetyBackup;
+$('#createSafetyBackup').onclick=()=>{save();showToast('✓ Respaldo de seguridad creado');};
+$('#importSafetyBackup').onclick=()=>$('#safetyBackupFile').click();
+$('#safetyBackupFile').onchange=(event)=>{importSafetyBackup(event.target.files?.[0]);event.target.value='';};
 $('#settingsBack').onclick=()=>{
   if(activeSettingsCategory){activeSettingsCategory='';fillCategories();return;}
   closeSettingsKeepingChanges();
@@ -3022,4 +3162,4 @@ $('#cancelResaleImport').onclick=()=>{pendingResaleImport=null;$('#resaleImportR
 window.addEventListener('pagehide',()=>{try{save();}catch{}}); document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){try{save();}catch{}}});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
 bindLocalizedNumberInputs();
-const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#fixedExpenseMonth').value=monthISO; $('#consultFrom').value=''; $('#consultTo').value=''; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
+const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#fixedExpenseMonth').value=monthISO; $('#consultFrom').value=''; $('#consultTo').value=''; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); void attemptIndexedRecovery(); if(window.__misGastosIntegrityBlocked)setTimeout(()=>showToast('Protección activa: se evitó un borrado total inesperado'),300); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
