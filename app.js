@@ -141,7 +141,7 @@ function seedUserFixedExpensesOnce(){
 seedUserFixedExpensesOnce();
 
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
-let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, selectedFixedExpenseOrderId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 4;
+let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, selectedFixedExpenseOrderId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 2;
 const $ = (s) => document.querySelector(s);
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
 const numberText=(n,maximumFractionDigits=2)=>formatLocalizedNumber(n,{maximumFractionDigits});
