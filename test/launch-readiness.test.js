@@ -150,3 +150,11 @@ test('lanzamiento: rescate exhaustivo busca gastos en todas las copias locales e
   assert.ok(app.includes("recoveredFrom:entry.source"));
   assert.ok(html.includes('id="fullRecoverySweep"'));
 });
+
+test('lanzamiento: recuperación incluye supermercado 2/10 con débito Brubank informado por el usuario',()=>{
+  assert.ok(app.includes("amount:389421.30"));
+  assert.ok(app.includes("category:'SUPERMERCADO'"));
+  assert.ok(app.includes("method:'Débito'"));
+  assert.ok(app.includes("card:'Brubank'"));
+  assert.ok(app.includes("verifiedOctoberRecoveryVersion:2"));
+});
