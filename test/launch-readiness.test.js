@@ -139,8 +139,8 @@ test('lanzamiento: protección de gastos usa copias múltiples y bloquea un vaci
 test('lanzamiento: recuperación de octubre sólo repone movimientos verificados y deduplica',()=>{
   assert.ok(app.includes('recoverVerifiedOctoberExpensesOnce'));
   assert.ok(app.includes('recoveryReferenceOctoberTotal:897000'));
-  assert.ok(app.includes('recoveryVerifiedTotal:407000'));
-  for(const amount of ['50000','23000','20000','75000','233000','6000'])assert.ok(app.includes(`amount:${amount}`),amount);
+  assert.ok(app.includes('recoveryVerifiedTotal:796421.30'));
+  for(const amount of ['50000','23000','20000','75000','233000','389421.30','6000'])assert.ok(app.includes(`amount:${amount}`),amount);
   assert.ok(app.includes("source:'recovered-screenshot'"));
 });
 
