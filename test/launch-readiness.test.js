@@ -106,9 +106,12 @@ test('lanzamiento: no hay IDs HTML duplicados ni vistas del menú inexistentes',
 });
 
 test('lanzamiento: versión PWA auditada es coherente',()=>{
-  assert.equal(html.match(/app\.js\?v=(\d+)/)?.[1],'86');
-  assert.equal(html.match(/styles\.css\?v=(\d+)/)?.[1],'86');
-  assert.equal(sw.match(/mis-gastos-v(\d+)/)?.[1],'86');
+  const appVersion=html.match(/app\.js\?v=(\d+)/)?.[1];
+  const styleVersion=html.match(/styles\.css\?v=(\d+)/)?.[1];
+  const cacheVersion=sw.match(/mis-gastos-v(\d+)/)?.[1];
+  assert.ok(appVersion);
+  assert.equal(styleVersion,appVersion);
+  assert.equal(cacheVersion,appVersion);
 });
 
 test('lanzamiento: sinónimos casa/hogar y peluquería/barbería',()=>{
