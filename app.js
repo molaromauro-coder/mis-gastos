@@ -7,7 +7,7 @@ import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrash
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=59');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=60');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -139,6 +139,38 @@ function seedUserFixedExpensesOnce(){
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
 }
 seedUserFixedExpensesOnce();
+
+
+// Importación puntual desde REVENTA_ENTRADAS_UNIFICADA(1).xlsx · compra JOHN DIGWEED
+const RESALE_JOHN_DIGWEED_IMPORT_VERSION=1;
+function importJohnDigweedPurchasesOnce(){
+  if(sharedMode || Number(state.settings?.resaleJohnDigweedImportVersion||0)>=RESALE_JOHN_DIGWEED_IMPORT_VERSION)return;
+  if(!state.resale||typeof state.resale!=='object')state.resale={ownerPercent:70,sellerPercent:30,parties:[]};
+  if(!Array.isArray(state.resale.parties))state.resale.parties=[];
+  const name='JOHN DIGWEED', date='2027-01-23';
+  let party=state.resale.parties.find((p)=>String(p.name||'').trim().toLocaleLowerCase('es-AR')===name.toLocaleLowerCase('es-AR'));
+  if(!party){
+    party={id:demoCardId(),name,date,tickets:[]};
+    state.resale.parties.push(party);
+  }else if(!party.date){
+    party.date=date;
+  }
+  if(!Array.isArray(party.tickets))party.tickets=[];
+  const expected=[];
+  for(let n=1;n<=6;n++)expected.push({type:'EARLY',number:n,cost:52250});
+  for(let n=7;n<=35;n++)expected.push({type:'EARLY',number:n,cost:63250});
+  for(let n=1;n<=2;n++)expected.push({type:'VIP',number:n,cost:80500});
+  expected.forEach((ticket)=>{
+    const exists=party.tickets.some((current)=>
+      String(current.type||'').trim().toLocaleLowerCase('es-AR')===ticket.type.toLocaleLowerCase('es-AR') &&
+      Number(current.number)===ticket.number
+    );
+    if(!exists)party.tickets.push({id:demoCardId(),...ticket,salePrice:0,status:'Disponible'});
+  });
+  state.settings={...state.settings,resaleJohnDigweedImportVersion:RESALE_JOHN_DIGWEED_IMPORT_VERSION};
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+}
+importJohnDigweedPurchasesOnce();
 
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
 let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, selectedFixedExpenseOrderId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 2;
