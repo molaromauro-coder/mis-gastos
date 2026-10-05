@@ -129,3 +129,17 @@ test('lanzamiento: tres gastos seguidos siguen separándose correctamente',()=>{
   assert.equal(rows[1].category,'Barbería');
   assert.equal(rows[2].category,'HOGAR');
 });
+
+test('lanzamiento: protección de gastos usa copias múltiples y bloquea un vaciado inesperado',()=>{
+  for(const marker of ['HISTORY_KEY','SAFETY_DB_NAME','retainedExpenseCount','persistIndexedSnapshot','latestIndexedSnapshot','permitDestructiveWriteOnce','restoreBestSafetyBackup'])assert.ok(app.includes(marker),marker);
+  assert.match(app,/retainedExpenseCount\(previous\)>0&&retainedExpenseCount\(state\)===0/);
+  for(const id of ['createSafetyBackup','exportSafetyBackup','restoreSafetyBackup','importSafetyBackup'])assert.ok(html.includes(`id="${id}"`),id);
+});
+
+test('lanzamiento: recuperación de octubre sólo repone movimientos verificados y deduplica',()=>{
+  assert.ok(app.includes('recoverVerifiedOctoberExpensesOnce'));
+  assert.ok(app.includes('recoveryReferenceOctoberTotal:897000'));
+  assert.ok(app.includes('recoveryVerifiedTotal:407000'));
+  for(const amount of ['50000','23000','20000','75000','233000','6000'])assert.ok(app.includes(`amount:${amount}`),amount);
+  assert.ok(app.includes("source:'recovered-screenshot'"));
+});
