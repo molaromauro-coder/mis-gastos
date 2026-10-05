@@ -261,6 +261,78 @@ async function latestIndexedSnapshot(){
     });
   }catch{return null;}
 }
+async function allIndexedSnapshots(){
+  try{
+    const db=await openSafetyDb();if(!db)return [];
+    return await new Promise((resolve,reject)=>{
+      const tx=db.transaction('snapshots','readonly'),req=tx.objectStore('snapshots').getAll();
+      req.onsuccess=()=>resolve((req.result||[]).map((item)=>item?.snapshot).filter(Boolean));
+      req.onerror=()=>reject(req.error);
+    });
+  }catch{return [];}
+}
+function expenseRecoveryKey(expense){
+  if(expense?.id)return 'id:'+expense.id;
+  const date=String(expense?.purchaseDate||expense?.date||'').slice(0,19);
+  const amount=Number(expense?.amount||0).toFixed(2);
+  const concept=normalizedRecoveryText(expense?.concept||'');
+  const category=normalizedRecoveryText(expense?.category||'');
+  const card=normalizedRecoveryText(expense?.card||'');
+  const installment=String(expense?.installment||1)+'/'+String(expense?.installments||1);
+  return ['sig',date,amount,concept,category,card,installment].join('|');
+}
+function expensesFromSnapshot(snapshot){
+  if(!snapshot||typeof snapshot!=='object')return [];
+  const active=Array.isArray(snapshot.expenses)?snapshot.expenses:[];
+  const trashed=Array.isArray(snapshot.trash)?snapshot.trash.flatMap((record)=>Array.isArray(record?.items)?record.items:[]):[];
+  return [...active,...trashed].filter((expense)=>expense&&typeof expense==='object'&&Number(expense.amount||0)>0);
+}
+function discoverLocalStorageSnapshots(){
+  const found=[];
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if(!key||!key.toLowerCase().includes('mis-gastos'))continue;
+    const parsed=parseStoredState(localStorage.getItem(key));
+    if(parsed)found.push({source:'localStorage:'+key,snapshot:parsed});
+    if(Array.isArray(parsed)){
+      parsed.forEach((candidate,index)=>{if(candidate&&typeof candidate==='object')found.push({source:'localStorage:'+key+'#'+index,snapshot:candidate});});
+    }
+  }
+  return found;
+}
+async function recoverAllReachableExpenses(){
+  if(sharedMode)return {added:0,candidates:0,sources:[]};
+  const sources=discoverLocalStorageSnapshots();
+  const indexed=await allIndexedSnapshots();
+  indexed.forEach((snapshot,index)=>sources.push({source:'indexedDB:'+index,snapshot}));
+  sources.push({source:'current',snapshot:structuredClone(state)});
+  const currentKeys=new Set(state.expenses.map(expenseRecoveryKey));
+  const recovered=[];
+  const recoveredSources=new Set();
+  for(const entry of sources){
+    for(const expense of expensesFromSnapshot(entry.snapshot)){
+      const key=expenseRecoveryKey(expense);
+      if(currentKeys.has(key))continue;
+      currentKeys.add(key);
+      recovered.push({...structuredClone(expense),recoveredAt:new Date().toISOString(),recoveredFrom:entry.source});
+      recoveredSources.add(entry.source);
+    }
+  }
+  if(!recovered.length)return {added:0,candidates:0,sources:[...recoveredSources]};
+  save(); // safety snapshot before merging
+  state.expenses.push(...recovered);
+  state.settings={...state.settings,lastRecoverySweepAt:new Date().toISOString(),lastRecoverySweepAdded:recovered.length};
+  save();render();
+  return {added:recovered.length,candidates:recovered.length,sources:[...recoveredSources]};
+}
+async function runFullRecoverySweep(showResult=true){
+  const result=await recoverAllReachableExpenses();
+  if(showResult){
+    if(result.added)showToast(`✓ Recuperé ${integerText(result.added)} gasto${result.added===1?'':'s'} adicionales`);
+    else showToast('No encontré más gastos guardados en este dispositivo');
+  }
+  return result;
+}
 const save = () => {
   const previousRaw=localStorage.getItem(STORAGE_KEY);
   const previous=parseStoredState(previousRaw);
@@ -2680,6 +2752,7 @@ $('#deleteAllTrash').onclick=()=>{
   const result=commitTrashDeletion(ids);
   if(result.removedRecords)showToast(`✓ Papelera vaciada: ${integerText(result.removedRecords)} gasto${result.removedRecords===1?'':'s'} eliminado${result.removedRecords===1?'':'s'}`);
 };
+$('#fullRecoverySweep').onclick=()=>runFullRecoverySweep(true);
 $('#exportSafetyBackup').onclick=exportSafetyBackup;
 $('#restoreSafetyBackup').onclick=restoreBestSafetyBackup;
 $('#createSafetyBackup').onclick=()=>{save();showToast('✓ Respaldo de seguridad creado');};
@@ -3162,4 +3235,11 @@ $('#cancelResaleImport').onclick=()=>{pendingResaleImport=null;$('#resaleImportR
 window.addEventListener('pagehide',()=>{try{save();}catch{}}); document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){try{save();}catch{}}});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
 bindLocalizedNumberInputs();
-const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#fixedExpenseMonth').value=monthISO; $('#consultFrom').value=''; $('#consultTo').value=''; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); void attemptIndexedRecovery(); if(window.__misGastosIntegrityBlocked)setTimeout(()=>showToast('Protección activa: se evitó un borrado total inesperado'),300); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
+const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#fixedExpenseMonth').value=monthISO; $('#consultFrom').value=''; $('#consultTo').value=''; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); void attemptIndexedRecovery().then(async()=>{
+  if(Number(state.settings?.fullRecoverySweepVersion||0)<1){
+    const result=await runFullRecoverySweep(false);
+    state.settings={...state.settings,fullRecoverySweepVersion:1,fullRecoverySweepResult:result.added||0};
+    save();
+    if(result.added)setTimeout(()=>showToast(`✓ Rescate automático: ${integerText(result.added)} gasto${result.added===1?'':'s'} recuperado${result.added===1?'':'s'}`),350);
+  }
+}); if(window.__misGastosIntegrityBlocked)setTimeout(()=>showToast('Protección activa: se evitó un borrado total inesperado'),300); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
