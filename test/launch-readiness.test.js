@@ -158,3 +158,12 @@ test('lanzamiento: recuperación incluye supermercado 2/10 con débito Brubank i
   assert.ok(app.includes("card:'Brubank'"));
   assert.ok(app.includes("verifiedOctoberRecoveryVersion:2"));
 });
+
+test('lanzamiento: inicio compacto mantiene micrófono despejado y aleja el tacho',()=>{
+  assert.ok(css.includes('v95 · inicio más compacto'));
+  assert.match(css,/#home \.today-card\{padding:7px 11px 7px/);
+  assert.match(css,/#home \.voice-zone\{margin-top:10px!important;padding:48px 0 8px!important\}/);
+  assert.match(css,/#home \.voice-trash\{position:absolute!important;left:50%!important;top:0!important/);
+  assert.match(css,/#home \.home-menu-btn\{height:52px;bottom:calc\(8px \+ env\(safe-area-inset-bottom\)\)\}/);
+  assert.match(css,/#home\{padding-bottom:calc\(96px \+ env\(safe-area-inset-bottom\)\)\}/);
+});
