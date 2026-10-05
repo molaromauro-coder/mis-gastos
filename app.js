@@ -1663,6 +1663,22 @@ function updateFixedExpenseOrderTools(){
   const label=$('#fixedExpenseOrderSelected');
   if(label)label.textContent=index>=0?`Seleccionado: ${state.fixedExpenses[index].concept}`:'Seleccioná un gasto para moverlo';
 }
+function fixedExpenseDisplayLabel(concept){
+  const raw=String(concept||'').trim();
+  if(/[💡💨🏠🚙🛵🚲🏡🐶]/u.test(raw))return raw;
+  const key=raw.toLocaleUpperCase('es-AR');
+  const emoji={
+    'LUZ':'💡',
+    'GAS':'💨',
+    'EXPENSAS':'🏠',
+    'SEGURO AUTO':'🚙',
+    'SEGURO MOTO':'🛵',
+    'SEGURO BICI':'🚲',
+    'SEGURO HOGAR':'🏡',
+    'COMIDA FRODO':'🐶'
+  }[key];
+  return emoji?raw+' '+emoji:raw;
+}
 function renderFixedExpenses(){
   if(!$('#fixedExpenseList'))return;
   const key=$('#fixedExpenseMonth')?.value||monthKey(new Date());
@@ -1683,7 +1699,7 @@ function renderFixedExpenses(){
         <label class="fixed-order-picker"><input type="radio" name="fixedExpenseOrder" value="${escape(item.id)}" ${selected?'checked':''}><span>Seleccionar</span></label>
         <small>Posición ${integerText(index+1)} de ${integerText(state.fixedExpenses.length)}</small>
       </div>
-      <div class="fixed-expense-head"><div><strong>${escape(item.concept)}</strong><small>${escape(category)} · día ${integerText(item.day||1)} · ${escape(item.method||'Efectivo')}${item.card?' · '+escape(item.card):''}</small></div><span class="${paid?'paid':'pending'}">${item.active===false?'Inactivo':paid?'Pagado':'Pendiente'}</span></div>
+      <div class="fixed-expense-head"><div><strong>${escape(fixedExpenseDisplayLabel(item.concept))}</strong><small>${escape(category)} · día ${integerText(item.day||1)} · ${escape(item.method||'Efectivo')}${item.card?' · '+escape(item.card):''}</small></div><span class="${paid?'paid':'pending'}">${item.active===false?'Inactivo':paid?'Pagado':'Pendiente'}</span></div>
       <div class="fixed-expense-values"><span>Este mes <strong>${paid?money(current,item.currency):'—'}</strong></span><span>Mes anterior <strong>${previous?money(previous,item.currency):'Sin dato'}</strong></span></div>
       <div class="fixed-expense-actions"><button type="button" class="fixed-pay">${paid?'Editar pago':'Registrar pago'}</button><button type="button" class="fixed-edit">Editar</button><button type="button" class="fixed-toggle">${item.active===false?'Activar':'Desactivar'}</button></div>
     </article>`;
