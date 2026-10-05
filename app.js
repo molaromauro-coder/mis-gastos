@@ -16,10 +16,13 @@ const withPortfolioPercent = resaleApi?.withPortfolioPercent;
 const orderResalePartiesByDate = resaleApi?.orderResalePartiesByDate;
 if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
 const STORAGE_KEY = sharedMode ? 'mis-gastos-shared-v1' : 'mis-gastos-v1';
+const BACKUP_KEY = STORAGE_KEY+'-backup-v1';
 const defaults = { expenses: [], cards: [], categories: [], subcategories: {}, categoryRules: [], stock: [], recoveries: [], budgets: {}, recurring: [], fixedExpenses: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 5 };
 function loadState() {
   try {
-    const old = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const primary=localStorage.getItem(STORAGE_KEY);
+    const backup=localStorage.getItem(BACKUP_KEY);
+    const old = JSON.parse(primary || backup || '{}');
     const legacyRecurring = Array.isArray(old.recurring) ? old.recurring : [];
     const fixedExpenses = Array.isArray(old.fixedExpenses)
       ? old.fixedExpenses
@@ -209,7 +212,16 @@ function setLocalizedInput(selector,value,max=2){
   input.value=value===''||value===null||value===undefined?'':formatNumericInputValue(value,{maximumFractionDigits:max});
 }
 
-const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+const save = () => {
+  const previous=localStorage.getItem(STORAGE_KEY);
+  if(previous){
+    try{
+      const parsed=JSON.parse(previous);
+      if(parsed&&typeof parsed==='object')localStorage.setItem(BACKUP_KEY,previous);
+    }catch{}
+  }
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+};
 const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 const escape = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const effectiveDate = (e) => new Date(e.dueDate || e.date);
@@ -332,6 +344,20 @@ function renderUnclassified(){
     };
   });
 }
+function renderUnclassifiedReminder(){
+  const box=$('#unclassifiedReminder');if(!box)return;
+  const pendingItems=recentPurchases(state.expenses).filter((e)=>!e.category);
+  if(!pendingItems.length){box.classList.add('hidden');return;}
+  const every=10*24*60*60*1000;
+  const last=Number(state.settings?.lastUnclassifiedReminderAt||0);
+  const due=!last||Date.now()-last>=every;
+  if(!due){box.classList.add('hidden');return;}
+  box.classList.remove('hidden');
+  box.innerHTML=`<button type="button" id="openUnclassifiedReminder"><span>⚠️</span><div><strong>Tenés ${integerText(pendingItems.length)} gasto${pendingItems.length===1?'':'s'} sin clasificar</strong><small>Recordatorio de cada 10 días · tocá para ordenarlos</small></div><b>›</b></button>`;
+  $('#openUnclassifiedReminder').onclick=()=>goView('unclassified');
+  state.settings={...state.settings,lastUnclassifiedReminderAt:Date.now()};
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+}
 function renderHomeRecent(){
   const target=$('#recentMovements'); if(!target)return;
   const all=chronologicalPurchases(), visible=all.slice(0,recentHomeLimit);
@@ -342,13 +368,13 @@ function renderHomeRecent(){
   }).join(''):'<div class="recent-empty">Todavía no registraste movimientos.</div>';
   const more=$('#recentMore');
   if(more){
-    const remaining=Math.max(0,all.length-recentHomeLimit);
-    more.classList.toggle('hidden',remaining===0);
-    more.textContent=remaining>0?'＋ Ver más':'';
+    const expanded=recentHomeLimit>2;
+    more.classList.toggle('hidden',all.length<=2);
+    more.textContent=all.length>2?(expanded?'⌃ Ver menos':'⌄ Ver más'):'';
   }
   $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>4);
 }
-function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock();renderMonthlyNetSummary(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderTrash(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
+function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock();renderMonthlyNetSummary(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderUnclassifiedReminder(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderTrash(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function subcategoriesFor(category){
   const values=state.subcategories?.[category];
@@ -1021,7 +1047,7 @@ function launchPendingPaymentVoiceCycle(){
   const rec=new SR();
   pendingVoiceRecognition=rec;
   session.cycle='';
-  rec.lang='es-AR';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
+  rec.lang='es-AR';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=3;
   rec.onstart=()=>{
     session.button?.classList.add('listening');
     if(session.button)session.button.textContent='🎙 Escuchando… soltá para terminar';
@@ -1948,27 +1974,80 @@ function globalSearchRows(){
   }));
   return [...expenses,...stock,...recoveries];
 }
+function normalizeAgentText(value){
+  return String(value||'').toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function agentSetDateRange(from,to){
+  const iso=(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  $('#consultFrom').value=iso(from);$('#consultTo').value=iso(to);
+}
+function clearAgentConsultationFilters(){
+  $('#consultFrom').value='';$('#consultTo').value='';$('#consultCategory').value='';renderConsultationFilters();
+  if($('#consultSubcategory'))$('#consultSubcategory').value='';
+  $('#consultMethod').value='';$('#consultCurrency').value='';$('#consultCard').value='';
+  $('#consultAmount').value='';$('#consultMin').value='';
+}
 function applyNaturalConsultation(text) {
-  const q=String(text||'').toLowerCase(), now=new Date(), today=now.toISOString().slice(0,10);
-  if(q.includes('este mes')){ $('#consultFrom').value=`${today.slice(0,8)}01`; $('#consultTo').value=today; }
-  if(q.includes('mes pasado')){ const d=new Date(now.getFullYear(),now.getMonth()-1,1), last=new Date(now.getFullYear(),now.getMonth(),0); $('#consultFrom').value=d.toISOString().slice(0,10); $('#consultTo').value=last.toISOString().slice(0,10); }
-  if(q.includes('hoy')){ $('#consultFrom').value=today; $('#consultTo').value=today; }
-  if(q.includes('dólar')||q.includes('dolar')) $('#consultCurrency').value='USD';
+  const original=String(text||''),q=normalizeAgentText(original),now=new Date();
+  clearAgentConsultationFilters();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const months=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  if(/\b(?:este mes|mes actual|lo que va del mes)\b/.test(q)){
+    agentSetDateRange(new Date(now.getFullYear(),now.getMonth(),1),today);
+  }else if(/\b(?:mes pasado|mes anterior)\b/.test(q)){
+    agentSetDateRange(new Date(now.getFullYear(),now.getMonth()-1,1),new Date(now.getFullYear(),now.getMonth(),0));
+  }else if(/\bhoy\b/.test(q)){
+    agentSetDateRange(today,today);
+  }else if(/\bayer\b/.test(q)){
+    const d=new Date(today);d.setDate(d.getDate()-1);agentSetDateRange(d,d);
+  }else{
+    const named=months.findIndex((month)=>new RegExp('\\b'+month+'\\b').test(q));
+    if(named>=0){
+      let year=Number(q.match(/\b(20\d{2})\b/)?.[1]||now.getFullYear());
+      if(!q.match(/\b20\d{2}\b/) && named>now.getMonth())year--;
+      agentSetDateRange(new Date(year,named,1),new Date(year,named+1,0));
+    }
+    const slash=q.match(/\b(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?\b/);
+    const namedDay=q.match(/\b(?:el\s+)?(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+de\s+(20\d{2}))?\b/);
+    if(slash){
+      const y=slash[3]?Number(slash[3].length===2?'20'+slash[3]:slash[3]):now.getFullYear();
+      const d=new Date(y,Number(slash[2])-1,Number(slash[1]));agentSetDateRange(d,d);
+    }else if(namedDay){
+      const y=Number(namedDay[3]||now.getFullYear()),m=months.indexOf(namedDay[2]);
+      const d=new Date(y,m,Number(namedDay[1]));agentSetDateRange(d,d);
+    }
+  }
+  if(q.includes('dolar')||q.includes('usd')) $('#consultCurrency').value='USD';
   if(q.includes('efectivo')) $('#consultMethod').value='Efectivo';
-  if(q.includes('débito')||q.includes('debito')) $('#consultMethod').value='Débito';
-  if(q.includes('crédito')||q.includes('credito')) $('#consultMethod').value='Crédito';
-  let category=state.categories.find((c)=>q.includes(c.toLowerCase()));
+  if(q.includes('debito')) $('#consultMethod').value='Débito';
+  if(q.includes('credito')) $('#consultMethod').value='Crédito';
+
+  const categoryMatches=state.categories
+    .map((c)=>({value:c,norm:normalizeAgentText(c)}))
+    .filter((x)=>x.norm&&q.includes(x.norm))
+    .sort((a,b)=>b.norm.length-a.norm.length);
+  let category=categoryMatches[0]?.value||'';
   let sub='';
   const subMatches=[];
   for(const [parent,values] of Object.entries(state.subcategories||{})){
-    for(const value of Array.isArray(values)?values:[])if(q.includes(String(value).toLowerCase()))subMatches.push({parent,value,length:String(value).length});
+    for(const value of Array.isArray(values)?values:[]){
+      const norm=normalizeAgentText(value);
+      if(norm&&q.includes(norm))subMatches.push({parent,value,length:norm.length});
+    }
   }
   subMatches.sort((a,b)=>b.length-a.length);
   if(!category&&subMatches.length)category=subMatches[0].parent;
-  if(category){ $('#consultCategory').value=category; renderConsultationFilters(); }
-  if(subMatches.length&&subMatches[0].parent===category)sub=subMatches[0].value;
+  if(category){$('#consultCategory').value=category;renderConsultationFilters();}
+  if(subMatches.length&&normalizeAgentText(subMatches[0].parent)===normalizeAgentText(category))sub=subMatches[0].value;
   if(sub&&$('#consultSubcategory'))$('#consultSubcategory').value=sub;
-  const card=state.cards.find((c)=>q.includes(c.name.toLowerCase())); if(card) $('#consultCard').value=card.name;
+
+  const card=state.cards.find((c)=>q.includes(normalizeAgentText(c.name)));if(card)$('#consultCard').value=card.name;
+
+  const amountMatch=original.match(/(?:\$\s*)?(\d[\d.\s,]*)(?:\s*(mil|millon|millones))?/i);
+  if(amountMatch && /\b(?:monto|importe|gasto|pague|pago|costo|costó|salio|salió|busca|buscame|encontra|encontrá)\b/i.test(original)){
+    const parsed=Number(parseAmount(amountMatch[0]));
+    if(Number.isFinite(parsed)&&parsed>0)setLocalizedInput('#consultAmount',parsed,2);
+  }
 }
 function consultationRows() {
   const from=$('#consultFrom').value ? new Date($('#consultFrom').value+'T00:00:00') : new Date('2000-01-01T00:00:00');
@@ -1977,7 +2056,7 @@ function consultationRows() {
   const min=localizedInputNumber('#consultMin'), exact=localizedInputNumber('#consultAmount');
   const query=String($('#consultQuery').value||'').toLowerCase().trim();
   const normalizeSearch=(value)=>String(value||'').toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const stopWords=new Set(['cuanto','gaste','gasto','gastos','pague','pago','pagos','compra','compras','recupero','recuperos','busca','buscar','buscame','mostra','mostrar','mostrame','dame','de','del','la','las','el','los','en','por','con','que','cual','cuando','este','esta','mes','pasado','hoy','ayer','entre','desde','hasta','mis','mi','un','una','al','para','ars','usd','pesos','peso','dolares','dolar','tarjeta','efectivo','debito','credito','categoria','subcategoria']);
+  const stopWords=new Set(['cuanto','cuanta','gaste','gasto','gastos','pague','pago','pagos','compra','compras','recupero','recuperos','busca','buscar','buscame','encontra','encontrame','mostra','mostrar','mostrame','dame','de','del','la','las','el','los','en','por','con','que','cual','cuando','este','esta','mes','pasado','anterior','actual','hoy','ayer','entre','desde','hasta','mis','mi','un','una','al','para','ars','usd','pesos','peso','dolares','dolar','tarjeta','efectivo','debito','credito','categoria','subcategoria','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']);
   const tokens=normalizeSearch(query).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter((token)=>token.length>2&&!stopWords.has(token));
   return globalSearchRows().filter((row)=>{
     if(!(row.date>=from&&row.date<=to))return false;
@@ -2032,7 +2111,14 @@ function runConsultation() {
   const usd=rows.filter((r)=>r.currency==='USD').reduce((s,r)=>s+r.amount,0);
   const eq=rows.reduce((s,r)=>s+r.arsEquivalent,0);
   $('#consultArs').textContent=money(ars,'ARS'); $('#consultUsd').textContent=money(usd,'USD'); $('#consultEquivalent').textContent=money(eq,'ARS');
-  const answer=`Encontré ${integerText(rows.length)} movimiento${rows.length===1?'':'s'}. Equivalente total: ${money(eq,'ARS')}.`;
+  const categoryLabel=$('#consultCategory').value;
+  const fromLabel=$('#consultFrom').value?new Date($('#consultFrom').value+'T12:00:00').toLocaleDateString('es-AR'):'';
+  const toLabel=$('#consultTo').value?new Date($('#consultTo').value+'T12:00:00').toLocaleDateString('es-AR'):'';
+  let answer='';
+  if(!rows.length)answer='No encontré movimientos que coincidan con esa consulta.';
+  else if(categoryLabel&&fromLabel&&toLabel)answer=`Gastaste ${money(eq,'ARS')} en ${categoryLabel} entre el ${fromLabel} y el ${toLabel}. Encontré ${integerText(rows.length)} movimiento${rows.length===1?'':'s'}.`;
+  else if(categoryLabel)answer=`Gastaste ${money(eq,'ARS')} en ${categoryLabel}. Encontré ${integerText(rows.length)} movimiento${rows.length===1?'':'s'}.`;
+  else answer=`Encontré ${integerText(rows.length)} movimiento${rows.length===1?'':'s'}. Total equivalente: ${money(eq,'ARS')}.`;
   $('#consultAnswer').textContent=answer;
   $('#consultResults').innerHTML=rows.length?rows.sort((a,b)=>b.date-a.date).map(renderConsultationRow).join(''):'<div class="empty">No encontré movimientos con esos filtros.</div>';
   if($('#consultSpeak').checked && 'speechSynthesis' in window){ speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(answer)); }
@@ -2063,33 +2149,36 @@ function bindHoldToTalk(button,{process,fallbackPrompt,idleText,listeningText,er
   if(!button||button.dataset.holdVoiceBound==='1')return;
   button.dataset.holdVoiceBound='1';
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  let rec=null,held=false,stopping=false,finished=true,transcript='',cycle='',finishTimer=null;
-  const reset=()=>{
-    button.classList.remove('listening');
-    if(idleText!=null)button.textContent=idleText;
-  };
+  let rec=null,pressed=false,tapMode=false,finished=true,transcript='',cycle='',startedAt=0,stopTimer=null,silenceTimer=null,maxTimer=null;
+  const reset=()=>{button.classList.remove('listening');if(idleText!=null)button.textContent=idleText;};
   const finish=()=>{
-    if(finished)return;
-    finished=true;
-    if(finishTimer){clearTimeout(finishTimer);finishTimer=null;}
-    held=false;stopping=false;
+    if(finished)return;finished=true;
+    [stopTimer,silenceTimer,maxTimer].forEach((timer)=>timer&&clearTimeout(timer));
+    stopTimer=silenceTimer=maxTimer=null;
+    pressed=false;tapMode=false;
     const phrase=[transcript,cycle].filter(Boolean).join(' ').trim();
     transcript='';cycle='';rec=null;reset();
-    if(phrase)process(phrase);
-    else showToast('No escuché nada. Mantené presionado y hablá');
+    if(phrase)process(phrase);else showToast('No escuché nada. Tocá el micrófono y hablá');
+  };
+  const armSilence=()=>{
+    if(!tapMode)return;
+    if(silenceTimer)clearTimeout(silenceTimer);
+    silenceTimer=setTimeout(()=>{pressed=false;if(rec){try{rec.stop();}catch{finish();}}else finish();},1400);
   };
   const launch=()=>{
-    if(!held||stopping||finished||rec)return;
+    if(finished||(!pressed&&!tapMode)||rec)return;
     const recognition=new SR();rec=recognition;cycle='';
-    recognition.lang='es-AR';recognition.interimResults=true;recognition.continuous=false;recognition.maxAlternatives=1;
-    recognition.onstart=()=>{
-      button.classList.add('listening');
-      if(listeningText!=null)button.textContent=listeningText;
-    };
+    recognition.lang='es-AR';recognition.interimResults=true;recognition.continuous=false;recognition.maxAlternatives=3;
+    recognition.onstart=()=>{button.classList.add('listening');if(listeningText!=null)button.textContent='🎙 Escuchando…';};
     recognition.onresult=(event)=>{
       let text='';
-      for(let i=0;i<event.results.length;i++)text+=' '+(event.results[i][0]?.transcript||'');
-      cycle=text.trim();
+      for(let i=0;i<event.results.length;i++){
+        const result=event.results[i];
+        let best=result[0]||null;
+        for(let a=1;a<result.length;a++)if(Number(result[a]?.confidence||0)>Number(best?.confidence||0))best=result[a];
+        text+=' '+(best?.transcript||'');
+      }
+      cycle=text.trim();if(tapMode&&cycle)armSilence();
     };
     recognition.onerror=(event)=>{
       if(event.error==='not-allowed')showToast('Activá el permiso del micrófono');
@@ -2099,51 +2188,39 @@ function bindHoldToTalk(button,{process,fallbackPrompt,idleText,listeningText,er
       if(finished){rec=null;cycle='';return;}
       if(cycle){transcript=[transcript,cycle].filter(Boolean).join(' ').trim();cycle='';}
       rec=null;
-      if(held&&!stopping){setTimeout(launch,25);return;}
+      if((pressed||tapMode)&&!finished){setTimeout(launch,25);return;}
       finish();
     };
-    try{recognition.start();}
-    catch{rec=null;if(held&&!stopping)setTimeout(launch,60);else finish();}
+    try{recognition.start();}catch{rec=null;if(pressed||tapMode)setTimeout(launch,60);else finish();}
   };
   const start=(event)=>{
-    event?.preventDefault?.();
-    if(held||rec)return;
+    event?.preventDefault?.();if(!finished||rec)return;
     window.getSelection?.()?.removeAllRanges?.();
-    if(!SR){
-      const phrase=prompt(fallbackPrompt||'Escribí lo que querías decir:');
-      if(phrase)process(phrase);
-      return;
-    }
-    held=true;stopping=false;finished=false;transcript='';cycle='';
-    button.classList.add('listening');
-    if(listeningText!=null)button.textContent=listeningText;
-    pendingVoiceStartCue();
-    launch();
+    if(!SR){const phrase=prompt(fallbackPrompt||'Escribí lo que querías decir:');if(phrase)process(phrase);return;}
+    finished=false;pressed=true;tapMode=false;transcript='';cycle='';startedAt=Date.now();
+    pendingVoiceStartCue();launch();
   };
   const stop=(event)=>{
-    event?.preventDefault?.();
-    if(!held&&!rec)return;
-    held=false;stopping=true;
+    event?.preventDefault?.();if(finished)return;
+    const held=Math.max(0,Date.now()-startedAt);
+    if(held<450){
+      tapMode=true;pressed=false;
+      if(listeningText!=null)button.textContent='🎙 Escuchando…';
+      maxTimer=setTimeout(()=>{tapMode=false;if(rec){try{rec.stop();}catch{finish();}}else finish();},8000);
+      armSilence();
+      return;
+    }
+    pressed=false;tapMode=false;
     if(rec){
-      try{rec.stop();}catch{rec=null;finish();return;}
-      finishTimer=setTimeout(()=>{
-        if(finished)return;
-        if(rec){try{rec.abort();}catch{}rec=null;}
-        finish();
-      },1800);
+      try{rec.stop();}catch{finish();return;}
+      stopTimer=setTimeout(()=>{if(!finished){try{rec?.abort();}catch{}finish();}},1800);
     }else finish();
   };
-  button.onclick=(event)=>event.preventDefault();
-  button.oncontextmenu=(event)=>event.preventDefault();
-  button.onselectstart=(event)=>event.preventDefault();
+  button.onclick=(event)=>event.preventDefault();button.oncontextmenu=(event)=>event.preventDefault();button.onselectstart=(event)=>event.preventDefault();
   if('ontouchstart' in window){
-    button.addEventListener('touchstart',start,{passive:false});
-    button.addEventListener('touchend',stop,{passive:false});
-    button.addEventListener('touchcancel',stop,{passive:false});
+    button.addEventListener('touchstart',start,{passive:false});button.addEventListener('touchend',stop,{passive:false});button.addEventListener('touchcancel',stop,{passive:false});
   }else{
-    button.onpointerdown=(event)=>{button.setPointerCapture?.(event.pointerId);start(event);};
-    button.onpointerup=stop;
-    button.onpointercancel=stop;
+    button.onpointerdown=(event)=>{button.setPointerCapture?.(event.pointerId);start(event);};button.onpointerup=stop;button.onpointercancel=stop;
   }
 }
 function goView(view) {
@@ -2214,7 +2291,7 @@ async function confirmPending(index, card) {
 }
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
-$('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit+=5;renderHomeRecent();}; $('#recentOpenHistory').onclick=()=>goView('history'); $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
+$('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit=recentHomeLimit>2?2:Number.MAX_SAFE_INTEGER;renderHomeRecent();}; $('#recentOpenHistory').onclick=()=>goView('history'); $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
 function clearExpenseValidation(){
   const box=$('#expenseValidation');
   if(box){box.textContent='';box.classList.add('hidden');}
