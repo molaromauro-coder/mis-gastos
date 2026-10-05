@@ -543,3 +543,6 @@ img,svg,canvas,video{
 .safety-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .safety-actions button{border:1px solid #b8d6cc;background:#fff;color:#1f6658;border-radius:11px;padding:10px 8px;font-weight:800}
 .recovery-note{margin-top:10px;line-height:1.4}
+
+/* v93 · rescate exhaustivo de gastos locales */
+.safety-actions .safety-primary{grid-column:1/-1;background:#1f6658;color:#fff;border-color:#1f6658}
