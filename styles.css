@@ -528,3 +528,10 @@ img,svg,canvas,video{
 #home .today-usd strong{font-size:14px}
 #home .recent-card{margin-top:10px}
 #home .voice-zone{display:flex;flex-direction:column;align-items:center}
+
+/* v91 · consultas tipo agente, recordatorio y movimientos desplegables */
+.unclassified-reminder{margin-top:10px}
+.unclassified-reminder>button{width:100%;border:1px solid #efd891;background:#fff6d9;border-radius:16px;padding:11px 12px;display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;text-align:left;color:#203c56}
+.unclassified-reminder>button>span{font-size:22px}.unclassified-reminder strong,.unclassified-reminder small{display:block}.unclassified-reminder small{margin-top:3px;color:#7e7354;font-size:10px}.unclassified-reminder b{font-size:22px;color:#9b8a5d}
+#recentMore{font-size:12px}
+#consultMic.listening,#stockVoiceBtn.listening,.voice-pay.listening{animation:voiceAnswerPulse .9s ease-in-out infinite}
