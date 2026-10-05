@@ -359,13 +359,14 @@ const save = () => {
 };
 function normalizedRecoveryText(value){return String(value||'').toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
 function recoverVerifiedOctoberExpensesOnce(){
-  if(sharedMode||Number(state.settings?.verifiedOctoberRecoveryVersion||0)>=1)return;
+  if(sharedMode||Number(state.settings?.verifiedOctoberRecoveryVersion||0)>=2)return;
   const known=[
     {amount:50000,concept:'Gasté limpieza pero ahí',category:'SUPERMERCADO',subcategory:'LIMPIEZA',method:'Débito',card:'Mercado Pago',date:'2026-10-01T20:16:00-03:00'},
     {amount:23000,concept:'Gasté barberí ahí',category:'BARBERIA',subcategory:'',method:'Débito',card:'Mercado Pago',date:'2026-10-01T20:29:00-03:00'},
     {amount:20000,concept:'Vianda',category:'COMIDA',subcategory:'',method:'',card:'',date:'2026-10-02T12:00:00-03:00'},
     {amount:75000,concept:'Viandas',category:'COMIDA',subcategory:'',method:'',card:'',date:'2026-10-02T12:01:00-03:00'},
     {amount:233000,concept:'Obra social',category:'GASTOS FIJOS',subcategory:'Obra social',method:'',card:'',date:'2026-10-02T12:02:00-03:00'},
+    {amount:389421.30,concept:'Supermercado',category:'SUPERMERCADO',subcategory:'',method:'Débito',card:'Brubank',date:'2026-10-02T12:03:00-03:00'},
     {amount:6000,concept:'otros',category:'CASA / HOGAR',subcategory:'OTROS',method:'',card:'',date:'2026-10-04T12:00:00-03:00'}
   ];
   let added=0;
@@ -384,7 +385,7 @@ function recoverVerifiedOctoberExpensesOnce(){
     });
     added++;
   }
-  state.settings={...state.settings,verifiedOctoberRecoveryVersion:1,verifiedOctoberRecoveryAdded:added,recoveryReferenceOctoberTotal:897000,recoveryVerifiedTotal:407000};
+  state.settings={...state.settings,verifiedOctoberRecoveryVersion:2,verifiedOctoberRecoveryAdded:added,recoveryReferenceOctoberTotal:897000,recoveryVerifiedTotal:796421.30};
   save();
 }
 recoverVerifiedOctoberExpensesOnce();
