@@ -143,3 +143,10 @@ test('lanzamiento: recuperación de octubre sólo repone movimientos verificados
   for(const amount of ['50000','23000','20000','75000','233000','6000'])assert.ok(app.includes(`amount:${amount}`),amount);
   assert.ok(app.includes("source:'recovered-screenshot'"));
 });
+
+test('lanzamiento: rescate exhaustivo busca gastos en todas las copias locales e IndexedDB',()=>{
+  for(const marker of ['allIndexedSnapshots','discoverLocalStorageSnapshots','recoverAllReachableExpenses','runFullRecoverySweep','expenseRecoveryKey'])assert.ok(app.includes(marker),marker);
+  assert.ok(app.includes("localStorage.key(i)"));
+  assert.ok(app.includes("recoveredFrom:entry.source"));
+  assert.ok(html.includes('id="fullRecoverySweep"'));
+});
