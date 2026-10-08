@@ -584,3 +584,18 @@ img,svg,canvas,video{
 @media(max-width:390px){
   #home .home-quick-actions{grid-template-columns:1fr 1fr}
 }
+
+/* v96 · eliminar gastos desde cada movimiento y enviar directo a Papelera */
+.expense{position:relative;padding-right:44px}
+.expense-delete,.recent-delete{
+  width:28px;height:28px;min-width:28px;border:0;border-radius:50%;
+  display:grid;place-items:center;background:#fff0ef;color:#b54842;
+  font-size:20px;line-height:1;font-weight:700;box-shadow:none;
+}
+.expense-delete{position:absolute;right:9px;top:50%;transform:translateY(-50%)}
+.recent-movement{grid-template-columns:minmax(0,1fr) auto 28px!important}
+.recent-delete{align-self:center}
+.expense-delete:active,.recent-delete:active{background:#ffdcd8;transform:scale(.94)}
+.expense-delete:focus-visible,.recent-delete:focus-visible{outline:2px solid #d46d65;outline-offset:2px}
+
+.expense-delete:active{transform:translateY(-50%) scale(.94)}
