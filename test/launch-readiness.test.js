@@ -175,3 +175,14 @@ test('lanzamiento: cada gasto visible tiene X y el toque lo manda directo a Pape
   assert.ok(!app.includes("confirm('¿Enviar este gasto a Papelera?')"));
   assert.match(css,/\.recent-movement\{grid-template-columns:minmax\(0,1fr\) auto 28px!important\}/);
 });
+
+test('lanzamiento: filas ya cargadas se reordenan manteniendo presionado y arrastrando',()=>{
+  assert.ok(app.includes('setTimeout(()=>activate(row),380)'));
+  assert.ok(app.includes('installMainMenuReorder'));
+  assert.ok(app.includes('mainMenuOrder:current'));
+  assert.ok(app.includes("installPointerReorder($('#fixedExpenseList'),'.fixed-expense-card'"));
+  assert.ok(app.includes("installPointerReorder(list,'.card-item'"));
+  assert.ok(app.includes("installPointerReorder(list,'.category-folder-row'"));
+  assert.ok(app.includes("installPointerReorder($('#subcategoryFolderList'),'.subcategory-folder-item'"));
+  assert.ok(html.includes('Mantené presionada una fila y arrastrala hacia arriba o abajo'));
+});
