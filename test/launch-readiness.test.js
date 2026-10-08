@@ -167,3 +167,11 @@ test('lanzamiento: inicio compacto mantiene micrófono despejado y aleja el tach
   assert.match(css,/#home \.home-menu-btn\{height:52px;bottom:calc\(8px \+ env\(safe-area-inset-bottom\)\)\}/);
   assert.match(css,/#home\{padding-bottom:calc\(96px \+ env\(safe-area-inset-bottom\)\)\}/);
 });
+
+test('lanzamiento: cada gasto visible tiene X y el toque lo manda directo a Papelera',()=>{
+  assert.ok(app.includes('class="recent-delete"'));
+  assert.ok(app.includes('aria-label="Enviar gasto a Papelera"'));
+  assert.match(app,/document\.addEventListener\('click'.*data-delete-expense[\s\S]*moveExpenseToTrash\(b\.dataset\.deleteExpense\)/);
+  assert.ok(!app.includes("confirm('¿Enviar este gasto a Papelera?')"));
+  assert.match(css,/\.recent-movement\{grid-template-columns:minmax\(0,1fr\) auto 28px!important\}/);
+});
