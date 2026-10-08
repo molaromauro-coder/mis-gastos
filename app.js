@@ -704,11 +704,31 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
   const controller=new AbortController();
   container.__reorderAbort=controller;
   const signal=controller.signal;
-  let source=null,target=null,active=false,startX=0,startY=0,holdTimer=null;
+  signal.addEventListener('abort',()=>clear(),{once:true});
+  let source=null,target=null,active=false,startX=0,startY=0,holdTimer=null,scrollFrame=null,lastX=0,lastY=0;
+  const isIgnored=(element)=>!!ignore&&!!element.closest?.(ignore);
+  const scrollHost=()=>{
+    for(let el=container;el;el=el.parentElement){
+      if(/auto|scroll/.test(getComputedStyle(el).overflowY)&&el.scrollHeight>el.clientHeight)return el;
+    }
+    return document.scrollingElement;
+  };
+  const autoScroll=()=>{
+    if(!active)return;
+    const host=scrollHost();
+    if(host){
+      const rect=host===document.scrollingElement?{top:0,bottom:innerHeight}:host.getBoundingClientRect();
+      const edge=48;
+      const delta=lastY<rect.top+edge?-10:lastY>rect.bottom-edge?10:0;
+      if(delta){host.scrollTop+=delta;candidateAt(lastX,lastY);}
+    }
+    scrollFrame=requestAnimationFrame(autoScroll);
+  };
   const rows=()=>[...container.querySelectorAll(selector)];
   const clearTimer=()=>{if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}};
   const clear=()=>{
     clearTimer();
+    if(scrollFrame!==null)cancelAnimationFrame(scrollFrame);scrollFrame=null;
     source?.classList.remove('drag-selected');
     target?.classList.remove('drag-target');
     source=null;target=null;active=false;
@@ -724,7 +744,8 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
   };
   const activate=(row)=>{
     if(!row)return;
-    active=true;source=row;target=row;
+    active=true;source=row;target=row;lastX=startX;lastY=startY;
+    scrollFrame=requestAnimationFrame(autoScroll);
     row.classList.add('drag-selected');
     navigator.vibrate?.(25);
     window.getSelection?.()?.removeAllRanges?.();
@@ -733,8 +754,10 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
     clearTimer();
     if(active&&source&&target){
       const from=Number(source.dataset.reorderIndex),to=Number(target.dataset.reorderIndex);
-      if(Number.isInteger(from)&&Number.isInteger(to)&&from!==to)onMove(from,to);
       container.__reorderSuppressUntil=Date.now()+550;
+      // Remove old gesture state before onMove replaces rows and listeners.
+      clear();
+      if(Number.isInteger(from)&&Number.isInteger(to)&&from!==to)onMove(from,to);
     }
     clear();
   };
@@ -749,7 +772,7 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
     row.addEventListener('contextmenu',(event)=>{if(active&&source===row)event.preventDefault();},{signal});
     if('ontouchstart' in window){
       row.addEventListener('touchstart',(event)=>{
-        if(event.touches.length!==1||event.target.closest?.(ignore))return;
+        if(event.touches.length!==1||isIgnored(event.target))return;
         const touch=event.touches[0];startX=touch.clientX;startY=touch.clientY;
         source=row;target=row;clearTimer();
         holdTimer=setTimeout(()=>activate(row),380);
@@ -760,7 +783,8 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
         if(!active&&Math.hypot(dx,dy)>10){clear();return;}
         if(!active)return;
         event.preventDefault();
-        candidateAt(touch.clientX,touch.clientY);
+        lastX=touch.clientX;lastY=touch.clientY;
+        candidateAt(lastX,lastY);
       },{passive:false,signal});
       row.addEventListener('touchend',()=>finish(),{signal});
       row.addEventListener('touchcancel',()=>clear(),{signal});
@@ -768,7 +792,7 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
       let pointerId=null;
       row.addEventListener('pointerdown',(event)=>{
         if(event.button!==undefined&&event.button!==0)return;
-        if(event.target.closest?.(ignore))return;
+        if(isIgnored(event.target))return;
         pointerId=event.pointerId;startX=event.clientX;startY=event.clientY;
         source=row;target=row;clearTimer();
         holdTimer=setTimeout(()=>{activate(row);try{row.setPointerCapture?.(pointerId);}catch{}},380);
@@ -777,7 +801,7 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
         if(!source||event.pointerId!==pointerId)return;
         const dx=event.clientX-startX,dy=event.clientY-startY;
         if(!active&&Math.hypot(dx,dy)>8){clear();return;}
-        if(active)candidateAt(event.clientX,event.clientY);
+        if(active){event.preventDefault();lastX=event.clientX;lastY=event.clientY;candidateAt(lastX,lastY);}
       },{signal});
       row.addEventListener('pointerup',(event)=>{if(event.pointerId===pointerId)finish();},{signal});
       row.addEventListener('pointercancel',()=>clear(),{signal});
@@ -888,7 +912,7 @@ function fillCategories() {
     });
     installPointerReorder(list,'.category-folder-row',(from,to)=>{
       const [item]=state.categories.splice(from,1);state.categories.splice(to,0,item);save();syncCategoryConsumers();fillCategories();renderReport();
-    },'button');
+    },'.category-folder-delete');
   }
   fillSubcategories();
 }
@@ -3332,3 +3356,4 @@ const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.
     if(result.added)setTimeout(()=>showToast(`✓ Rescate automático: ${integerText(result.added)} gasto${result.added===1?'':'s'} recuperado${result.added===1?'':'s'}`),350);
   }
 }); if(window.__misGastosIntegrityBlocked)setTimeout(()=>showToast('Protección activa: se evitó un borrado total inesperado'),300); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
+
