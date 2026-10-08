@@ -705,7 +705,7 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
   container.__reorderAbort=controller;
   const signal=controller.signal;
   signal.addEventListener('abort',()=>clear(),{once:true});
-  let source=null,target=null,active=false,startX=0,startY=0,holdTimer=null,scrollFrame=null,lastX=0,lastY=0;
+  let source=null,target=null,active=false,startX=0,startY=0,holdTimer=null,scrollFrame=null,lastX=0,lastY=0,touchId=null,ghost=null;
   const isIgnored=(element)=>!!ignore&&!!element.closest?.(ignore);
   const scrollHost=()=>{
     for(let el=container;el;el=el.parentElement){
@@ -724,18 +724,28 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
     }
     scrollFrame=requestAnimationFrame(autoScroll);
   };
-  const rows=()=>[...container.querySelectorAll(selector)];
+  const rows=()=>[...container.querySelectorAll(selector)].filter((row)=>!row.classList.contains('reorder-ghost'));
   const clearTimer=()=>{if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}};
   const clear=()=>{
     clearTimer();
     if(scrollFrame!==null)cancelAnimationFrame(scrollFrame);scrollFrame=null;
     source?.classList.remove('drag-selected');
     target?.classList.remove('drag-target');
-    source=null;target=null;active=false;
+    ghost?.remove();ghost=null;
+    source=null;target=null;active=false;touchId=null;
   };
   const candidateAt=(x,y)=>{
-    const candidate=document.elementFromPoint(x,y)?.closest?.(selector);
-    if(!candidate||!container.contains(candidate))return;
+    if(ghost)ghost.style.transform=`translate(${x-startX}px,${y-startY}px)`;
+    // Use row rectangles: iOS dialogs and floating controls can obscure hit testing.
+    let candidate=null,distance=Infinity;
+    for(const row of rows()){
+      const rect=row.getBoundingClientRect();
+      if(!rect.width||!rect.height)continue;
+      const dx=Math.max(rect.left-x,0,x-rect.right),dy=Math.max(rect.top-y,0,y-rect.bottom);
+      const next=Math.hypot(dx,dy);
+      if(next<distance){distance=next;candidate=row;}
+    }
+    if(!candidate)return;
     if(candidate!==target){
       target?.classList.remove('drag-target');
       target=candidate;
@@ -747,6 +757,16 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
     active=true;source=row;target=row;lastX=startX;lastY=startY;
     scrollFrame=requestAnimationFrame(autoScroll);
     row.classList.add('drag-selected');
+    const rect=row.getBoundingClientRect();
+    ghost=row.cloneNode(true);
+    ghost.removeAttribute('id');
+    ghost.querySelectorAll('[id]').forEach((el)=>el.removeAttribute('id'));
+    ghost.querySelectorAll('input,select,textarea').forEach((el)=>{el.removeAttribute('name');el.disabled=true;});
+    ghost.classList.remove('drag-selected','drag-target');
+    ghost.classList.add('reorder-ghost');
+    ghost.setAttribute('aria-hidden','true');
+    Object.assign(ghost.style,{left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});
+    container.appendChild(ghost);
     navigator.vibrate?.(25);
     window.getSelection?.()?.removeAllRanges?.();
   };
@@ -754,7 +774,7 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
     clearTimer();
     if(active&&source&&target){
       const from=Number(source.dataset.reorderIndex),to=Number(target.dataset.reorderIndex);
-      container.__reorderSuppressUntil=Date.now()+550;
+      container.__reorderSuppressUntil=Date.now()+750;
       // Remove old gesture state before onMove replaces rows and listeners.
       clear();
       if(Number.isInteger(from)&&Number.isInteger(to)&&from!==to)onMove(from,to);
@@ -767,27 +787,36 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
     }
   },{capture:true,signal});
 
+  // Capture touch gestures above the row/button listeners. Once selected, prevent
+  // native scrolling and the synthetic click that would open the category/menu.
+  document.addEventListener('touchmove',(event)=>{
+    if(!source)return;
+    if(event.touches.length!==1){clear();return;}
+    const touch=[...event.touches].find((item)=>item.identifier===touchId);
+    if(!touch)return;
+    if(!active&&Math.hypot(touch.clientX-startX,touch.clientY-startY)>10){clear();return;}
+    if(!active)return;
+    if(event.cancelable)event.preventDefault();
+    lastX=touch.clientX;lastY=touch.clientY;candidateAt(lastX,lastY);
+  },{capture:true,passive:false,signal});
+  document.addEventListener('touchend',(event)=>{
+    if(touchId===null||![...event.changedTouches].some((item)=>item.identifier===touchId))return;
+    if(active&&event.cancelable)event.preventDefault();
+    finish();
+  },{capture:true,passive:false,signal});
+  document.addEventListener('touchcancel',()=>clear(),{capture:true,signal});
+
   rows().forEach((row)=>{
     row.classList.add('reorderable');
-    row.addEventListener('contextmenu',(event)=>{if(active&&source===row)event.preventDefault();},{signal});
+    row.addEventListener('contextmenu',(event)=>{if(source===row)event.preventDefault();},{signal});
     if('ontouchstart' in window){
       row.addEventListener('touchstart',(event)=>{
         if(event.touches.length!==1||isIgnored(event.target))return;
-        const touch=event.touches[0];startX=touch.clientX;startY=touch.clientY;
+        clear();
+        const touch=event.touches[0];touchId=touch.identifier;startX=touch.clientX;startY=touch.clientY;
         source=row;target=row;clearTimer();
         holdTimer=setTimeout(()=>activate(row),380);
-      },{passive:true,signal});
-      row.addEventListener('touchmove',(event)=>{
-        if(!source||event.touches.length!==1)return;
-        const touch=event.touches[0],dx=touch.clientX-startX,dy=touch.clientY-startY;
-        if(!active&&Math.hypot(dx,dy)>10){clear();return;}
-        if(!active)return;
-        event.preventDefault();
-        lastX=touch.clientX;lastY=touch.clientY;
-        candidateAt(lastX,lastY);
       },{passive:false,signal});
-      row.addEventListener('touchend',()=>finish(),{signal});
-      row.addEventListener('touchcancel',()=>clear(),{signal});
     }else{
       let pointerId=null;
       row.addEventListener('pointerdown',(event)=>{
@@ -828,6 +857,26 @@ function installMainMenuReorder(){
   },'');
 }
 installMainMenuReorder();
+
+function installOptionMenuReorder(){
+  ['.home-quick-actions','.card-type-chooser','.history-tabs','.report-tabs','.usd-tabs'].forEach((selector)=>{
+    const list=$(selector);if(!list)return;
+    const buttons=[...list.querySelectorAll(':scope > button')];
+    buttons.forEach((button)=>{button.dataset.optionOrderKey=button.id||button.dataset.cardTypeView||button.dataset.history||button.dataset.range||button.dataset.usdRange;});
+    const saved=state.settings.optionMenuOrder?.[selector]||[];
+    [...new Set([...saved,...buttons.map((button)=>button.dataset.optionOrderKey)])].forEach((key)=>{
+      const button=buttons.find((item)=>item.dataset.optionOrderKey===key);if(button)list.appendChild(button);
+    });
+    [...list.children].forEach((button,index)=>button.dataset.reorderIndex=String(index));
+    installPointerReorder(list,':scope > button',(from,to)=>{
+      const current=[...list.children].map((button)=>button.dataset.optionOrderKey);
+      const [item]=current.splice(from,1);current.splice(to,0,item);
+      state.settings.optionMenuOrder={...state.settings.optionMenuOrder,[selector]:current};
+      save();installOptionMenuReorder();showToast('✓ Orden guardado');
+    },'');
+  });
+}
+installOptionMenuReorder();
 
 function fillCategories() {
   const selected=$('#category')?.value||'';

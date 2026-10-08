@@ -607,3 +607,8 @@ img,svg,canvas,video{
 .menu-reorder-hint{margin:-4px 2px 10px;color:#7890a4;font-size:10px;line-height:1.35}
 .menu-list .menu-reorderable.drag-selected{background:#eaf5f1;border-color:#93c2b6}
 .fixed-expense-card.drag-selected,.category-folder-row.drag-selected,.subcategory-folder-item.drag-selected,.card-item.drag-selected{background-position:0 0}
+
+/* v99 · la fila sigue el dedo dentro y fuera de los diálogos */
+.reorderable,.reorderable *{-webkit-touch-callout:none}
+.reorder-ghost{position:fixed!important;z-index:2147483647!important;pointer-events:none!important;margin:0!important;box-sizing:border-box;opacity:.92;transition:none!important;box-shadow:0 12px 30px #173f3750!important;outline:2px solid #2f806f}
+.reorderable.drag-selected{opacity:.35;transform:none!important}
