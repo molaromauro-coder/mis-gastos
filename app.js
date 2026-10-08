@@ -437,7 +437,7 @@ function returnToMainMenu(){
   goView('home');
   setTimeout(()=>{
     const menu=$('#menuDialog');
-    if(menu&&!menu.open)menu.showModal();
+    if(menu&&!menu.open){installMainMenuReorder();menu.showModal();}
   },0);
 }
 document.addEventListener('click',(event)=>{
@@ -700,29 +700,111 @@ function fillSubcategories(selected=''){
 
 function installPointerReorder(container,selector,onMove,ignore='button,input,select,summary,details,a'){
   if(!container)return;
-  let source=null,target=null,pointerId=null;
-  const clear=()=>{source?.classList.remove('drag-selected');target?.classList.remove('drag-target');source=null;target=null;pointerId=null;};
-  container.querySelectorAll(selector).forEach((row)=>{
-    row.onpointerdown=(event)=>{
-      if(event.target.closest?.(ignore))return;
-      source=row;target=row;pointerId=event.pointerId;row.classList.add('drag-selected');
-      row.setPointerCapture?.(pointerId);event.preventDefault();
-    };
-    row.onpointermove=(event)=>{
-      if(!source||event.pointerId!==pointerId)return;
-      const candidate=document.elementFromPoint(event.clientX,event.clientY)?.closest?.(selector);
-      if(!candidate||!container.contains(candidate)||candidate===target)return;
-      target?.classList.remove('drag-target');target=candidate;if(target!==source)target.classList.add('drag-target');
-    };
-    row.onpointerup=(event)=>{
-      if(!source||event.pointerId!==pointerId){clear();return;}
-      const from=Number(source.dataset.reorderIndex),to=Number(target?.dataset.reorderIndex);
+  container.__reorderAbort?.abort?.();
+  const controller=new AbortController();
+  container.__reorderAbort=controller;
+  const signal=controller.signal;
+  let source=null,target=null,active=false,startX=0,startY=0,holdTimer=null;
+  const rows=()=>[...container.querySelectorAll(selector)];
+  const clearTimer=()=>{if(holdTimer){clearTimeout(holdTimer);holdTimer=null;}};
+  const clear=()=>{
+    clearTimer();
+    source?.classList.remove('drag-selected');
+    target?.classList.remove('drag-target');
+    source=null;target=null;active=false;
+  };
+  const candidateAt=(x,y)=>{
+    const candidate=document.elementFromPoint(x,y)?.closest?.(selector);
+    if(!candidate||!container.contains(candidate))return;
+    if(candidate!==target){
+      target?.classList.remove('drag-target');
+      target=candidate;
+      if(target!==source)target.classList.add('drag-target');
+    }
+  };
+  const activate=(row)=>{
+    if(!row)return;
+    active=true;source=row;target=row;
+    row.classList.add('drag-selected');
+    navigator.vibrate?.(25);
+    window.getSelection?.()?.removeAllRanges?.();
+  };
+  const finish=()=>{
+    clearTimer();
+    if(active&&source&&target){
+      const from=Number(source.dataset.reorderIndex),to=Number(target.dataset.reorderIndex);
       if(Number.isInteger(from)&&Number.isInteger(to)&&from!==to)onMove(from,to);
-      clear();
-    };
-    row.onpointercancel=clear;
+      container.__reorderSuppressUntil=Date.now()+550;
+    }
+    clear();
+  };
+  container.addEventListener('click',(event)=>{
+    if(Date.now()<Number(container.__reorderSuppressUntil||0)){
+      event.preventDefault();event.stopImmediatePropagation();
+    }
+  },{capture:true,signal});
+
+  rows().forEach((row)=>{
+    row.classList.add('reorderable');
+    row.addEventListener('contextmenu',(event)=>{if(active&&source===row)event.preventDefault();},{signal});
+    if('ontouchstart' in window){
+      row.addEventListener('touchstart',(event)=>{
+        if(event.touches.length!==1||event.target.closest?.(ignore))return;
+        const touch=event.touches[0];startX=touch.clientX;startY=touch.clientY;
+        source=row;target=row;clearTimer();
+        holdTimer=setTimeout(()=>activate(row),380);
+      },{passive:true,signal});
+      row.addEventListener('touchmove',(event)=>{
+        if(!source||event.touches.length!==1)return;
+        const touch=event.touches[0],dx=touch.clientX-startX,dy=touch.clientY-startY;
+        if(!active&&Math.hypot(dx,dy)>10){clear();return;}
+        if(!active)return;
+        event.preventDefault();
+        candidateAt(touch.clientX,touch.clientY);
+      },{passive:false,signal});
+      row.addEventListener('touchend',()=>finish(),{signal});
+      row.addEventListener('touchcancel',()=>clear(),{signal});
+    }else{
+      let pointerId=null;
+      row.addEventListener('pointerdown',(event)=>{
+        if(event.button!==undefined&&event.button!==0)return;
+        if(event.target.closest?.(ignore))return;
+        pointerId=event.pointerId;startX=event.clientX;startY=event.clientY;
+        source=row;target=row;clearTimer();
+        holdTimer=setTimeout(()=>{activate(row);try{row.setPointerCapture?.(pointerId);}catch{}},380);
+      },{signal});
+      row.addEventListener('pointermove',(event)=>{
+        if(!source||event.pointerId!==pointerId)return;
+        const dx=event.clientX-startX,dy=event.clientY-startY;
+        if(!active&&Math.hypot(dx,dy)>8){clear();return;}
+        if(active)candidateAt(event.clientX,event.clientY);
+      },{signal});
+      row.addEventListener('pointerup',(event)=>{if(event.pointerId===pointerId)finish();},{signal});
+      row.addEventListener('pointercancel',()=>clear(),{signal});
+    }
   });
 }
+function installMainMenuReorder(){
+  const list=$('#menuDialog .menu-list');if(!list)return;
+  const buttons=[...list.querySelectorAll(':scope > [data-menu-view]')];
+  const available=buttons.map((button)=>button.dataset.menuView).filter(Boolean);
+  const saved=Array.isArray(state.settings?.mainMenuOrder)?state.settings.mainMenuOrder.filter((view)=>available.includes(view)):[];
+  const order=[...saved,...available.filter((view)=>!saved.includes(view))];
+  order.forEach((view)=>{
+    const button=buttons.find((item)=>item.dataset.menuView===view);
+    if(button)list.appendChild(button);
+  });
+  const ordered=[...list.querySelectorAll(':scope > [data-menu-view]')];
+  ordered.forEach((button,index)=>{button.dataset.reorderIndex=String(index);button.classList.add('menu-reorderable');});
+  installPointerReorder(list,'.menu-reorderable',(from,to)=>{
+    const current=[...list.querySelectorAll(':scope > .menu-reorderable')].map((button)=>button.dataset.menuView);
+    const [item]=current.splice(from,1);current.splice(to,0,item);
+    state.settings={...state.settings,mainMenuOrder:current};
+    save();installMainMenuReorder();showToast('✓ Orden del menú guardado');
+  },'');
+}
+installMainMenuReorder();
+
 function fillCategories() {
   const selected=$('#category')?.value||'';
   $('#category').innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(c)}</option>`).join('');
@@ -1927,7 +2009,7 @@ function renderFixedExpenses(){
     const previous=fixedExpensePreviousAmount(item,key);
     const category=[item.category,item.subcategory].filter(Boolean).join(' · ')||'Sin categoría';
     const selected=item.id===selectedFixedExpenseOrderId;
-    return `<article class="fixed-expense-card ${item.active===false?'disabled':''} ${selected?'order-selected':''}" data-fixed-expense-id="${escape(item.id)}">
+    return `<article class="fixed-expense-card reorderable ${item.active===false?'disabled':''} ${selected?'order-selected':''}" data-fixed-expense-id="${escape(item.id)}" data-reorder-index="${index}">
       <div class="fixed-expense-order-row">
         <label class="fixed-order-picker"><input type="radio" name="fixedExpenseOrder" value="${escape(item.id)}" ${selected?'checked':''}><span>Seleccionar</span></label>
         <small>Posición ${integerText(index+1)} de ${integerText(state.fixedExpenses.length)}</small>
@@ -1944,6 +2026,12 @@ function renderFixedExpenses(){
     row.querySelector('.fixed-edit').onclick=()=>openFixedExpenseDialog(item);
     row.querySelector('.fixed-toggle').onclick=()=>{item.active=item.active===false?true:false;save();renderFixedExpenses();};
   });
+  installPointerReorder($('#fixedExpenseList'),'.fixed-expense-card',(from,to)=>{
+    const [item]=state.fixedExpenses.splice(from,1);
+    state.fixedExpenses.splice(to,0,item);
+    selectedFixedExpenseOrderId=item?.id||selectedFixedExpenseOrderId;
+    save();renderFixedExpenses();showToast('✓ Orden de gastos fijos guardado');
+  },'button,input,label,select,a');
   updateFixedExpenseOrderTools();
 }
 
@@ -2498,7 +2586,7 @@ async function confirmPending(index, card) {
 }
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
-$('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit=recentHomeLimit>2?2:Number.MAX_SAFE_INTEGER;renderHomeRecent();}; $('#recentOpenHistory').onclick=()=>goView('history'); $('#homeMenuBtn').onclick = () => $('#menuDialog').showModal();
+$('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit=recentHomeLimit>2?2:Number.MAX_SAFE_INTEGER;renderHomeRecent();}; $('#recentOpenHistory').onclick=()=>goView('history'); $('#homeMenuBtn').onclick = () => { installMainMenuReorder(); $('#menuDialog').showModal(); };
 function clearExpenseValidation(){
   const box=$('#expenseValidation');
   if(box){box.textContent='';box.classList.add('hidden');}
