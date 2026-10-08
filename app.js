@@ -474,7 +474,7 @@ function purchaseAmount(e) { return e.parentId ? e.amount * e.installments : e.a
 function expenseHTML(e, showDate = false) {
   const detail=[e.category,e.subcategory,e.method,e.card,e.installments>1?`${integerText(e.installment||1)}/${integerText(e.installments)}`:null].filter(Boolean).join(' · ');
   const when=new Date(e.purchaseDate||e.date);
-  return `<article class="expense" data-expense-id="${escape(e.id)}"><div class="expense-icon">${e.method==='Efectivo'?'◆':'▰'}</div><div class="expense-info"><strong>${escape(e.concept||'Sin detalle')}</strong><span class="meta">${escape(detail)}${showDate?` · ${when.toLocaleDateString('es-AR')} ${when.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`:` · ${when.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`}</span></div><div class="amount">${money(showDate?e.amount:purchaseAmount(e),e.currency)}<small>${e.currency}</small></div>${showDate?`<button class="expense-delete" type="button" data-delete-expense="${escape(e.id)}" aria-label="Eliminar gasto">⌫</button>`:''}</article>`;
+  return `<article class="expense" data-expense-id="${escape(e.id)}"><div class="expense-icon">${e.method==='Efectivo'?'◆':'▰'}</div><div class="expense-info"><strong>${escape(e.concept||'Sin detalle')}</strong><span class="meta">${escape(detail)}${showDate?` · ${when.toLocaleDateString('es-AR')} ${when.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`:` · ${when.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`}</span></div><div class="amount">${money(showDate?e.amount:purchaseAmount(e),e.currency)}<small>${e.currency}</small></div><button class="expense-delete" type="button" data-delete-expense="${escape(e.id)}" aria-label="Enviar gasto a Papelera">×</button></article>`;
 }
 function chronologicalPurchases(){
   return recentPurchases(state.expenses);
@@ -569,7 +569,7 @@ function renderHomeRecent(){
   target.innerHTML=visible.length?visible.map((e)=>{
     const when=new Date(e.purchaseDate||e.date);
     const category=[e.category,e.subcategory].filter(Boolean).join(' · ')||'Sin categoría';
-    return `<article class="recent-movement"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${when.toLocaleDateString('es-AR')} · ${escape(category)}</small></div><strong class="recent-amount">${money(purchaseAmount(e),e.currency)}</strong></article>`;
+    return `<article class="recent-movement" data-expense-id="${escape(e.id)}"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${when.toLocaleDateString('es-AR')} · ${escape(category)}</small></div><strong class="recent-amount">${money(purchaseAmount(e),e.currency)}</strong><button class="recent-delete" type="button" data-delete-expense="${escape(e.id)}" aria-label="Enviar gasto a Papelera">×</button></article>`;
   }).join(''):'<div class="recent-empty">Todavía no registraste movimientos.</div>';
   const more=$('#recentMore');
   if(more){
@@ -1747,7 +1747,7 @@ function moveExpenseToTrash(expenseId){
   const items=state.expenses.filter((e)=>(e.parentId||e.id)===key);
   state.expenses=state.expenses.filter((e)=>(e.parentId||e.id)!==key);
   state.trash.push({id:uid(),deletedAt:new Date().toISOString(),items});
-  save();render();renderTrash();showToast('Gasto enviado a Papelera');
+  save();render();renderTrash();showToast('✓ Gasto enviado a Papelera · podés restaurarlo');
 }
 function updateTrashBulkActions(){
   const toolbar=$('#trashBulkActions'),selectAll=$('#trashSelectAll'),deleteSelected=$('#deleteSelectedTrash');
@@ -1798,7 +1798,7 @@ function renderTrash(){
   updateTrashBulkActions();
 }
 
-document.addEventListener('click',(e)=>{const b=e.target.closest?.('[data-delete-expense]');if(!b)return;if(confirm('¿Enviar este gasto a Papelera?'))moveExpenseToTrash(b.dataset.deleteExpense);});
+document.addEventListener('click',(e)=>{const b=e.target.closest?.('[data-delete-expense]');if(!b)return;e.preventDefault();e.stopPropagation();moveExpenseToTrash(b.dataset.deleteExpense);});
 
 function recurringCardOptions(method,selected=''){const cards=state.cards.filter((c)=>c.type===method);return '<option value="">Elegí una tarjeta</option>'+cards.map((c)=>`<option value="${escape(c.name)}" ${c.name===selected?'selected':''}>${escape(c.name)}</option>`).join('');}
 function updateRecurringCardField(){const method=$('#recurringMethod').value;$('#recurringCardWrap').classList.toggle('hidden',method==='Efectivo');$('#recurringCard').innerHTML=recurringCardOptions(method,$('#recurringCard').value);}
