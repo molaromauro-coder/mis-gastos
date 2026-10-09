@@ -787,3 +787,31 @@ img,svg,canvas,video{
 #home[data-density="compact"] #micBtn.mic{width:96px;height:96px}
 #home[data-density="tight"] .voice-zone{grid-template-columns:84px minmax(0,1fr)}
 #home[data-density="tight"] #micBtn.mic{width:84px;height:84px}
+
+/* Larger primary controls and a deliberate gap to audio cancellation. */
+#home.active #micBtn.mic{width:128px;height:128px;border-width:10px}
+#home[data-density="compact"] #micBtn.mic{width:116px;height:116px}
+#home[data-density="tight"] .voice-zone{grid-template-columns:104px minmax(0,1fr)}
+#home[data-density="tight"] #micBtn.mic{width:104px;height:104px}
+#home.active #micBtn.mic span{transform:scale(1.3)}
+#home.active .voice-zone.recording,#home[data-density="tight"] .voice-zone.recording{padding-top:124px!important}
+#home.active #manualBtn{min-height:62px;padding:10px;grid-template-columns:34px minmax(0,1fr)}
+#home.active #manualBtn strong{font-size:16px}
+#home.active #manualBtn .home-action-icon{width:34px;height:34px;font-size:22px}
+#home.active .home-menu-btn,:root[data-large-text] #home.active .home-menu-btn{min-height:58px;padding:12px;font-size:18px}
+#home[data-density="tight"] #manualBtn{min-height:56px;padding:8px}
+#home[data-density="tight"] .home-menu-btn{min-height:52px;padding:9px}
+
+.home-category-shortcuts{display:grid;gap:4px;min-width:0}
+#home.active #homeCategoriesBtn{min-height:40px;height:40px}
+#home.active .home-notifications{border:0;border-radius:12px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:3px 1px;min-height:38px;font-size:14px}
+#home.active .home-notifications span{font-size:8px;white-space:nowrap!important;overflow-wrap:normal;font-weight:700}
+#notificationsDialog{max-height:85dvh;overflow-y:auto}
+#notificationsDialog h3{font-size:16px;margin:18px 0 10px}
+#notificationsDialog #budgetAlert,#notificationsDialog #unusual{padding:12px;border-radius:12px;background:#fff0ca;margin:8px 0}
+#notificationOther button{width:100%;padding:12px;border:0;border-radius:12px;background:#fff0ca;text-align:left}
+
+.notification-row{display:flex;align-items:center;gap:10px;margin:8px 0;min-width:0}
+.notification-row>:first-child{flex:1;min-width:0}
+.notification-delete{flex:0 0 38px;width:38px;height:38px;border:0;border-radius:50%;background:#fbe5e3;color:#b8443e;font-size:24px}
+.notification-dismissed{display:none!important}
