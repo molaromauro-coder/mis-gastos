@@ -1,3 +1,4 @@
+import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel } from './category-display.js';
 import { parseExpenses, parseAmount } from './parser.js';
@@ -20,8 +21,11 @@ if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remo
 const STORAGE_KEY = sharedMode ? 'mis-gastos-shared-v1' : 'mis-gastos-v1';
 const BACKUP_KEY = STORAGE_KEY+'-backup-v1';
 const HISTORY_KEY = STORAGE_KEY+'-history-v2';
-const SAFETY_DB_NAME = 'mis-gastos-safety-v1';
+const SAFETY_DB_NAME = sharedMode?'mis-gastos-shared-safety-v1':'mis-gastos-safety-v1';
 let destructiveWriteAllowed = false;
+let indexedWriteTail=Promise.resolve(true),lastIndexedTimestamp=0;
+let storagePersistenceGranted=false;
+function safeStoredValue(key){try{return localStorage.getItem(key);}catch{return null;}}
 function parseStoredState(raw){try{const value=JSON.parse(raw||'null');return value&&typeof value==='object'?value:null;}catch{return null;}}
 function retainedExpenseCount(snapshot){
   const active=Array.isArray(snapshot?.expenses)?snapshot.expenses.length:0;
@@ -30,20 +34,17 @@ function retainedExpenseCount(snapshot){
 }
 function localHistorySnapshots(){
   try{
-    const list=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');
+    const list=JSON.parse(safeStoredValue(HISTORY_KEY)||'[]');
     return Array.isArray(list)?list.map((item)=>typeof item==='string'?parseStoredState(item):item).filter(Boolean):[];
   }catch{return [];}
 }
 function bestLocalSnapshot(){
-  const primary=parseStoredState(localStorage.getItem(STORAGE_KEY));
-  const backup=parseStoredState(localStorage.getItem(BACKUP_KEY));
-  const candidates=[primary,backup,...localHistorySnapshots()].filter(Boolean);
-  if(!candidates.length)return {};
-  const best=candidates.slice().sort((a,b)=>retainedExpenseCount(b)-retainedExpenseCount(a))[0];
-  if(primary&&retainedExpenseCount(primary)>0)return primary;
-  return retainedExpenseCount(best)>retainedExpenseCount(primary||{})?best:(primary||best);
+  const primary=parseStoredState(safeStoredValue(STORAGE_KEY));
+  if(isValidSnapshot(primary))return primary;
+  return chooseSnapshot([parseStoredState(safeStoredValue(BACKUP_KEY)),...localHistorySnapshots(),startupSafetySnapshot])||{};
 }
 function permitDestructiveWriteOnce(){destructiveWriteAllowed=true;}
+const startupSafetySnapshot=isValidSnapshot(parseStoredState(safeStoredValue(STORAGE_KEY)))?null:chooseSnapshot(await allIndexedSnapshots());
 const defaults = { expenses: [], cards: [], cardPayments: [], categories: [], subcategories: {}, categoryRules: [], stock: [], recoveries: [], budgets: {}, recurring: [], fixedExpenses: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 5 };
 function loadState() {
   try {
@@ -246,14 +247,24 @@ function openSafetyDb(){
     request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
   });
 }
-async function persistIndexedSnapshot(snapshot){
-  try{
-    const db=await openSafetyDb();if(!db)return;
-    const tx=db.transaction('snapshots','readwrite'),store=tx.objectStore('snapshots');
-    store.put({ts:Date.now(),snapshot});
-    const all=await new Promise((resolve,reject)=>{const req=store.getAllKeys();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);});
-    all.sort((a,b)=>a-b).slice(0,Math.max(0,all.length-20)).forEach((key)=>store.delete(key));
-  }catch{}
+function persistIndexedSnapshot(snapshot){
+  const captured=structuredClone(snapshot);
+  indexedWriteTail=indexedWriteTail.then(async()=>{
+    let db;
+    try{
+      db=await openSafetyDb();if(!db){window.__misGastosIndexedWriteError=true;return false;}
+      await new Promise((resolve,reject)=>{
+        const tx=db.transaction('snapshots','readwrite'),store=tx.objectStore('snapshots');
+        tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Respaldo interrumpido'));
+        lastIndexedTimestamp=Math.max(Date.now(),lastIndexedTimestamp+1);
+        store.put({ts:lastIndexedTimestamp,snapshot:captured});
+        const req=store.getAllKeys();req.onsuccess=()=>req.result.sort((a,b)=>a-b).slice(0,-20).forEach((key)=>store.delete(key));
+      });
+      window.__misGastosIndexedWriteError=false;return true;
+    }catch{window.__misGastosIndexedWriteError=true;return false;}
+    finally{db?.close();}
+  }).catch(()=>false);
+  return indexedWriteTail;
 }
 async function latestIndexedSnapshot(){
   try{
@@ -295,7 +306,7 @@ function discoverLocalStorageSnapshots(){
   for(let i=0;i<localStorage.length;i++){
     const key=localStorage.key(i);
     if(!key||!key.toLowerCase().includes('mis-gastos'))continue;
-    const parsed=parseStoredState(localStorage.getItem(key));
+    const parsed=parseStoredState(safeStoredValue(key));
     if(parsed)found.push({source:'localStorage:'+key,snapshot:parsed});
     if(Array.isArray(parsed)){
       parsed.forEach((candidate,index)=>{if(candidate&&typeof candidate==='object')found.push({source:'localStorage:'+key+'#'+index,snapshot:candidate});});
@@ -337,16 +348,21 @@ async function runFullRecoverySweep(showResult=true){
   return result;
 }
 const save = () => {
-  const previousRaw=localStorage.getItem(STORAGE_KEY);
+  const previousRaw=safeStoredValue(STORAGE_KEY);
   const previous=parseStoredState(previousRaw);
+  if(!isValidSnapshot(state)){
+    window.__misGastosPrimaryWriteError=true;
+    if(isValidSnapshot(previous))restoreState(previous);
+    renderDataSafetyStatus();return false;
+  }
   if(previousRaw&&previous){
-    localStorage.setItem(BACKUP_KEY,previousRaw);
+    try{localStorage.setItem(BACKUP_KEY,previousRaw);}catch{window.__misGastosLocalBackupError=true;}
     const history=localHistorySnapshots();
     const last=history.at(-1);
     if(JSON.stringify(last||null)!==previousRaw){
       history.push(previous);
       while(history.length>20)history.shift();
-      localStorage.setItem(HISTORY_KEY,JSON.stringify(history));
+      try{localStorage.setItem(HISTORY_KEY,JSON.stringify(history));}catch{window.__misGastosLocalBackupError=true;}
     }
   }
   if(previous&&retainedExpenseCount(previous)>0&&retainedExpenseCount(state)===0&&!destructiveWriteAllowed){
@@ -354,11 +370,17 @@ const save = () => {
     state.trash=structuredClone(previous.trash||[]);
     window.__misGastosIntegrityBlocked=true;
   }
+  const protectedRecords=protectExpenseRecords(previous,state,destructiveWriteAllowed);
+  if(protectedRecords.missing.length)window.__misGastosIntegrityBlocked=true;
   destructiveWriteAllowed=false;
   state.settings={...state.settings,lastSafeExpenseCount:retainedExpenseCount(state),lastSafeSaveAt:new Date().toISOString()};
   const nextRaw=JSON.stringify(state);
-  localStorage.setItem(STORAGE_KEY,nextRaw);
-  void persistIndexedSnapshot(structuredClone(state));
+  let stored=false;
+  try{localStorage.setItem(STORAGE_KEY,nextRaw);stored=safeStoredValue(STORAGE_KEY)===nextRaw;}catch{}
+  window.__misGastosPrimaryWriteError=!stored;
+  void persistIndexedSnapshot(structuredClone(state)).then(()=>renderDataSafetyStatus());
+  renderDataSafetyStatus();
+  return stored;
 };
 function normalizedRecoveryText(value){return String(value||'').toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
 function recoverVerifiedOctoberExpensesOnce(){
@@ -393,37 +415,67 @@ function recoverVerifiedOctoberExpensesOnce(){
 }
 recoverVerifiedOctoberExpensesOnce();
 
-function exportSafetyBackup(){
-  save();
-  const payload={format:'mis-gastos-backup-v2',createdAt:new Date().toISOString(),state:structuredClone(state)};
-  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download='mis-gastos-respaldo-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(url);
-  showToast('✓ Respaldo completo exportado');
+function renderDataSafetyStatus(){
+  const target=document.querySelector('#dataSafetyStatus');if(!target)return;
+  const failed=window.__misGastosPrimaryWriteError;
+  const alert=document.querySelector('#storageSafetyAlert');
+  if(alert){alert.classList.toggle('hidden',!failed);alert.textContent='⚠️ No se pudo verificar el guardado. No cierres la app: guardá una copia completa en Archivos desde Configuración.';}
+  const external=safeStoredValue(STORAGE_KEY+'-last-external-backup');
+  target.innerHTML=`<strong>${failed?'⚠️ No se pudo verificar el guardado principal':'🛡️ Guardado local verificado'}</strong><small>${window.__misGastosIndexedWriteError?'La copia secundaria falló. Guardá una copia en Archivos.':'Copias automáticas completas e historial de hasta 20 estados.'}</small><small>${window.__misGastosLocalBackupError?'No se pudo ampliar el historial local. Guardá una copia en Archivos.':''}</small><small>${storagePersistenceGranted?'Almacenamiento persistente concedido por el navegador.':'La permanencia de los datos depende del almacenamiento del dispositivo.'}</small><small>${external?'Última copia solicitada: '+new Date(external).toLocaleString('es-AR'):'Todavía no se solicitó una copia para guardar en Archivos.'}</small><small>Las copias locales no protegen si se eliminan los datos de la app. Guardá el archivo fuera de ella.</small>`;
+}
+async function requestDataPersistence(){
+  try{storagePersistenceGranted=await navigator.storage?.persist?.()||false;}catch{}
+  renderDataSafetyStatus();
+}
+async function exportSafetyBackup(){
+  try{
+    save();await indexedWriteTail;
+    const payload=await createSafetyEnvelope(state);
+    const filename='mis-gastos-respaldo-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+    const file=new File([JSON.stringify(payload,null,2)],filename,{type:'application/json'});
+    if(navigator.canShare?.({files:[file]})&&navigator.share){
+      await navigator.share({files:[file],title:'Respaldo completo de Mis Gastos'});
+    }else{
+      const url=URL.createObjectURL(file),a=document.createElement('a');
+      a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }
+    try{localStorage.setItem(STORAGE_KEY+'-last-external-backup',new Date().toISOString());}catch{}renderDataSafetyStatus();
+    showToast('Verificá que el respaldo quedó guardado en Archivos antes de eliminar la app.');
+  }catch(error){if(error.name!=='AbortError')showToast('No pude preparar el respaldo. Conservá el acceso actual.');}
+}
+async function updateWithoutDeleting(){
+  const button=$('#updateAppSafely');button.disabled=true;
+  try{
+    if(!save())throw new Error('No pude verificar el guardado. Guardá un respaldo en Archivos y conservá este acceso.');
+    await indexedWriteTail;
+    const registration=await navigator.serviceWorker?.getRegistration?.();
+    await registration?.update();
+    location.reload();
+  }catch(error){showToast(error.message||'No pude actualizar. Los datos siguen en este acceso.');button.disabled=false;}
 }
 function restoreSnapshot(snapshot,label='respaldo'){
-  if(!snapshot||typeof snapshot!=='object'||!Array.isArray(snapshot.expenses))return showToast('El respaldo no es válido');
+  if(!isValidSnapshot(snapshot))return showToast('El respaldo no es válido');
   permitDestructiveWriteOnce();
-  restoreState(snapshot);
+  restoreState({...structuredClone(defaults),...structuredClone(snapshot),settings:{...defaults.settings,...snapshot.settings},security:{...defaults.security,...snapshot.security}});
   save();render();
   showToast('✓ Datos restaurados desde '+label);
 }
 async function restoreBestSafetyBackup(){
-  const local=bestLocalSnapshot(),indexed=await latestIndexedSnapshot();
-  const candidates=[local,indexed].filter(Boolean).sort((a,b)=>retainedExpenseCount(b)-retainedExpenseCount(a));
-  const best=candidates[0];
-  if(!best||retainedExpenseCount(best)===0)return showToast('No encontré un respaldo anterior con gastos');
-  if(!confirm(`Restaurar el respaldo con ${integerText(retainedExpenseCount(best))} movimiento${retainedExpenseCount(best)===1?'':'s'}? Antes se guardará una copia del estado actual.`))return;
-  save();restoreSnapshot(best,'el respaldo más completo');
+  const best=chooseSnapshot([bestLocalSnapshot(),...await allIndexedSnapshots()]);
+  if(!best||!Object.values(snapshotInventory(best)).some((count)=>count>0))return showToast('No encontré un respaldo anterior con datos');
+  const counts=snapshotInventory(best);
+  if(!confirm(`Restaurar la copia más reciente con ${integerText(counts.gastos)} gastos, ${integerText(counts.tarjetas)} tarjetas y ${integerText(counts.entradas)} entradas? Se reemplazará el estado actual por esa copia; antes se conservará el estado actual.`))return;
+  if(!save())return showToast('No pude verificar la copia del estado actual. Conservá este acceso.');
+  await indexedWriteTail;restoreSnapshot(best,'la copia más reciente');
 }
 async function importSafetyBackup(file){
   if(!file)return;
   try{
-    const parsed=JSON.parse(await file.text()),snapshot=parsed?.state||parsed;
-    if(!snapshot||!Array.isArray(snapshot.expenses))throw new Error('invalid');
-    if(!confirm(`Importar respaldo con ${integerText(retainedExpenseCount(snapshot))} movimiento${retainedExpenseCount(snapshot)===1?'':'s'}?`))return;
-    save();restoreSnapshot(snapshot,'archivo');
-  }catch{showToast('No pude leer ese respaldo');}
+    const snapshot=await readSafetyEnvelope(await file.text()),counts=snapshotInventory(snapshot);
+    if(!confirm(`Restaurar esta copia completa: ${integerText(counts.gastos)} gastos, ${integerText(counts.tarjetas)} tarjetas y ${integerText(counts.entradas)} entradas? Reemplazará los datos y la configuración de este acceso por los del archivo. Antes se conservará una copia completa del estado actual.`))return;
+    if(!save())throw new Error('No pude guardar la copia del estado actual. No se importó el archivo.');
+    await indexedWriteTail;restoreSnapshot(snapshot,'archivo verificado');
+  }catch(error){showToast(error.message||'No pude leer ese respaldo. No se modificó ningún dato.');}
 }
 async function attemptIndexedRecovery(){
   if(retainedExpenseCount(state)>0)return;
@@ -2876,10 +2928,11 @@ $('#quickSubcategory').onclick = () => createSubcategoryFromPrompt('#category','
 $('#editSelectedCategory').onclick=()=>{if(editCategoryFromSelect('#category'))fillSubcategories();};
 $('#editSelectedSubcategory').onclick=()=>editSubcategoryFromSelect('#category','#subcategory','#subcategoryWrap');
 function renderReminderSettings() { const labels = { 3: '3 días antes', 2: '2 días antes', 1: '1 día antes' }; $('#reminderSettings').innerHTML = [3, 2, 1].map((d) => `<label><input type="checkbox" value="${d}" ${state.settings.reminderDays.includes(d) ? 'checked' : ''}>${labels[d]}</label>`).join(''); $('#reminderSettings').onchange = () => { state.settings.reminderDays = [...$('#reminderSettings').querySelectorAll(':checked')].map((i) => Number(i.value)); save(); renderPaymentReminders(); }; }
-function cloneState(){return typeof structuredClone==='function'?structuredClone(state):JSON.parse(JSON.stringify(state));}
+function cloneState(snapshot=state){return typeof structuredClone==='function'?structuredClone(snapshot):JSON.parse(JSON.stringify(snapshot));}
 function restoreState(snapshot){
+  const restored=cloneState(snapshot);
   Object.keys(state).forEach((key)=>delete state[key]);
-  Object.assign(state,cloneState.call(null,snapshot));
+  Object.assign(state,restored);
 }
 function settingsHasChanges(){return settingsSnapshot&&JSON.stringify(state)!==JSON.stringify(settingsSnapshot);}
 function closeSettingsKeepingChanges(){
@@ -2976,6 +3029,7 @@ $('#deleteAllTrash').onclick=()=>{
 };
 $('#fullRecoverySweep').onclick=()=>runFullRecoverySweep(true);
 $('#exportSafetyBackup').onclick=exportSafetyBackup;
+$('#updateAppSafely').onclick=updateWithoutDeleting;
 $('#restoreSafetyBackup').onclick=restoreBestSafetyBackup;
 $('#createSafetyBackup').onclick=()=>{save();showToast('✓ Respaldo de seguridad creado');};
 $('#importSafetyBackup').onclick=()=>$('#safetyBackupFile').click();
@@ -3465,5 +3519,5 @@ const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.
     save();
     if(result.added)setTimeout(()=>showToast(`✓ Rescate automático: ${integerText(result.added)} gasto${result.added===1?'':'s'} recuperado${result.added===1?'':'s'}`),350);
   }
-}); if(window.__misGastosIntegrityBlocked)setTimeout(()=>showToast('Protección activa: se evitó un borrado total inesperado'),300); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
+}); if(window.__misGastosIntegrityBlocked)setTimeout(()=>showToast('Protección activa: se conservaron gastos que faltaban al guardar'),300); void requestDataPersistence(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
 
