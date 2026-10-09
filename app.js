@@ -1,3 +1,5 @@
+import { cardPurchasesInMonth, upcomingCardPayments } from './card-summary.js';
+import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -472,7 +474,7 @@ function totalsHTML(items) { const [ars, usd] = totals(items); return `${money(a
 function purchaseRows(date) { const day = state.expenses.filter((e) => sameDay(e.purchaseDate || e.date, date)); return day.filter((e) => !e.parentId || e.installment === 1); }
 function purchaseAmount(e) { return e.parentId ? e.amount * e.installments : e.amount; }
 function expenseHTML(e, showDate = false) {
-  const detail=[e.category,e.subcategory,e.method,e.card,e.installments>1?`${integerText(e.installment||1)}/${integerText(e.installments)}`:null].filter(Boolean).join(' · ');
+  const detail=[displayCategory(e.category),displaySubcategory(e.subcategory),e.method,e.card,e.installments>1?`${integerText(e.installment||1)}/${integerText(e.installments)}`:null].filter(Boolean).join(' · ');
   const when=new Date(e.purchaseDate||e.date);
   return `<article class="expense" data-expense-id="${escape(e.id)}"><div class="expense-icon">${e.method==='Efectivo'?'◆':'▰'}</div><div class="expense-info"><strong>${escape(e.concept||'Sin detalle')}</strong><span class="meta">${escape(detail)}${showDate?` · ${when.toLocaleDateString('es-AR')} ${when.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`:` · ${when.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`}</span></div><div class="amount">${money(showDate?e.amount:purchaseAmount(e),e.currency)}<small>${e.currency}</small></div><button class="expense-delete" type="button" data-delete-expense="${escape(e.id)}" aria-label="Enviar gasto a Papelera">×</button></article>`;
 }
@@ -506,7 +508,7 @@ function renderUnclassified(){
   $('#unclassifiedCount').textContent=items.length?`${integerText(items.length)} pendiente${items.length===1?'':'s'}`:'Todo clasificado';
   target.innerHTML=items.length?items.map((e)=>{
     const key=escape(expenseGroupKey(e));
-    const categoryOptions=state.categories.map((category)=>`<option value="${escape(category)}">${escape(category)}</option>`).join('');
+    const categoryOptions=state.categories.map((category)=>`<option value="${escape(category)}">${escape(displayCategory(category))}</option>`).join('');
     return `<article class="unclassified-item" data-unclassified-id="${key}"><div class="unclassified-head"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${new Date(e.purchaseDate||e.date).toLocaleDateString('es-AR')} · ${money(purchaseAmount(e),e.currency)}</small></div><span>Sin clasificar</span></div><label>Categoría<select class="unclassified-category"><option value="">Elegí categoría</option>${categoryOptions}</select></label><button type="button" class="category-create-button unclassified-add-category">＋ Agregar categoría</button><div class="unclassified-subcategory-wrap hidden"><label>Subcategoría<select class="unclassified-subcategory"><option value="">Sin subcategoría</option></select></label><button type="button" class="category-create-button unclassified-add-subcategory">＋ Agregar subcategoría</button></div><button type="button" class="primary unclassified-save">Guardar y aprender</button></article>`;
   }).join(''):'<div class="empty">No tenés compras sin clasificar.</div>';
   document.querySelectorAll('.unclassified-item').forEach((row)=>{
@@ -517,7 +519,7 @@ function renderUnclassified(){
     const refreshSubcategories=(selected='')=>{
       const values=subcategoriesFor(categorySelect.value);
       subWrap.classList.toggle('hidden',!categorySelect.value);
-      subSelect.innerHTML='<option value="">Sin subcategoría</option>'+values.map((value)=>`<option value="${escape(value)}">${escape(value)}</option>`).join('');
+      subSelect.innerHTML='<option value="">Sin subcategoría</option>'+values.map((value)=>`<option value="${escape(value)}">${escape(displaySubcategory(value))}</option>`).join('');
       if(selected&&values.includes(selected))subSelect.value=selected;
     };
     categorySelect.onchange=()=>refreshSubcategories();
@@ -568,7 +570,7 @@ function renderHomeRecent(){
   const all=chronologicalPurchases(), visible=all.slice(0,recentHomeLimit);
   target.innerHTML=visible.length?visible.map((e)=>{
     const when=new Date(e.purchaseDate||e.date);
-    const category=[e.category,e.subcategory].filter(Boolean).join(' · ')||'Sin categoría';
+    const category=displayCategoryPath(e.category,e.subcategory)||'Sin categoría';
     return `<article class="recent-movement" data-expense-id="${escape(e.id)}"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${when.toLocaleDateString('es-AR')} · ${escape(category)}</small></div><strong class="recent-amount">${money(purchaseAmount(e),e.currency)}</strong><button class="recent-delete" type="button" data-delete-expense="${escape(e.id)}" aria-label="Enviar gasto a Papelera">×</button></article>`;
   }).join(''):'<div class="recent-empty">Todavía no registraste movimientos.</div>';
   const more=$('#recentMore');
@@ -588,7 +590,7 @@ function subcategoriesFor(category){
 function fillCategorySelect(selector,selected=''){
   const select=$(selector); if(!select)return '';
   const current=selected||select.value||'';
-  select.innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  select.innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(displayCategory(c))}</option>`).join('');
   if(current&&state.categories.includes(current))select.value=current;
   return select.value||'';
 }
@@ -596,7 +598,7 @@ function fillScopedSubcategories(categorySelector,subcategorySelector,wrapSelect
   const category=$(categorySelector)?.value||'';
   const select=$(subcategorySelector); if(!select)return;
   const values=category?subcategoriesFor(category):[];
-  select.innerHTML='<option value="">Sin subcategoría</option>'+values.map((s)=>`<option value="${escape(s)}">${escape(s)}</option>`).join('');
+  select.innerHTML='<option value="">Sin subcategoría</option>'+values.map((s)=>`<option value="${escape(s)}">${escape(displaySubcategory(s))}</option>`).join('');
   if(selected&&values.includes(selected))select.value=selected;
   $(wrapSelector)?.classList.toggle('hidden',!category);
 }
@@ -690,7 +692,7 @@ function fillSubcategories(selected=''){
   const select=$('#subcategory'); if(!select)return;
   const category=$('#category')?.value||'';
   const values=category?subcategoriesFor(category):[];
-  select.innerHTML='<option value="">Sin subcategoría</option>'+values.map((s)=>`<option value="${escape(s)}">${escape(s)}</option>`).join('');
+  select.innerHTML='<option value="">Sin subcategoría</option>'+values.map((s)=>`<option value="${escape(s)}">${escape(displaySubcategory(s))}</option>`).join('');
   if(selected&&values.includes(selected))select.value=selected;
   $('#subcategoryWrap')?.classList.toggle('hidden',!category);
   $('#quickSubcategory')?.classList.toggle('hidden',!category);
@@ -880,7 +882,7 @@ installOptionMenuReorder();
 
 function fillCategories() {
   const selected=$('#category')?.value||'';
-  $('#category').innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(c)}</option>`).join('');
+  $('#category').innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(displayCategory(c))}</option>`).join('');
   if(selected&&state.categories.includes(selected))$('#category').value=selected;
 
   const list=$('#categoryList');
@@ -889,13 +891,13 @@ function fillCategories() {
   activeSettingsCategory=active;
   $('#categoryForm')?.classList.toggle('hidden',!!active);
   $('#categorySettingsIntro')?.classList.toggle('hidden',!!active);
-  if($('#categorySettingsTitle')) $('#categorySettingsTitle').textContent=active?active:'Categorías';
+  if($('#categorySettingsTitle')) $('#categorySettingsTitle').textContent=active?displayCategory(active):'Categorías';
 
   if(active){
     const subs=subcategoriesFor(active);
-    list.innerHTML=`<div class="category-folder-head"><button type="button" id="categoryFolderBack" class="screen-back">← Categorías</button><small>SUBCATEGORÍAS DE</small><div class="category-folder-title"><strong>${escape(active)}</strong><button type="button" id="renameActiveCategory">Editar</button></div></div>
+    list.innerHTML=`<div class="category-folder-head"><button type="button" id="categoryFolderBack" class="screen-back">← Categorías</button><small>SUBCATEGORÍAS DE</small><div class="category-folder-title"><strong>${escape(displayCategory(active))}</strong><button type="button" id="renameActiveCategory">Editar</button></div></div>
       <form id="subcategoryInlineForm" class="inline-form"><input id="newInlineSubcategory" maxlength="40" placeholder="Nueva subcategoría" required><button class="primary">Agregar</button></form>
-      <div id="subcategoryFolderList" class="subcategory-folder-list">${subs.length?subs.map((s,si)=>`<article class="subcategory-folder-item reorderable" data-reorder-index="${si}"><span class="drag-grip">↕</span><strong>${escape(s)}</strong><div class="category-row-actions"><button type="button" class="mini-edit" data-edit-subcategory="${si}">Editar</button><button type="button" class="chip-delete" data-delete-subcategory="${si}" aria-label="Eliminar ${escape(s)}">×</button></div></article>`).join(''):'<div class="empty">Todavía no agregaste subcategorías dentro de esta categoría.</div>'}</div>`;
+      <div id="subcategoryFolderList" class="subcategory-folder-list">${subs.length?subs.map((s,si)=>`<article class="subcategory-folder-item reorderable" data-reorder-index="${si}"><span class="drag-grip">↕</span><strong>${escape(displaySubcategory(s))}</strong><div class="category-row-actions"><button type="button" class="mini-edit" data-edit-subcategory="${si}">Editar</button><button type="button" class="chip-delete" data-delete-subcategory="${si}" aria-label="Eliminar ${escape(s)}">×</button></div></article>`).join(''):'<div class="empty">Todavía no agregaste subcategorías dentro de esta categoría.</div>'}</div>`;
     $('#categoryFolderBack').onclick=()=>{activeSettingsCategory='';fillCategories();};
     $('#renameActiveCategory').onclick=()=>{
       const value=prompt('Nuevo nombre de la categoría:',active)?.trim();
@@ -946,7 +948,7 @@ function fillCategories() {
   } else {
     list.innerHTML=state.categories.length?state.categories.map((c,i)=>{
       const count=subcategoriesFor(c).length;
-      return `<article class="category-folder-row reorderable" data-reorder-index="${i}"><span class="drag-grip">↕</span><button type="button" class="category-folder-open" data-open-category="${i}"><span><strong>${escape(c)}</strong><small>${count?integerText(count)+' subcategoría'+(count===1?'':'s'):'Sin subcategorías'}</small></span><b>›</b></button><button type="button" class="category-folder-delete" data-delete-category="${i}" aria-label="Eliminar ${escape(c)}">×</button></article>`;
+      return `<article class="category-folder-row reorderable" data-reorder-index="${i}"><span class="drag-grip">↕</span><button type="button" class="category-folder-open" data-open-category="${i}"><span><strong>${escape(displayCategory(c))}</strong><small>${count?integerText(count)+' subcategoría'+(count===1?'':'s'):'Sin subcategorías'}</small></span><b>›</b></button><button type="button" class="category-folder-delete" data-delete-category="${i}" aria-label="Eliminar ${escape(c)}">×</button></article>`;
     }).join(''):'<p class="muted">Creá categorías como quieras; cada una puede tener subcategorías.</p>';
     document.querySelectorAll('[data-open-category]').forEach((button)=>{
       button.onclick=()=>{activeSettingsCategory=state.categories[Number(button.dataset.openCategory)]||'';fillCategories();};
@@ -988,15 +990,14 @@ function renderCards() {
 
   const now=new Date(),rows=state.cards.map((card,index)=>({card,index})).filter(({card})=>card.type===type);
   list.innerHTML=rows.length?rows.map(({card,index},orderIndex)=>{
-    const all=state.expenses.filter((e)=>e.card===card.name&&e.method===card.type),current=monthlyCardTotal(card,now);
+    const all=state.expenses.filter((e)=>e.card===card.name&&e.method===card.type),current=cardPurchasesInMonth(state.expenses,card,now);
     const closeForCycle=card.type==='Crédito'?nextClosingDateForCard(card,now):null,dueForCycle=card.type==='Crédito'?firstDueDateForCard(card,now):null;
-    const nextPaymentDue=card.type==='Crédito'?nextDue(card,now):null;
-    const nextPaymentItems=card.type==='Crédito'?monthlyCardTotal(card,nextPaymentDue):[];
+    const payments=card.type==='Crédito'?upcomingCardPayments(state.expenses,card,now):[];
     const meta=card.type==='Crédito'?`Cierra ${closeForCycle.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})} · Vence ${dueForCycle.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}`:'Débito inmediato · sin vencimiento de pago';
     const label=card.type==='Crédito'?'Crédito':'Cuenta / Débito';
-    const nextDueSummary=card.type==='Crédito'?`<div class="card-total"><small>PRÓXIMO VENCIMIENTO · ${nextPaymentDue.toLocaleDateString('es-AR')}</small><strong>${totalsHTML(nextPaymentItems)}</strong></div>`:'';
+    const nextDueSummary=card.type==='Crédito'?payments.map((payment,i)=>`<div class="card-total"><small>${i===0?'PRÓXIMO VENCIMIENTO':'SEGUNDO VENCIMIENTO'} · ${payment.date.toLocaleDateString('es-AR')}</small><strong>${totalsHTML(payment.items)}</strong></div>`).join('')+`<div class="card-total"><small>ACUMULADO A PAGAR · PRÓXIMOS 2 VENCIMIENTOS</small><strong>${totalsHTML(payments.flatMap((payment)=>payment.items))}</strong></div>`:'';
     const debitDetail=card.type==='Débito'?`<details class="debit-detail"><summary>Ver movimientos</summary>${all.length?all.slice().sort((a,b)=>new Date(b.purchaseDate||b.date)-new Date(a.purchaseDate||a.date)).map((e)=>`<div class="due-line"><span>${new Date(e.purchaseDate||e.date).toLocaleDateString('es-AR')} · ${escape(e.concept||'Sin detalle')}</span><strong>${money(e.amount,e.currency)}</strong></div>`).join(''):'<small class="muted">Sin movimientos.</small>'}</details>`:'';
-    return `<article class="card-item reorderable" data-card-id="${escape(card.id)}" data-reorder-index="${orderIndex}" style="--card-color:${escape(card.color||'#173f37')}"><div class="top"><div class="card-name-line"><span class="drag-grip light">↕</span><strong>${escape(card.name)}</strong></div><span>${label}</span></div><p>${meta}</p>${nextDueSummary}<div class="card-total"><small>${card.type==='Crédito'?'ACUMULADO DEL MES':'TOTAL ACUMULADO'}</small><strong>${card.type==='Crédito'?totalsHTML(current):totalsHTML(all)}</strong></div>${debitDetail}<div class="card-actions"><button class="edit-card" data-card-id="${escape(card.id)}">Editar</button><button class="delete-card" data-card-id="${escape(card.id)}">Eliminar</button></div></article>`;
+    return `<article class="card-item reorderable" data-card-id="${escape(card.id)}" data-reorder-index="${orderIndex}" style="--card-color:${escape(card.color||'#173f37')}"><div class="top"><div class="card-name-line"><span class="drag-grip light">↕</span><strong>${escape(card.name)}</strong></div><span>${label}</span></div><p>${meta}</p>${nextDueSummary}<div class="card-total"><small>${card.type==='Crédito'?'COMPRAS REALIZADAS ESTE MES':'TOTAL ACUMULADO'}</small><strong>${card.type==='Crédito'?totalsHTML(current):totalsHTML(all)}</strong></div>${debitDetail}<div class="card-actions"><button class="edit-card" data-card-id="${escape(card.id)}">Editar</button><button class="delete-card" data-card-id="${escape(card.id)}">Eliminar</button></div></article>`;
   }).join(''):'<div class="empty">No agregaste medios de pago de este tipo.</div>';
 
   document.querySelectorAll('.edit-card').forEach((b)=>{b.onclick=()=>{const card=state.cards.find((c)=>c.id===b.dataset.cardId);if(!card)return;editingCardId=card.id;$('#cardDialog h2').textContent='Editar tarjeta / cuenta';$('#cardName').value=card.name;$('#cardType').value=card.type;$('#cardColor').value=card.color||'#173f37';$('#closingDate').value='';$('#dueDate').value='';$('#creditCardDates').classList.toggle('hidden',card.type!=='Crédito');if(card.type==='Crédito')setCreditDateDefaults(card);$('#cardDialog').showModal();};});
@@ -1018,12 +1019,12 @@ function reportLabel(range, from, to) {
   return `${from.toLocaleDateString('es-AR')} al ${to.toLocaleDateString('es-AR')}`;
 }
 function renderReportRows(target, rows, kind) {
-  target.innerHTML = rows.length ? rows.map((r) => `<button class="report-row" data-report-kind="${kind}" data-report-key="${escape(r.key)}"><span><strong>${escape(r.key)}</strong><small>${integerText(r.count)} movimiento${r.count === 1 ? '' : 's'}${r.rollup?' · acumulado transversal':''}${r.usd ? ` · ${money(r.usd,'USD')}` : ''}</small></span><strong>${money(r.arsEquivalent,'ARS')}</strong></button>`).join('') : '<div class="empty">Sin movimientos.</div>';
+  target.innerHTML = rows.length ? rows.map((r) => `<button class="report-row" data-report-kind="${kind}" data-report-key="${escape(r.key)}"><span><strong>${escape(kind==='category'?displayCategory(r.key):r.key)}</strong><small>${integerText(r.count)} movimiento${r.count === 1 ? '' : 's'}${r.rollup?' · acumulado transversal':''}${r.usd ? ` · ${money(r.usd,'USD')}` : ''}</small></span><strong>${money(r.arsEquivalent,'ARS')}</strong></button>`).join('') : '<div class="empty">Sin movimientos.</div>';
 }
 function renderReportChart(rows){
   const target=$('#reportChart'); if(!target)return;
   const top=rows.slice(0,6), max=Math.max(...top.map((r)=>r.arsEquivalent),1);
-  target.innerHTML=top.length?top.map((r)=>`<div class="report-chart-row"><span>${escape(r.key)}</span><div><i style="width:${Math.max(2,r.arsEquivalent/max*100)}%"></i></div><strong>${money(r.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin datos para graficar.</div>';
+  target.innerHTML=top.length?top.map((r)=>`<div class="report-chart-row"><span>${escape(displayCategory(r.key))}</span><div><i style="width:${Math.max(2,r.arsEquivalent/max*100)}%"></i></div><strong>${money(r.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin datos para graficar.</div>';
 }
 function renderReportPie(items){
   const target=$('#reportPie'); if(!target)return;
@@ -1040,8 +1041,11 @@ function renderReportPie(items){
     return {...row,start,end:cursor,percent,color};
   });
   const gradient=slices.map((row)=>`${row.color} ${row.start}% ${row.end}%`).join(',');
-  target.innerHTML=`<div class="report-pie-layout"><div class="report-pie-chart" style="background:conic-gradient(${gradient})" role="img" aria-label="Distribución porcentual por categoría"></div><div class="report-pie-legend">${slices.map((row)=>`<div><i style="background:${row.color}"></i><span>${escape(row.key)}</span><strong>${row.percent.toLocaleString('es-AR',{maximumFractionDigits:1})}%</strong></div>`).join('')}</div></div><small class="report-pie-note">La torta muestra categorías de origen sin duplicar acumuladores transversales.</small>`;
+  target.innerHTML=`<div class="report-pie-layout"><div class="report-pie-chart" style="background:conic-gradient(${gradient})" role="img" aria-label="Distribución porcentual por categoría"></div><div class="report-pie-legend">${slices.map((row)=>`<div><i style="background:${row.color}"></i><span>${escape(displayCategory(row.key))}</span><strong>${row.percent.toLocaleString('es-AR',{maximumFractionDigits:1})}%</strong></div>`).join('')}</div></div><small class="report-pie-note">La torta muestra categorías de origen sin duplicar acumuladores transversales.</small>`;
 }
+function displayCategory(value){return categoryDisplayLabel(value,state.categories);}
+function displaySubcategory(value){return categoryDisplayLabel(value,Object.values(state.subcategories||{}).flat());}
+function displayCategoryPath(category,subcategory){return [displayCategory(category),displaySubcategory(subcategory)].filter(Boolean).join(' · ')||'Sin categoría';}
 function normalizedCategoryName(value){return String(value||'').trim().toLocaleLowerCase('es-AR');}
 function categoryHasCrossSubcategories(category){
   const target=normalizedCategoryName(category);
@@ -1102,7 +1106,7 @@ function renderReport() {
   renderReportRows($('#reportCategories'),categoryRows,'category');
   renderReportRows($('#reportMethods'),groupExpenses(items,e=>e.method || 'Sin definir'),'method');
   const top = items.slice().sort((a,b)=>expenseArsEquivalent(b)-expenseArsEquivalent(a)).slice(0,8);
-  $('#reportTop').innerHTML = top.length ? top.map((e) => `<button class="report-row report-expense"><span><strong>${escape(e.concept || 'Sin detalle')}</strong><small>${new Date(e.purchaseDate || e.date).toLocaleDateString('es-AR')} · ${escape(e.category || 'Sin categoría')} · ${escape(e.method || '')}</small></span><strong>${money(e.amount,e.currency)}</strong></button>`).join('') : '<div class="empty">Sin movimientos.</div>';
+  $('#reportTop').innerHTML = top.length ? top.map((e) => `<button class="report-row report-expense"><span><strong>${escape(e.concept || 'Sin detalle')}</strong><small>${new Date(e.purchaseDate || e.date).toLocaleDateString('es-AR')} · ${escape(displayCategory(e.category || 'Sin categoría'))} · ${escape(e.method || '')}</small></span><strong>${money(e.amount,e.currency)}</strong></button>`).join('') : '<div class="empty">Sin movimientos.</div>';
   $('#reportDrilldown').classList.add('hidden');
   document.querySelectorAll('[data-report-kind]').forEach((b) => b.onclick = () => {
     const kind=b.dataset.reportKind, key=b.dataset.reportKey;
@@ -1114,8 +1118,8 @@ function renderReport() {
         detailLabel='Origen del acumulado';
         rows=groupExpenses(filtered,(e)=>{
           const direct=normalizedCategoryName(e.category)===normalizedCategoryName(key);
-          if(direct)return e.subcategory?`${key} → ${e.subcategory}`:`${key} directo`;
-          return `${e.category||'Sin categoría'} → ${e.subcategory||key}`;
+          if(direct)return e.subcategory?`${displayCategory(key)} → ${displaySubcategory(e.subcategory)}`:`${displayCategory(key)} directo`;
+          return `${displayCategory(e.category)||'Sin categoría'} → ${displaySubcategory(e.subcategory||key)}`;
         });
       }else{
         const configuredSubs=subcategoriesFor(key);
@@ -1126,7 +1130,7 @@ function renderReport() {
           ...groupedSubs.filter((row)=>!configuredSubs.includes(row.key))
         ];
       }
-      $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(key)}</strong><button id="closeReportDetail">← Atrás</button></div><p class="muted">${detailLabel}${rollup?' · suma de la misma subcategoría usada en distintas categorías':''}</p><div class="report-list">${rows.length?rows.map((row)=>`<div class="report-row static"><span><strong>${escape(row.key)}</strong><small>${integerText(row.count)} movimiento${row.count===1?'':'s'}</small></span><strong>${money(row.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin movimientos.</div>'}</div>${filtered.length?filtered.map((e)=>expenseHTML(e,true)).join(''):'<div class="empty">Todavía no hay gastos en esta categoría.</div>'}`;
+      $('#reportDrilldown').innerHTML=`<div class="report-drill-head"><strong>${escape(displayCategory(key))}</strong><button id="closeReportDetail">← Atrás</button></div><p class="muted">${detailLabel}${rollup?' · suma de la misma subcategoría usada en distintas categorías':''}</p><div class="report-list">${rows.length?rows.map((row)=>`<div class="report-row static"><span><strong>${escape(displaySubcategory(row.key))}</strong><small>${integerText(row.count)} movimiento${row.count===1?'':'s'}</small></span><strong>${money(row.arsEquivalent,'ARS')}</strong></div>`).join(''):'<div class="empty">Sin movimientos.</div>'}</div>${filtered.length?filtered.map((e)=>expenseHTML(e,true)).join(''):'<div class="empty">Todavía no hay gastos en esta categoría.</div>'}`;
     } else if(kind==='method'&&['Débito','Crédito'].includes(key)){
       const filtered=items.filter((e)=>e.method===key);
       const rows=configuredCardRows(items,key);
@@ -1193,7 +1197,7 @@ function renderUsd() {
   $('#usdExpenseList').innerHTML=items.length ? items.map((e)=>{
     const when=new Date(e.purchaseDate || e.date);
     const eq=expenseArsEquivalent(e);
-    return `<article class="usd-expense"><div><strong>${escape(e.concept || 'Sin detalle')}</strong><span>${when.toLocaleDateString('es-AR')} · ${escape(e.category || 'Sin categoría')}</span><small>${e.fxRate ? `Cotización ${money(e.fxRate,'ARS')} · ${escape(e.fxRateName || e.fxType || '')} · ${e.fxRateUpdatedAt ? new Date(e.fxRateUpdatedAt).toLocaleString('es-AR') : ''}` : 'Sin cotización histórica'}</small></div><div><strong>${money(e.amount,'USD')}</strong><span>${e.fxRate ? money(eq,'ARS') : '—'}</span></div></article>`;
+    return `<article class="usd-expense"><div><strong>${escape(e.concept || 'Sin detalle')}</strong><span>${when.toLocaleDateString('es-AR')} · ${escape(displayCategory(e.category || 'Sin categoría'))}</span><small>${e.fxRate ? `Cotización ${money(e.fxRate,'ARS')} · ${escape(e.fxRateName || e.fxType || '')} · ${e.fxRateUpdatedAt ? new Date(e.fxRateUpdatedAt).toLocaleString('es-AR') : ''}` : 'Sin cotización histórica'}</small></div><div><strong>${money(e.amount,'USD')}</strong><span>${e.fxRate ? money(eq,'ARS') : '—'}</span></div></article>`;
   }).join('') : '<div class="empty">No hay gastos en dólares en este período.</div>';
 }
 function historyBounds() { const now = new Date(); if (historyRange === 'today') return [new Date(now.getFullYear(), now.getMonth(), now.getDate()), new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59)]; if (historyRange === 'day') { const d = new Date($('#historyDate').value || now); return [new Date(d.getFullYear(), d.getMonth(), d.getDate()), new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59)]; } if (historyRange === 'month') { const [y, m] = ($('#historyMonth').value || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`).split('-').map(Number); return [new Date(y, m - 1, 1), new Date(y, m, 0, 23, 59)]; } if (historyRange === 'year') { const y = Number($('#historyYear').value || now.getFullYear()); return [new Date(y, 0, 1), new Date(y, 11, 31, 23, 59)]; } const from = new Date($('#historyFrom').value || '2000-01-01'), to = new Date($('#historyTo').value || '2100-01-01'); to.setHours(23, 59); return [from, to]; }
@@ -1252,19 +1256,19 @@ function pendingAmountPrompt(e,i){
 function pendingCategoryPrompt(e,i){
   const needsCategory=!e.category;
   if(!needsCategory)return '';
-  const options=state.categories.map((category)=>`<option value="${escape(category)}">${escape(category)}</option>`).join('');
+  const options=state.categories.map((category)=>`<option value="${escape(category)}">${escape(displayCategory(category))}</option>`).join('');
   return `<div class="pending-payment-question pending-category-question"><strong>No estoy seguro de la categoría</strong>${state.categories.length?`<select class="pending-category-select" data-index="${i}"><option value="">Clasificar ahora (opcional)</option>${options}</select>`:'<small class="muted">Todavía no tenés categorías creadas.</small>'}<button type="button" class="category-create-button pending-create-category" data-pending-add-category="${i}">＋ Agregar categoría</button><div class="pending-payment-actions pending-category-actions"><button type="button" data-pending-uncategorized="${i}">Dejar sin clasificar</button><button type="button" class="voice-pay" data-pending-category-voice="${i}">🎙 Decir categoría</button></div><small class="muted">Podés confirmar el gasto sin clasificar y ordenarlo después desde “Compras sin clasificar”.</small></div>`;
 }
 function pendingSubcategoryPrompt(e,i){
   if(!e.category)return '';
   const values=subcategoriesFor(e.category);
   if(!values.length){
-    return `<div class="pending-subcategory-choice"><small class="muted">La categoría ${escape(e.category)} no tiene subcategorías.</small><button type="button" class="category-create-button pending-create-subcategory" data-pending-add-subcategory="${i}">＋ Agregar subcategoría</button></div>`;
+    return `<div class="pending-subcategory-choice"><small class="muted">La categoría ${escape(displayCategory(e.category))} no tiene subcategorías.</small><button type="button" class="category-create-button pending-create-subcategory" data-pending-add-subcategory="${i}">＋ Agregar subcategoría</button></div>`;
   }
   if(e.subcategory){
-    return `<div class="pending-subcategory-choice"><label>Subcategoría<select class="pending-subcategory-select" data-index="${i}"><option value="">Elegí subcategoría</option>${values.map((value)=>`<option value="${escape(value)}" ${e.subcategory===value?'selected':''}>${escape(value)}</option>`).join('')}</select></label><button type="button" class="category-create-button pending-create-subcategory" data-pending-add-subcategory="${i}">＋ Agregar subcategoría</button></div>`;
+    return `<div class="pending-subcategory-choice"><label>Subcategoría<select class="pending-subcategory-select" data-index="${i}"><option value="">Elegí subcategoría</option>${values.map((value)=>`<option value="${escape(value)}" ${e.subcategory===value?'selected':''}>${escape(displaySubcategory(value))}</option>`).join('')}</select></label><button type="button" class="category-create-button pending-create-subcategory" data-pending-add-subcategory="${i}">＋ Agregar subcategoría</button></div>`;
   }
-  return `<div class="pending-subcategory-choice pending-subcategory-question"><strong>¿En qué subcategoría de ${escape(e.category)} querés cargarlo?</strong><select class="pending-subcategory-select" data-index="${i}"><option value="">Elegí subcategoría</option>${values.map((value)=>`<option value="${escape(value)}">${escape(value)}</option>`).join('')}</select><div class="pending-category-actions"><button type="button" class="secondary pending-category-only" data-pending-category-only="${i}">Guardar sólo en ${escape(e.category)}</button><button type="button" class="category-create-button pending-create-subcategory" data-pending-add-subcategory="${i}">＋ Agregar subcategoría</button></div></div>`;
+  return `<div class="pending-subcategory-choice pending-subcategory-question"><strong>¿En qué subcategoría de ${escape(displayCategory(e.category))} querés cargarlo?</strong><select class="pending-subcategory-select" data-index="${i}"><option value="">Elegí subcategoría</option>${values.map((value)=>`<option value="${escape(value)}">${escape(displaySubcategory(value))}</option>`).join('')}</select><div class="pending-category-actions"><button type="button" class="secondary pending-category-only" data-pending-category-only="${i}">Guardar sólo en ${escape(displayCategory(e.category))}</button><button type="button" class="category-create-button pending-create-subcategory" data-pending-add-subcategory="${i}">＋ Agregar subcategoría</button></div></div>`;
 }
 function pendingPaymentPrompt(e,i){
   const needsMethod=needsPaymentMethod(e);
@@ -1486,7 +1490,7 @@ function showPending() {
     const when=new Date(e.purchaseDate||e.date);
     const whenLabel=needsDate?'Fecha pendiente':(e.dateSpecified&&!e.timeSpecified?when.toLocaleDateString('es-AR'):when.toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}));
     const installmentLabel=e.method==='Crédito'?(needsInstallments?'Cuotas pendientes':`${integerText(Math.max(1,Number(e.installments||1)))} cuota${Number(e.installments||1)===1?'':'s'}`):'';
-    const categoryLabel=needsCategory?'Sin clasificar':(needsSubcategory?`${e.category} · Subcategoría pendiente`:e.category);
+    const categoryLabel=needsCategory?'Sin clasificar':(needsSubcategory?`${displayCategory(e.category)} · Subcategoría pendiente`:displayCategory(e.category));
     const meta=[whenLabel,categoryLabel,methodLabel,e.card,installmentLabel].filter(Boolean).join(' · ');
     const incomplete=!e.amount||needsMethod||needsCard||needsInstallments||needsDate||needsSubcategory;
     return `<article class="pending" data-index="${i}"><div class="pending-head"><div><strong>${escape(e.concept)}</strong><p class="muted">${escape(meta)}</p></div><strong>${e.amount ? money(e.amount, e.currency) : 'Sin importe'}</strong></div>${pendingAmountPrompt(e,i)}${pendingDatePrompt(e,i)}${pendingPaymentPrompt(e,i)}${pendingCategoryPrompt(e,i)}${pendingSubcategoryPrompt(e,i)}${pendingCreditDetail(e)}<div class="actions"><button type="button" class="edit">${incomplete?'✎ Corregir / completar':'Corregir'}</button><button type="button" class="confirm" ${incomplete ? 'disabled' : ''}>✓ Confirmar</button></div></article>`;
@@ -2094,25 +2098,9 @@ function updateFixedExpenseOrderTools(){
   up.disabled=index<=0;
   down.disabled=index<0||index>=state.fixedExpenses.length-1;
   const label=$('#fixedExpenseOrderSelected');
-  if(label)label.textContent=index>=0?`Seleccionado: ${state.fixedExpenses[index].concept}`:'Seleccioná un gasto para moverlo';
+  if(label)label.textContent=index>=0?`Seleccionado: ${displaySubcategory(state.fixedExpenses[index].concept)}`:'Seleccioná un gasto para moverlo';
 }
-function fixedExpenseDisplayLabel(concept){
-  const raw=String(concept||'').trim();
-  if(/[💡💨🏠🚙🛵🚲🏡🐶]/u.test(raw))return raw;
-  const key=raw.toLocaleUpperCase('es-AR');
-  const emoji={
-    'LUZ':'💡',
-    'GAS':'💨',
-    'EXPENSAS':'🏠',
-    'SEGURO AUTO':'🚙',
-    'SEGURO MOTO':'🛵',
-    'SEGURO BICI':'🚲',
-    'SEGURO HOGAR':'🏡',
-    'IMPUESTOS VARIOS':'🧾',
-    'COMIDA FRODO':'🐶'
-  }[key];
-  return emoji?raw+' '+emoji:raw;
-}
+function fixedExpenseDisplayLabel(concept){return displaySubcategory(concept);}
 function renderFixedExpenses(){
   if(!$('#fixedExpenseList'))return;
   const key=$('#fixedExpenseMonth')?.value||monthKey(new Date());
@@ -2126,7 +2114,7 @@ function renderFixedExpenses(){
     const paid=fixedExpenseIsPaid(item,key);
     const current=fixedExpenseAmountForMonth(item,key);
     const previous=fixedExpensePreviousAmount(item,key);
-    const category=[item.category,item.subcategory].filter(Boolean).join(' · ')||'Sin categoría';
+    const category=displayCategoryPath(item.category,item.subcategory)||'Sin categoría';
     const selected=item.id===selectedFixedExpenseOrderId;
     return `<article class="fixed-expense-card reorderable ${item.active===false?'disabled':''} ${selected?'order-selected':''}" data-fixed-expense-id="${escape(item.id)}" data-reorder-index="${index}">
       <div class="fixed-expense-order-row">
@@ -2154,7 +2142,7 @@ function renderFixedExpenses(){
   updateFixedExpenseOrderTools();
 }
 
-function exportRowsForConsultation(){return consultationRows().map((row)=>({Tipo:row.type,Fecha:row.date.toLocaleString('es-AR'),Concepto:row.concept||'',Categoría:row.category||'',Subcategoría:row.subcategory||'',Medio:row.method||'',Tarjeta:row.card||'',Moneda:row.currency,Importe:Number(row.amount||0),EquivalenteARS:Number(row.arsEquivalent||0)}));}
+function exportRowsForConsultation(){return consultationRows().map((row)=>({Tipo:row.type,Fecha:row.date.toLocaleString('es-AR'),Concepto:row.concept||'',Categoría:displayCategory(row.category),Subcategoría:displaySubcategory(row.subcategory),Medio:row.method||'',Tarjeta:row.card||'',Moneda:row.currency,Importe:Number(row.amount||0),EquivalenteARS:Number(row.arsEquivalent||0)}));}
 function exportConsultExcel(){
   const rows=exportRowsForConsultation(),headers=Object.keys(rows[0]||{Fecha:'',Concepto:'',Categoría:'',Medio:'',Tarjeta:'',Moneda:'',Importe:'',Cotización:'',EquivalenteARS:''});
   const csv=[headers,...rows.map((r)=>headers.map((h)=>r[h]))].map((row)=>row.map((v)=>`"${String(v??'').replaceAll('"','""')}"`).join(';')).join('\n');
@@ -2266,7 +2254,7 @@ function renderStock() {
   const totalValue=rows.reduce((s,x)=>s+x.m.remainingValue,0);
   $('#stockSummary').textContent=`${integerText(totalRemaining)} unidades disponibles · ${money(totalValue,'ARS')} aprox.`;
   $('#stockList').innerHTML=rows.length ? rows.map(({p,m})=>`<article class="stock-card" data-stock-id="${escape(p.id)}">
-    <div class="stock-head"><div><strong>${escape(p.product)}</strong><small>${escape([p.category,p.subcategory].filter(Boolean).join(' · ') || 'Sin categoría')} · pagado ${new Date(p.paidDate+'T12:00:00').toLocaleDateString('es-AR')}</small></div><span class="stock-money">${p.currency==='USD' ? money(p.totalAmount,'USD') : money(p.totalAmount,'ARS')}</span></div>
+    <div class="stock-head"><div><strong>${escape(p.product)}</strong><small>${escape(displayCategoryPath(p.category,p.subcategory) || 'Sin categoría')} · pagado ${new Date(p.paidDate+'T12:00:00').toLocaleDateString('es-AR')}</small></div><span class="stock-money">${p.currency==='USD' ? money(p.totalAmount,'USD') : money(p.totalAmount,'ARS')}</span></div>
     <div class="stock-stats"><div><span>Comprado</span><strong>${numberText(m.qty)}</strong></div><div><span>Consumido</span><strong>${numberText(m.consumed)}</strong></div><div><span>Disponible</span><strong>${numberText(m.remaining)}</strong></div></div>
     <div class="stock-actions"><button class="consume">Consumir</button><button class="adjust">Ajustar</button></div></article>`).join('') : '<div class="empty">Todavía no cargaste compras de stock.</div>';
   document.querySelectorAll('.stock-card').forEach((card)=>{
@@ -2338,10 +2326,10 @@ function renderSavings() {
 function renderConsultationFilters() {
   if (!$('#consultCategory')) return;
   const category=$('#consultCategory').value, subcategory=$('#consultSubcategory')?.value||'', card=$('#consultCard').value;
-  $('#consultCategory').innerHTML='<option value="">Todas</option>'+state.categories.map((c)=>`<option value="${escape(c)}" ${c===category?'selected':''}>${escape(c)}</option>`).join('');
+  $('#consultCategory').innerHTML='<option value="">Todas</option>'+state.categories.map((c)=>`<option value="${escape(c)}" ${c===category?'selected':''}>${escape(displayCategory(c))}</option>`).join('');
   const subValues=category?subcategoriesFor(category):[];
   if($('#consultSubcategory')){
-    $('#consultSubcategory').innerHTML='<option value="">Todas</option>'+subValues.map((s)=>`<option value="${escape(s)}" ${s===subcategory?'selected':''}>${escape(s)}</option>`).join('');
+    $('#consultSubcategory').innerHTML='<option value="">Todas</option>'+subValues.map((s)=>`<option value="${escape(s)}" ${s===subcategory?'selected':''}>${escape(displaySubcategory(s))}</option>`).join('');
     $('#consultSubcategory').disabled=!category;
   }
   $('#consultCard').innerHTML='<option value="">Todas</option>'+state.cards.map((c)=>`<option value="${escape(c.name)}" ${c.name===card?'selected':''}>${escape(c.name)}</option>`).join('');
@@ -2494,7 +2482,7 @@ function consultationRows() {
   });
 }
 function renderConsultationRow(row){
-  return `<article class="search-result-card"><div><span class="search-result-type">${escape(row.type)}</span><strong>${escape(row.concept)}</strong><small>${row.date.toLocaleDateString('es-AR')} · ${escape([row.category,row.subcategory].filter(Boolean).join(' · ')||'Sin categoría')}${row.method?' · '+escape(row.method):''}</small></div><strong>${money(row.amount,row.currency)}</strong></article>`;
+  return `<article class="search-result-card"><div><span class="search-result-type">${escape(row.type)}</span><strong>${escape(row.concept)}</strong><small>${row.date.toLocaleDateString('es-AR')} · ${escape(displayCategoryPath(row.category,row.subcategory)||'Sin categoría')}${row.method?' · '+escape(row.method):''}</small></div><strong>${money(row.amount,row.currency)}</strong></article>`;
 }
 function renderFixedPendingConsultation(){
   const key=monthKey(new Date());
@@ -2782,7 +2770,7 @@ function addCategory() {
   if(created&&input)input.value='';
   return created;
 }
-function isFixedExpenseMasterCategory(category){return normalizedCategoryName(category)===normalizedCategoryName('GASTOS FIJOS');}
+function isFixedExpenseMasterCategory(category){return categoryBaseName(category)==='GASTOS FIJOS';}
 function ensureFixedExpenseForSubcategory(category,subcategory){
   if(!isFixedExpenseMasterCategory(category)||!subcategory)return false;
   if(!Array.isArray(state.fixedExpenses))state.fixedExpenses=[];
