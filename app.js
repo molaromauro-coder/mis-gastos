@@ -10,13 +10,14 @@ import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrash
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=60');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=106');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
 const portfolioMetrics = resaleApi?.portfolioMetrics;
 const withPortfolioPercent = resaleApi?.withPortfolioPercent;
 const orderResalePartiesByDate = resaleApi?.orderResalePartiesByDate;
+const groupResalePartiesByDate = resaleApi?.groupResalePartiesByDate;
 if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
 const STORAGE_KEY = sharedMode ? 'mis-gastos-shared-v1' : 'mis-gastos-v1';
 const BACKUP_KEY = STORAGE_KEY+'-backup-v1';
@@ -1820,10 +1821,40 @@ function saveAllResaleSales(){
   renderResale({totalsOnly:true});
   showToast('✓ Todas las ventas guardadas y verificadas');
 }
+function resalePartyCardHTML(party,split,open=false){
+    const m = partyMetrics(party, split);
+    const tickets = party.tickets.map((ticket,ticketIndex) => {
+      return `<div class="resale-ticket" data-ticket-index="${ticketIndex}" data-ticket-id="${escape(ticket.id)}" data-party-id="${escape(party.id)}">
+        <div class="resale-ticket-head"><div><strong>${escape(ticket.type)} · #${integerText(ticket.number)}</strong><small>Costo ${money(ticket.cost, 'ARS')}</small></div><select class="resale-status">
+          ${['Disponible','Vendida','Uso personal'].map((s) => `<option ${ticket.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+        </select></div>
+        <div class="resale-ticket-sale"><label>Precio de venta<span class="resale-money-input"><b>$</b><input class="resale-price" type="text" inputmode="decimal" data-local-number="2" value="${formatNumericInputValue(ticket.salePrice||0,{maximumFractionDigits:2})}"></span></label>
+        <div class="resale-ticket-result">${resaleTicketResultHTML(ticket,split)}</div></div>
+      </div>`;
+    }).join('');
+    const partyDateLabel=party.date ? new Date(party.date + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin fecha';
+    return `<details class="resale-party" data-party-id="${escape(party.id)}" ${open?'open':''}><summary><strong>${escape(party.name)}</strong><small class="resale-party-date">${escape(partyDateLabel)}</small><span>›</span></summary>
+      <div class="resale-party-meta">${partyDateLabel} · ${integerText(m.totalTickets)} entradas</div>
+      <div class="resale-metrics">${resalePartyMetricsHTML(party,split)}</div>
+      <div class="resale-tickets">${tickets || '<div class="empty">Todavía no cargaste entradas para esta fiesta.</div>'}</div>
+      <div class="resale-party-actions"><button class="resale-add-tickets" type="button">＋ Agregar entradas</button><button class="delete-party" type="button">Eliminar fiesta</button></div></details>`;
+
+}
+function resaleGroupedCardsHTML(parties,split,list,now=new Date()){
+  const groups=groupResalePartiesByDate(parties,now);
+  const openGroups=new Set(Array.from(list.querySelectorAll('[data-resale-group][open]')).map((node)=>node.dataset.resaleGroup));
+  const openParties=new Set(Array.from(list.querySelectorAll('.resale-party[open]')).map((node)=>node.dataset.partyId));
+  const partyCards=(rows)=>rows.map((party)=>resalePartyCardHTML(party,split,openParties.has(party.id))).join('');
+  const upcoming=partyCards(groups.upcoming)+(groups.undated.length?`<div class="resale-undated-heading">Sin fecha definida</div>${partyCards(groups.undated)}`:'');
+  const count=(n)=>`${integerText(n)} fiesta${n===1?'':'s'}`;
+  return `<details class="resale-group" data-resale-group="upcoming" ${openGroups.has('upcoming')?'open':''}><summary><span><strong>🎉 Próximas fiestas</strong><small>${count(groups.upcoming.length)}${groups.undated.length?' · '+count(groups.undated.length)+' sin fecha':''}</small></span><b aria-hidden="true">›</b></summary><div class="resale-group-content">${upcoming||'<div class="empty">No hay próximas fiestas cargadas. Tocá “＋ Nueva fiesta” para agregar una.</div>'}</div></details>
+    <details class="resale-group" data-resale-group="finished" ${openGroups.has('finished')?'open':''}><summary><span><strong>🏁 Fiestas terminadas</strong><small>${count(groups.finished.length)}</small></span><b aria-hidden="true">›</b></summary><div class="resale-group-content">${partyCards(groups.finished)||'<div class="empty">Todavía no hay fiestas terminadas.</div>'}</div></details>`;
+}
 function renderResale({ totalsOnly = false } = {}) {
   if (sharedMode || !$('#resaleList') || !resaleApi) return;
   const split = resaleSplit();
-  const orderedParties = orderResalePartiesByDate ? orderResalePartiesByDate(state.resale.parties, new Date()) : [...state.resale.parties];
+  const now=new Date();
+  const orderedParties = orderResalePartiesByDate ? orderResalePartiesByDate(state.resale.parties, now) : [...state.resale.parties];
   state.resale.ownerPercent = split.ownerPercent;
   state.resale.sellerPercent = split.sellerPercent;
   const total = withPortfolioPercent(portfolioMetrics(state.resale.parties, split));
@@ -1877,28 +1908,7 @@ function renderResale({ totalsOnly = false } = {}) {
     });
     return;
   }
-  if (!state.resale.parties.length) {
-    $('#resaleList').innerHTML = '<div class="empty">Todavía no cargaste ninguna fiesta. Tocá “＋ Compra” para empezar.</div>';
-    return;
-  }
-  $('#resaleList').innerHTML = orderedParties.map((party) => {
-    const m = partyMetrics(party, split);
-    const tickets = party.tickets.map((ticket,ticketIndex) => {
-      return `<div class="resale-ticket" data-ticket-index="${ticketIndex}" data-ticket-id="${escape(ticket.id)}" data-party-id="${escape(party.id)}">
-        <div class="resale-ticket-head"><div><strong>${escape(ticket.type)} · #${integerText(ticket.number)}</strong><small>Costo ${money(ticket.cost, 'ARS')}</small></div><select class="resale-status">
-          ${['Disponible','Vendida','Uso personal'].map((s) => `<option ${ticket.status === s ? 'selected' : ''}>${s}</option>`).join('')}
-        </select></div>
-        <div class="resale-ticket-sale"><label>Precio de venta<span class="resale-money-input"><b>$</b><input class="resale-price" type="text" inputmode="decimal" data-local-number="2" value="${formatNumericInputValue(ticket.salePrice||0,{maximumFractionDigits:2})}"></span></label>
-        <div class="resale-ticket-result">${resaleTicketResultHTML(ticket,split)}</div></div>
-      </div>`;
-    }).join('');
-    const partyDateLabel=party.date ? new Date(party.date + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin fecha';
-    return `<details class="resale-party" data-party-id="${escape(party.id)}"><summary><strong>${escape(party.name)}</strong><small class="resale-party-date">${escape(partyDateLabel)}</small><span>›</span></summary>
-      <div class="resale-party-meta">${partyDateLabel} · ${integerText(m.totalTickets)} entradas</div>
-      <div class="resale-metrics">${resalePartyMetricsHTML(party,split)}</div>
-      <div class="resale-tickets">${tickets || '<div class="empty">Todavía no cargaste entradas para esta fiesta.</div>'}</div>
-      <div class="resale-party-actions"><button class="resale-add-tickets" type="button">＋ Agregar entradas</button><button class="delete-party" type="button">Eliminar fiesta</button></div></details>`;
-  }).join('');
+  $('#resaleList').innerHTML = resaleGroupedCardsHTML(state.resale.parties,split,$('#resaleList'),now);
   bindLocalizedNumberInputs($('#resaleList'));
   document.querySelectorAll('.resale-ticket').forEach((row) => {
     const party = state.resale.parties.find((p) => p.id === row.dataset.partyId);

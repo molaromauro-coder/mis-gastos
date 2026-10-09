@@ -124,24 +124,31 @@ function seedInitialResaleData() {
 
 seedInitialResaleData();
 
+function resalePartyChronology(party, now) {
+  const raw = String(party?.date || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return { bucket: 2, time: Infinity };
+  const date = new Date(raw + 'T12:00:00');
+  const dateKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  if (!Number.isFinite(date.getTime()) || dateKey !== raw) return { bucket: 2, time: Infinity };
+  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return { bucket: day >= today ? 0 : 1, time: day };
+}
 export function orderResalePartiesByDate(parties = [], now = new Date()) {
   const list = Array.isArray(parties) ? [...parties] : [];
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const parse = (party) => {
-    const raw = String(party?.date || '').trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return { bucket: 2, time: Number.POSITIVE_INFINITY };
-    const date = new Date(raw + 'T12:00:00');
-    if (Number.isNaN(date.getTime())) return { bucket: 2, time: Number.POSITIVE_INFINITY };
-    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-    return day >= today ? { bucket: 0, time: day } : { bucket: 1, time: day };
-  };
   return list.sort((a,b)=>{
-    const da=parse(a), db=parse(b);
+    const da=resalePartyChronology(a,now), db=resalePartyChronology(b,now);
     if(da.bucket!==db.bucket)return da.bucket-db.bucket;
     if(da.bucket===0)return da.time-db.time || String(a?.name||'').localeCompare(String(b?.name||''),'es');
     if(da.bucket===1)return db.time-da.time || String(a?.name||'').localeCompare(String(b?.name||''),'es');
     return String(a?.name||'').localeCompare(String(b?.name||''),'es');
   });
+}
+export function groupResalePartiesByDate(parties = [], now = new Date()) {
+  const groups = { upcoming: [], finished: [], undated: [] };
+  const keys = ['upcoming','finished','undated'];
+  orderResalePartiesByDate(parties,now).forEach((party)=>groups[keys[resalePartyChronology(party,now).bucket]].push(party));
+  return groups;
 }
 
 export function normalizeSplit(ownerPercent = 70, sellerPercent = 30) {
