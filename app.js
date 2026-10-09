@@ -12,7 +12,7 @@ import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrash
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=111');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=112');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -1846,7 +1846,6 @@ function renderResale({ totalsOnly = false } = {}) {
   if (sharedMode || !$('#resaleList') || !resaleApi) return;
   const split = resaleSplit();
   const now=new Date();
-  const orderedParties = orderResaleBalanceParties(state.resale.parties);
   state.resale.ownerPercent = split.ownerPercent;
   state.resale.sellerPercent = split.sellerPercent;
   const total = withPortfolioPercent(portfolioMetrics(state.resale.parties, split));
@@ -1880,10 +1879,17 @@ function renderResale({ totalsOnly = false } = {}) {
   if ($('#resaleOwnerHead')) $('#resaleOwnerHead').textContent = `Ganancia Mauro (${numberText(split.ownerPercent,1)}%)`;
   if ($('#resaleSellerHead')) $('#resaleSellerHead').textContent = `Total vendedor (${numberText(split.sellerPercent,1)}%)`;
   if ($('#resaleBalanceBody')) {
-    $('#resaleBalanceBody').innerHTML = orderedParties.map((party) => {
+    const groups=groupResalePartiesByDate(state.resale.parties,now);
+    const sections=[
+      {title:'PRÓXIMAS FIESTAS',parties:[...groups.upcoming,...groups.undated]},
+      {title:'FIESTAS FINALIZADAS',parties:groups.finished}
+    ];
+    $('#resaleBalanceBody').innerHTML = sections.map((section)=>
+      `<tr class="resale-balance-section"><th colspan="9">${section.title}</th></tr>`+
+      orderResaleBalanceParties(section.parties).map((party) => {
       const m = partyMetrics(party, split);
       return `<tr><td><strong>${escape(party.name)}</strong></td><td>${money(m.investment,'ARS')}</td><td>${money(m.recovered,'ARS')}</td><td>${money(m.sales,'ARS')}</td><td>${money(m.totalForOwner,'ARS')}</td><td>${money(m.netGain,'ARS')}</td><td>${pct(m.gainPercent)}</td><td>${money(m.ownerGain,'ARS')}</td><td>${money(m.sellerGain,'ARS')}</td></tr>`;
-    }).join('');
+    }).join('')).join('');
   }
   if ($('#resaleBalanceTotal')) {
     $('#resaleBalanceTotal').innerHTML = `<tr><th>TOTAL GENERAL</th><th>${money(total.investment,'ARS')}</th><th>${money(total.recovered,'ARS')}</th><th>${money(total.sales,'ARS')}</th><th>${money(total.totalForOwner,'ARS')}</th><th>${money(total.netGain,'ARS')}</th><th>${pct(total.gainPercent)}</th><th>${money(total.ownerGain,'ARS')}</th><th>${money(total.sellerGain,'ARS')}</th></tr>`;

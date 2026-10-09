@@ -692,3 +692,5 @@ img,svg,canvas,video{
 :root[data-large-text] :is(.expense-icon,.menu-list button span){width:auto;min-width:40px;height:auto;flex-shrink:0}
 :root[data-large-text] input:is([type="checkbox"],[type="radio"]){width:auto;min-height:0;height:auto;flex-shrink:0}
 :root[data-large-text] .toast{width:min(90vw,390px);white-space:normal;overflow-wrap:anywhere}
+
+.resale-balance-table .resale-balance-section th{background:#dcece5;color:#24594d;text-align:left!important;padding:12px 8px;font-size:12px;letter-spacing:.04em;font-weight:800}

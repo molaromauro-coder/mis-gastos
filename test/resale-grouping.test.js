@@ -50,16 +50,22 @@ test('empty groups and events without dates remain reachable in the requested tw
  assert.ok(undated.indexOf('data-party-id="undated"')<undated.indexOf('data-resale-group="finished"'));
 });
 
-test('balance table follows one ascending calendar timeline without mutating parties or sale records',()=>{
+test('balance table always displays upcoming then finished titles and chronological rows without changing sales',()=>{
  const before=structuredClone(parties),ordered=orderResaleBalanceParties(parties);
  assert.deepEqual(ordered.map(p=>p.id),['past-old','past-new','today','future-close','future-far']);
  assert.deepEqual(parties,before);
  const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
  const start=app.indexOf("  if ($('#resaleBalanceBody')) {"),end=app.indexOf("  if ($('#resaleBalanceTotal')) {",start);
  const body={innerHTML:''},split={ownerPercent:70,sellerPercent:30};
- vm.runInNewContext(app.slice(start,end),{$:()=>body,orderedParties:ordered,partyMetrics,split,money:String,pct:String,escape:String});
+ vm.runInNewContext(app.slice(start,end),{$:()=>body,state:{resale:{parties}},now,groupResalePartiesByDate,orderResaleBalanceParties,partyMetrics,split,money:String,pct:String,escape:String});
  const names=[...body.innerHTML.matchAll(/<strong>(.*?)<\/strong>/g)].map(match=>match[1]);
- assert.deepEqual(names,ordered.map(p=>p.name));
+ assert.deepEqual(names,['HOY','KEVIN DI SERNA','JOHN DIGWEED','MAX STYLER','NACHO SCOPPA']);
+ assert.match(body.innerHTML,/colspan="9">PRÓXIMAS FIESTAS<\/th>/);
+ assert.match(body.innerHTML,/colspan="9">FIESTAS FINALIZADAS<\/th>/);
+ assert.ok(body.innerHTML.indexOf('PRÓXIMAS FIESTAS')<body.innerHTML.indexOf('HOY'));
+ assert.ok(body.innerHTML.indexOf('JOHN DIGWEED')<body.innerHTML.indexOf('FIESTAS FINALIZADAS'));
+ assert.ok(body.innerHTML.indexOf('FIESTAS FINALIZADAS')<body.innerHTML.indexOf('MAX STYLER'));
+ assert.equal(body.innerHTML.includes('<details'),false);
  assert.deepEqual(parties,before);
  assert.deepEqual(ordered.map(p=>partyMetrics(p,split)),ordered.map(p=>partyMetrics(before.find(original=>original.id===p.id),split)));
 });
