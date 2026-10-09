@@ -12,7 +12,7 @@ import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrash
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=108');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=109');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -3646,6 +3646,7 @@ $('#cancelResaleImport').onclick=()=>{pendingResaleImport=null;$('#resaleImportR
 
 window.addEventListener('pagehide',()=>{try{save();}catch{}}); document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){try{save();}catch{}}});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
+if(state.settings.textScale!==undefined)state.settings.textScale=normalizeTextScale(state.settings.textScale);
 displayFeatures={setTextScale:installTextScaling(document),zoom:installViewZoom(document,window),buttons:installButtonFeedback(document,window)};
 displayFeatures.setTextScale(state.settings.textScale);
 bindLocalizedNumberInputs();

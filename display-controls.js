@@ -1,5 +1,5 @@
-export const TEXT_SCALES=[1,1.5,1.8,2.3];
-export function normalizeTextScale(value){return TEXT_SCALES.includes(Number(value))?Number(value):1;}
+export const TEXT_SCALES=[1,1.3,1.5,1.7];
+export function normalizeTextScale(value){const scale=Number(value);if(scale===1.8)return 1.5;if(scale===2.3)return 1.7;return TEXT_SCALES.includes(scale)?scale:1;}
 export function scaledFontRules(rules){
   return Array.from(rules||[]).map((rule)=>{
     if(rule.selectorText&&rule.style){
