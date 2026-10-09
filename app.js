@@ -1,4 +1,4 @@
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout } from './display-controls.js?v=117';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout } from './display-controls.js?v=118';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -12,7 +12,7 @@ import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrash
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=117');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=118');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -3459,7 +3459,7 @@ $('#homeNotificationsBtn').onclick=()=>{
       if(item===box){const content=document.createElement('span');content.textContent=box.textContent;box.replaceChildren(wrapper);wrapper.append(content);}
       else{item.before(wrapper);wrapper.append(item);}
       const remove=document.createElement('button');remove.type='button';remove.className='notification-delete';remove.textContent='×';remove.setAttribute('aria-label','Eliminar esta notificación');
-      remove.onclick=()=>{const previous=state.settings.dismissedNotifications;state.settings.dismissedNotifications=[...new Set([...(previous||[]),key])];try{save();wrapper.remove();showToast('Aviso eliminado');}catch(error){state.settings.dismissedNotifications=previous;showToast('No se pudo guardar el cambio.');}};
+      remove.onclick=()=>{const previous=state.settings.dismissedNotifications;state.settings.dismissedNotifications=[...new Set([...(previous||[]),key])];try{if(save()===false)throw new Error('No se pudo guardar');wrapper.remove();showToast('Aviso eliminado');}catch(error){state.settings.dismissedNotifications=previous;showToast('No se pudo guardar el cambio.');}};
       wrapper.append(remove);
     }
   }
