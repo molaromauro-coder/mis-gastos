@@ -1,5 +1,5 @@
-export const TEXT_SCALES=[1,1.3,1.5,1.7];
-export function normalizeTextScale(value){const scale=Number(value);if(scale===1.8)return 1.5;if(scale===2.3)return 1.7;return TEXT_SCALES.includes(scale)?scale:1;}
+export const TEXT_SCALES=[1,1.2,1.3,1.5];
+export function normalizeTextScale(value){const scale=Number(value);if(scale===1.8)return 1.5;if(scale===2.3||scale===1.7)return 1.5;return TEXT_SCALES.includes(scale)?scale:1;}
 export function scaledFontRules(rules){
   return Array.from(rules||[]).map((rule)=>{
     if(rule.selectorText&&rule.style){
@@ -174,4 +174,27 @@ export function installButtonFeedback(doc,win){
     if(control&&(Date.now()-(lastPress.get(control)||0)>350))respond(control);
   },{capture:true,passive:true});
   return {respond};
+}
+
+export function homeLayoutDensity(height){return height>=650?'comfortable':height>=520?'compact':'tight';}
+export function installHomeLayout(doc,win){
+  const home=doc.querySelector('#home'),main=doc.querySelector('.app>main');
+  if(!home||!main)return {refresh:()=>{}};
+  let queued=false;
+  const update=()=>{
+    queued=false;
+    const height=main.clientHeight;if(!height)return;
+    home.dataset.density=homeLayoutDensity(height);
+    // If unusually long amounts or labels need more room, compact spacing first.
+    if(home.classList.contains('active')&&home.scrollHeight>height+2){
+      home.dataset.density=home.dataset.density==='comfortable'?'compact':'tight';
+      if(home.scrollHeight>height+2)home.dataset.density='tight';
+    }
+  };
+  const refresh=()=>{if(queued)return;queued=true;(win.requestAnimationFrame||win.setTimeout).call(win,update);};
+  const Observer=win.ResizeObserver;
+  if(Observer){const observer=new Observer(refresh);observer.observe(main);observer.observe(doc.querySelector('.home-header'));}
+  if(win.MutationObserver)new win.MutationObserver(refresh).observe(home,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+  win.addEventListener('resize',refresh);win.visualViewport?.addEventListener('resize',refresh);refresh();
+  return {refresh};
 }

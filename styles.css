@@ -694,3 +694,59 @@ img,svg,canvas,video{
 :root[data-large-text] .toast{width:min(90vw,390px);white-space:normal;overflow-wrap:anywhere}
 
 .resale-balance-table .resale-balance-section th{background:#dcece5;color:#24594d;text-align:left!important;padding:12px 8px;font-size:12px;letter-spacing:.04em;font-weight:800}
+
+/* v113: keep the home controls inside the viewport, including larger text. */
+#home.active,:root[data-large-text] #home.active{height:100%!important;min-height:0!important;overflow:hidden!important;padding-bottom:0!important;gap:6px;display:flex;flex-direction:column}
+#home.active>*{flex:0 0 auto;min-width:0}
+#home.active .home-month-net{margin:0;padding:8px 10px}
+#home.active .today-card{margin:0;padding:7px 10px}
+#home.active .recent-card{flex:1 1 auto;min-height:112px;display:flex;flex-direction:column;overflow:hidden;margin:0;padding:7px 10px}
+#home.active .recent-list{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+#home.active .recent-head,#home.active .recent-more{flex:0 0 auto}
+#home.active .recent-more{margin-top:2px;padding:4px 0 0}
+#home.active .recent-movement,:root[data-large-text] #home.active .recent-movement{grid-template-columns:minmax(0,1fr) auto!important;gap:3px 8px;padding:5px 0;align-items:center}
+#home.active .recent-movement>div{grid-column:1;grid-row:1 / span 2;min-width:0}
+#home.active .recent-movement>div strong,#home.active .recent-movement>div small{white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis!important}
+#home.active .recent-amount{grid-column:2;grid-row:1;white-space:nowrap!important;font-variant-numeric:tabular-nums}
+#home.active .recent-movement>.expense-actions{grid-column:2;grid-row:2;justify-self:end;gap:5px;flex-wrap:nowrap}
+#home.active .expense-actions button,:root[data-large-text] #home.active .expense-actions button{width:32px;height:32px;min-width:32px;min-height:32px;padding:2px}
+#home.active .home-quick-actions,:root[data-large-text] #home.active .home-quick-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:6px;margin:0}
+#home.active .home-action{padding:8px;grid-template-columns:26px minmax(0,1fr);gap:6px;min-height:54px}
+#home.active .home-action-icon{width:26px;height:30px;font-size:16px}
+#home.active .home-action small,#home.active .home-action b{display:none}
+#home.active .home-action strong{line-height:1.15}
+#home.active .voice-zone{margin:0!important;padding:6px 0 4px!important;flex:0 0 auto}
+#home.active #micBtn.mic{width:84px;height:84px;margin-bottom:7px;border-width:8px;box-shadow:0 0 0 6px #e8f4ff,0 7px 18px #4d80aa28}
+#home.active .voice-zone.recording{padding-top:86px!important}
+#home.active .voice-trash{top:0!important;height:48px!important}
+#home.active .voice-zone strong{line-height:1.1}
+#home.active .voice-zone small{line-height:1.1;margin-top:2px}
+#home.active .home-menu-btn,:root[data-large-text] #home.active .home-menu-btn{position:static!important;transform:none!important;width:100%;height:auto!important;min-height:44px;padding:8px 12px;margin:0;display:flex;flex-wrap:nowrap;align-items:center;justify-content:center;gap:8px;flex:0 0 auto;line-height:1.1}
+:root[data-large-text] .home-header{flex-wrap:nowrap;gap:8px;margin-bottom:8px}
+:root[data-large-text] .home-header>div:first-child{min-width:0;flex:1}
+:root[data-large-text] .home-header h1{font-size:28px;letter-spacing:-1px;line-height:1.08}
+:root[data-large-text] .home-header .header-actions{flex-wrap:nowrap;gap:6px;flex-shrink:0}
+:root[data-large-text] .home-header .icon-btn{width:40px;height:40px;min-width:40px;min-height:40px;padding:4px}
+#home[data-density="compact"] .home-month-net,#home[data-density="tight"] .home-month-net{padding:6px 9px;gap:2px}
+#home[data-density="compact"] #micBtn.mic{width:72px;height:72px;margin-bottom:5px}
+#home[data-density="compact"] .recent-card{min-height:96px;padding:5px 9px}
+#home[data-density="compact"] .home-action{padding:5px 7px;min-height:48px}
+#home[data-density="tight"]{gap:4px}
+#home[data-density="tight"] .today-card{padding:5px 9px}
+#home[data-density="tight"] .today-card-head{align-items:center}
+#home[data-density="tight"] .today-card-head>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#home[data-density="tight"] .today-card-head small{margin:0}
+#home[data-density="tight"] .today-ars{margin:2px 0 3px}
+#home[data-density="tight"] .recent-card{min-height:54px;padding:4px 8px}
+#home[data-density="tight"] .recent-head{margin:0}
+#home[data-density="tight"] .home-action{padding:5px 7px;min-height:44px}
+#home[data-density="tight"] .voice-zone{display:grid;grid-template-columns:64px minmax(0,1fr);grid-template-rows:auto auto;column-gap:14px;align-items:center;align-self:center;max-width:100%;padding:5px 0!important}
+#home[data-density="tight"] .voice-zone.recording{padding-top:86px!important}
+#home[data-density="tight"] #micBtn.mic{grid-column:1;grid-row:1 / span 2;width:64px;height:64px;margin:0}
+#home[data-density="tight"] #voiceTitle{grid-column:2;grid-row:1;align-self:end}
+#home[data-density="tight"] #voiceHint{grid-column:2;grid-row:2;align-self:start}
+#home[data-density="tight"] .home-menu-btn{min-height:40px;padding:5px 10px}
+#home[data-density="tight"] .recent-card{min-height:96px}
+#home[data-density="tight"] .home-month-net>div:not(:first-child){display:flex;align-items:baseline;gap:5px;flex-wrap:wrap}
+#home[data-density="tight"] .home-action{grid-template-columns:minmax(0,1fr);text-align:center}
+#home[data-density="tight"] .home-action-icon{display:none}

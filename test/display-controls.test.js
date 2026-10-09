@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {normalizeTextScale,scaledFontRules,installTextScaling,pinchGeometry,installViewZoom,installButtonFeedback} from '../display-controls.js';
+import {normalizeTextScale,scaledFontRules,installTextScaling,pinchGeometry,installViewZoom,installButtonFeedback,homeLayoutDensity,installHomeLayout} from '../display-controls.js';
 const font=(selector,value,important='')=>({selectorText:selector,style:{getPropertyValue:()=>value,getPropertyPriority:()=>important}});
 function harness(){
   const events={},timers=new Map();let next=1;
@@ -16,8 +16,8 @@ function harness(){
   return {view,doc,win,target,emit,touch,drain,timers};
 }
 test('only requested font choices are accepted; missing old setting preserves ×1',()=>{
-  for(const n of [1,1.3,1.5,1.7])assert.equal(normalizeTextScale(String(n)),n);
-  assert.equal(normalizeTextScale(1.8),1.5);assert.equal(normalizeTextScale(2.3),1.7);
+  for(const n of [1,1.2,1.3,1.5])assert.equal(normalizeTextScale(String(n)),n);
+  assert.equal(normalizeTextScale(1.8),1.5);assert.equal(normalizeTextScale(2.3),1.5);assert.equal(normalizeTextScale(1.7),1.5);
   for(const n of [undefined,0,-1,2,NaN,Infinity])assert.equal(normalizeTextScale(n),1);
 });
 test('font scaling preserves media queries, specificity and important without cumulative multiplication',()=>{
@@ -27,7 +27,7 @@ test('font scaling preserves media queries, specificity and important without cu
 test('switching font size and back only updates presentation and creates one stylesheet',()=>{
   const root={values:{},style:{setProperty(k,v){root.values[k]=v;}},toggleAttribute(k,v){root[k]=v;}};
   const children=[];const doc={documentElement:root,styleSheets:[{cssRules:[font('button','14px')]}],createElement:()=>({}),head:{append:child=>children.push(child)}};
-  const set=installTextScaling(doc);set(1.7);assert.equal(root['data-large-text'],true);set(1);set(1);
+  const set=installTextScaling(doc);set(1.5);assert.equal(root['data-large-text'],true);set(1);set(1);
   assert.equal(root.values['--app-font-scale'],'1');assert.equal(root['data-large-text'],false);assert.equal(children.length,1);
   assert.match(children[0].textContent,/calc\(14px \* var/);
 });
@@ -71,12 +71,21 @@ test('font preference saves only its setting, rolls back on failed storage, and 
   const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
   const handler=source.slice(source.indexOf("$('#fontScale').onchange="),source.indexOf("$('#resetViewZoom').onclick="));
   const state={settings:{textScale:1},expenses:[{amount:65000,date:'2026-10-09',category:'Hogar',cardId:'a'}],cards:[{id:'a',closingDate:'2026-10-20',dueDate:'2026-11-10'}],cardPayments:[{amount:100}],resale:{parties:[{tickets:[{salePrice:65000}]}]}};
-  const records=JSON.stringify([state.expenses,state.cards,state.cardPayments,state.resale]);const input={value:'1.7'},scales=[];let saved=true;
+  const records=JSON.stringify([state.expenses,state.cards,state.cardPayments,state.resale]);const input={value:'1.5'},scales=[];let saved=true;
   vm.runInNewContext(handler,{state,$:()=>input,normalizeTextScale,displayFeatures:{setTextScale:s=>scales.push(s)},save:()=>saved,showToast:()=>{}});
-  input.onchange();assert.equal(state.settings.textScale,1.7);assert.equal(JSON.stringify([state.expenses,state.cards,state.cardPayments,state.resale]),records);
-  saved=false;input.value='1.5';input.onchange();assert.equal(state.settings.textScale,1.7);assert.equal(input.value,'1.7');assert.equal(JSON.stringify([state.expenses,state.cards,state.cardPayments,state.resale]),records);
+  input.onchange();assert.equal(state.settings.textScale,1.5);assert.equal(JSON.stringify([state.expenses,state.cards,state.cardPayments,state.resale]),records);
+  saved=false;input.value='1.3';input.onchange();assert.equal(state.settings.textScale,1.5);assert.equal(input.value,'1.5');assert.equal(JSON.stringify([state.expenses,state.cards,state.cardPayments,state.resale]),records);
 });
 test('large text gets vertical layout and offline cache includes the controller',()=>{
   const css=fs.readFileSync(new URL('../styles.css',import.meta.url),'utf8'),sw=fs.readFileSync(new URL('../sw.js',import.meta.url),'utf8');
   assert.match(css,/:root\[data-large-text\][\s\S]*grid-template-columns:minmax\(0,1fr\)/);assert.match(css,/data-view-zoomed[\s\S]*transform-origin:0 0/);assert.match(sw,/'\.\/display-controls\.js'/);
+});
+
+test('home reserves its own viewport and compacts overflowing cards before losing access to controls',()=>{
+ const frames=[],main={clientHeight:700},home={dataset:{},classList:{contains:()=>true},get scrollHeight(){return this.dataset.density==='comfortable'?750:680;}};
+ const doc={querySelector:s=>s==='#home'?home:s==='.app>main'?main:{}};
+ const win={requestAnimationFrame:fn=>frames.push(fn),addEventListener:()=>{}};
+ const controller=installHomeLayout(doc,win);controller.refresh();assert.equal(frames.length,1);frames.shift()();
+ assert.equal(home.dataset.density,'compact');main.clientHeight=480;controller.refresh();frames.shift()();assert.equal(home.dataset.density,'tight');
+ assert.equal(homeLayoutDensity(700),'comfortable');assert.equal(homeLayoutDensity(600),'compact');assert.equal(homeLayoutDensity(450),'tight');
 });
