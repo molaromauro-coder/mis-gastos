@@ -1,4 +1,4 @@
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout } from './display-controls.js?v=115';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout } from './display-controls.js?v=116';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -12,7 +12,7 @@ import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrash
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=115');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=116');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;

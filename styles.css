@@ -760,3 +760,30 @@ img,svg,canvas,video{
 #home.active .recent-amount{grid-column:2;grid-row:1}
 #home.active .recent-movement>.expense-actions{grid-column:3;grid-row:1;gap:4px}
 #home.active .voice-zone{margin-top:auto!important}
+/* More room for voice; manual/category shortcuts use a 75/25 split. */
+#home.active .home-month-net{padding:6px 9px;gap:3px;border-radius:12px}
+#home.active .home-month-net small{font-size:8px}
+#home.active .home-month-net strong{font-size:15px}
+#home.active .home-month-net span{font-size:10px}
+#home.active .today-card{padding:6px 9px;border-radius:13px}
+#home.active .today-card-head span{font-size:11px}
+#home.active .today-card-head small{font-size:8px}
+#home.active .today-ars{font-size:21px;margin:3px 0 4px}
+#home.active .today-usd{padding-top:4px}
+#home.active .today-usd span{font-size:9px}
+#home.active .today-usd strong{font-size:11px}
+#home.active .recent-card{padding:5px 8px;border-radius:13px}
+#home.active .recent-head>strong{font-size:11px}
+#home.active .recent-movement{padding:3px 0}
+#home.active .recent-more{padding-top:3px;font-size:11px}
+#home.active .home-quick-actions,:root[data-large-text] #home.active .home-quick-actions{grid-template-columns:minmax(0,3fr) minmax(0,1fr)!important;gap:6px}
+#home.active .home-action{min-height:48px;padding:6px 8px}
+#home.active #manualBtn{display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px;text-align:left}
+#home.active #manualBtn .home-action-icon{display:grid;width:28px;height:28px}
+#home.active #homeCategoriesBtn{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;padding:4px;min-height:48px;text-align:center}
+#home.active #homeCategoriesBtn .home-action-icon{display:grid;width:24px;height:22px;font-size:15px}
+#home.active #homeCategoriesBtn strong{font-size:10px;line-height:1.1;white-space:nowrap!important;overflow-wrap:normal}
+#home.active #micBtn.mic{width:104px;height:104px;border-width:9px;box-shadow:0 0 0 9px #e0effc,0 8px 24px #366fa835}
+#home[data-density="compact"] #micBtn.mic{width:96px;height:96px}
+#home[data-density="tight"] .voice-zone{grid-template-columns:84px minmax(0,1fr)}
+#home[data-density="tight"] #micBtn.mic{width:84px;height:84px}
