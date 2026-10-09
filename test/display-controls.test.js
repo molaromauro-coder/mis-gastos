@@ -89,3 +89,10 @@ test('home reserves its own viewport and compacts overflowing cards before losin
  assert.equal(home.dataset.density,'compact');main.clientHeight=480;controller.refresh();frames.shift()();assert.equal(home.dataset.density,'tight');
  assert.equal(homeLayoutDensity(700),'comfortable');assert.equal(homeLayoutDensity(600),'compact');assert.equal(homeLayoutDensity(450),'tight');
 });
+
+test('the home controller is versioned and precached so an older cached module cannot block app startup',()=>{
+ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'),html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8'),sw=fs.readFileSync(new URL('../sw.js',import.meta.url),'utf8');
+ const module=app.match(/from '\.\/display-controls\.js\?v=(\d+)'/)[1];
+ assert.equal(module,html.match(/app\.js\?v=(\d+)/)[1]);
+ assert.ok(sw.includes(`'./display-controls.js?v=${module}'`));
+});
