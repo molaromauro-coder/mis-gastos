@@ -54,6 +54,7 @@ export function previousMonthDeletableCount(state,now=new Date()){
 
 export function moveCurrentMonthExpensesToTrash(state,now=new Date()){
   const {start,next}=monthBounds(now);
+  const original=state.expenses||[];
   const removed=[],kept=[];
   for(const item of state.expenses||[]){
     const d=purchaseDate(item);
@@ -67,7 +68,8 @@ export function moveCurrentMonthExpensesToTrash(state,now=new Date()){
     state.trash.push({
       id:crypto.randomUUID?.()||('trash-'+Date.now()+'-'+Math.random().toString(16).slice(2)),
       deletedAt,
-      items
+      items,
+      positions:items.map((item)=>{const index=original.indexOf(item);return {id:item.id,index,before:original[index-1]?.id,after:original[index+1]?.id};})
     });
   }
   return {removed:removed.length,trashRecords:groupByPurchase(removed).length};

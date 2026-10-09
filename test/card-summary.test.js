@@ -43,7 +43,8 @@ test('credit card tile renders purchases and both payments without changing save
  const nodes={};const get=(selector)=>nodes[selector]??=( {innerHTML:'',classList:{toggle(){}},querySelectorAll:()=>[]} );
  const state={cards:[{...card,id:'card'}],expenses:installments,recurring:[]};const before=structuredClone(state);
  const context={bindLocalizedNumberInputs(){},state,activeCardType:'Crédito',$:get,document:{querySelectorAll:()=>[]},installPointerReorder(){},nextDue:nextDueDateForCard,nextClosingDateForCard,firstDueDateForCard,upcomingCardPayments,cardPurchasesInMonth,cardMonthSummary,cardStatementProjection,cardHistoryMonths,monthKey:(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,dateInputValue:()=> '2026-10-09',monthlyCardTotal:()=>[],effectiveDate:(e)=>new Date(e.dueDate),escape:(s)=>s,integerText:String,money:String,totalsHTML:(items)=>String(items.reduce((sum,e)=>sum+e.amount,0)),Date:class extends Date {constructor(...args){super(...(args.length?args:[now]));}}};
- vm.createContext(context);vm.runInContext(source.slice(start,end),context);context.renderCards();
+ const actions=source.slice(source.indexOf('function expenseActionsHTML('),source.indexOf('function expenseHTML('));
+ vm.createContext(context);vm.runInContext(actions+source.slice(start,end),context);context.renderCards();
  assert.match(nodes['#cardList'].innerHTML,/COMPRAS REALIZADAS ESTE MES<\/small><strong>30000/);
  assert.match(nodes['#cardList'].innerHTML,/SEGUNDO VENCIMIENTO/);
  assert.match(nodes['#cardList'].innerHTML,/PRÓXIMOS 2 VENCIMIENTOS<\/small><strong>10000/);
@@ -107,7 +108,8 @@ test('saving actual card payments survives storage reload and never duplicates e
  const form={dataset:{cardId:'card',statementMonth:'2026-11'},elements:{date:{value:'2026-12-01'},amount:{value:'10.000,50'},currency:{value:'ARS'}}};
  const nodes={};const $=(selector)=>nodes[selector]??={innerHTML:'',querySelectorAll:(s)=>s==='.card-payment-form'?[form]:[]};
  let persisted,saves=0;const context={state,$,bindLocalizedNumberInputs(){},cardStatementProjection,cardHistoryMonths,cardMonthSummary,createCardPayment,parseLocalizedNumber,monthKey:(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,dateInputValue:()=> '2026-10-09',escape:String,integerText:String,money:String,totalsHTML:(items)=>String(items.reduce((s,e)=>s+e.amount,0)),uid:()=> 'payment',save:()=>{persisted=JSON.stringify(state);saves++;},showToast(){}};
- vm.createContext(context);vm.runInContext(source.slice(start,end),context);context.renderCardStatements([identified],now);
+ const actions=source.slice(source.indexOf('function expenseActionsHTML('),source.indexOf('function expenseHTML('));
+ vm.createContext(context);vm.runInContext(actions+source.slice(start,end),context);context.renderCardStatements([identified],now);
  form.onsubmit({preventDefault(){}});
  assert.equal(saves,1);assert.equal(JSON.parse(persisted).cardPayments[0].amount,10000.5);
  assert.deepEqual({cards:state.cards,expenses:state.expenses,resale:state.resale},protectedBefore);

@@ -169,7 +169,7 @@ test('lanzamiento: inicio compacto mantiene micrófono despejado y aleja el tach
 });
 
 test('lanzamiento: cada gasto visible tiene X y el toque lo manda directo a Papelera',()=>{
-  assert.ok(app.includes('class="recent-delete"'));
+  assert.ok(app.includes("recent?'recent-delete':'expense-delete'"));
   assert.ok(app.includes('aria-label="Enviar gasto a Papelera"'));
   assert.match(app,/document\.addEventListener\('click'.*data-delete-expense[\s\S]*moveExpenseToTrash\(b\.dataset\.deleteExpense\)/);
   assert.ok(!app.includes("confirm('¿Enviar este gasto a Papelera?')"));
