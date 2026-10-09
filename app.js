@@ -12,13 +12,13 @@ import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrash
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=110');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=111');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
 const portfolioMetrics = resaleApi?.portfolioMetrics;
 const withPortfolioPercent = resaleApi?.withPortfolioPercent;
-const orderResalePartiesByDate = resaleApi?.orderResalePartiesByDate;
+const orderResaleBalanceParties = resaleApi?.orderResaleBalanceParties;
 const groupResalePartiesByDate = resaleApi?.groupResalePartiesByDate;
 if (sharedMode) document.querySelectorAll('.owner-only').forEach((el) => el.remove());
 const STORAGE_KEY = sharedMode ? 'mis-gastos-shared-v1' : 'mis-gastos-v1';
@@ -1846,7 +1846,7 @@ function renderResale({ totalsOnly = false } = {}) {
   if (sharedMode || !$('#resaleList') || !resaleApi) return;
   const split = resaleSplit();
   const now=new Date();
-  const orderedParties = orderResalePartiesByDate ? orderResalePartiesByDate(state.resale.parties, now) : [...state.resale.parties];
+  const orderedParties = orderResaleBalanceParties(state.resale.parties);
   state.resale.ownerPercent = split.ownerPercent;
   state.resale.sellerPercent = split.sellerPercent;
   const total = withPortfolioPercent(portfolioMetrics(state.resale.parties, split));

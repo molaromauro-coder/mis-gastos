@@ -144,6 +144,14 @@ export function orderResalePartiesByDate(parties = [], now = new Date()) {
     return String(a?.name||'').localeCompare(String(b?.name||''),'es');
   });
 }
+// The balance is one calendar timeline, independent of upcoming/finished groups.
+export function orderResaleBalanceParties(parties = []) {
+  const now=new Date();
+  return (Array.isArray(parties)?[...parties]:[]).sort((a,b)=>{
+    const aTime=resalePartyChronology(a,now).time,bTime=resalePartyChronology(b,now).time;
+    return aTime===bTime?0:aTime<bTime?-1:1;
+  });
+}
 export function groupResalePartiesByDate(parties = [], now = new Date()) {
   const groups = { upcoming: [], finished: [], undated: [] };
   const keys = ['upcoming','finished','undated'];

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
-import {groupResalePartiesByDate,partyMetrics} from '../resale.js';
+import {groupResalePartiesByDate,orderResaleBalanceParties,partyMetrics} from '../resale.js';
 import {formatNumericInputValue} from '../numeric-format.js';
 const now=new Date(2026,9,9,23,30);
 const parties=[
@@ -30,7 +30,7 @@ test('undated or invalid events remain accessible without being marked finished 
 });
 function renderer(){
  const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');const start=app.indexOf('function resalePartyCardHTML('),end=app.indexOf('function renderResale(',start);
- const context={groupResalePartiesByDate,partyMetrics,formatNumericInputValue,escape:(s)=>String(s||'').replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;'),integerText:String,money:(n)=>String(n),resaleTicketResultHTML:()=>'',resalePartyMetricsHTML:()=>''};
+ const context={groupResalePartiesByDate,orderResaleBalanceParties,partyMetrics,formatNumericInputValue,escape:(s)=>String(s||'').replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;'),integerText:String,money:(n)=>String(n),resaleTicketResultHTML:()=>'',resalePartyMetricsHTML:()=>''};
  vm.createContext(context);vm.runInContext(app.slice(start,end),context);return context.resaleGroupedCardsHTML;
 }
 test('two expandable cards preserve each event detail, saved sale price and open states after rendering',()=>{
@@ -48,4 +48,24 @@ test('empty groups and events without dates remain reachable in the requested tw
  const empty=renderer()([],split,list,now);assert.equal((empty.match(/class="resale-group"/g)||[]).length,2);assert.match(empty,/No hay próximas fiestas/);assert.match(empty,/Todavía no hay fiestas terminadas/);
  const undated=renderer()([{id:'undated',name:'SIN FECHA',date:'',tickets:[]}],split,list,now);assert.match(undated,/Sin fecha definida/);assert.match(undated,/data-party-id="undated"/);
  assert.ok(undated.indexOf('data-party-id="undated"')<undated.indexOf('data-resale-group="finished"'));
+});
+
+test('balance table follows one ascending calendar timeline without mutating parties or sale records',()=>{
+ const before=structuredClone(parties),ordered=orderResaleBalanceParties(parties);
+ assert.deepEqual(ordered.map(p=>p.id),['past-old','past-new','today','future-close','future-far']);
+ assert.deepEqual(parties,before);
+ const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+ const start=app.indexOf("  if ($('#resaleBalanceBody')) {"),end=app.indexOf("  if ($('#resaleBalanceTotal')) {",start);
+ const body={innerHTML:''},split={ownerPercent:70,sellerPercent:30};
+ vm.runInNewContext(app.slice(start,end),{$:()=>body,orderedParties:ordered,partyMetrics,split,money:String,pct:String,escape:String});
+ const names=[...body.innerHTML.matchAll(/<strong>(.*?)<\/strong>/g)].map(match=>match[1]);
+ assert.deepEqual(names,ordered.map(p=>p.name));
+ assert.deepEqual(parties,before);
+ assert.deepEqual(ordered.map(p=>partyMetrics(p,split)),ordered.map(p=>partyMetrics(before.find(original=>original.id===p.id),split)));
+});
+test('balance chronology uses event dates across years, preserves ties and places missing or invalid dates last',()=>{
+ const list=[{id:'none',date:''},{id:'invalid',date:'2026-02-30'},{id:'new-year',date:'2027-01-01'},{id:'tie-a',date:'2026-12-31'},{id:'old',date:'2025-12-31'},{id:'tie-b',date:'2026-12-31'}];
+ const before=structuredClone(list);
+ assert.deepEqual(orderResaleBalanceParties(list).map(p=>p.id),['old','tie-a','tie-b','new-year','none','invalid']);
+ assert.deepEqual(list,before);assert.deepEqual(orderResaleBalanceParties(null),[]);
 });
