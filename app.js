@@ -1,4 +1,4 @@
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout } from './display-controls.js?v=119';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=120';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -12,7 +12,7 @@ import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrash
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=119');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=120');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -922,7 +922,7 @@ function installMainMenuReorder(){
 installMainMenuReorder();
 
 function installOptionMenuReorder(){
-  ['.home-quick-actions','.card-type-chooser','.history-tabs','.report-tabs','.usd-tabs'].forEach((selector)=>{
+  ['.card-type-chooser','.history-tabs','.report-tabs','.usd-tabs'].forEach((selector)=>{
     const list=$(selector);if(!list)return;
     const buttons=[...list.querySelectorAll(':scope > button')];
     buttons.forEach((button)=>{button.dataset.optionOrderKey=button.id||button.dataset.cardTypeView||button.dataset.history||button.dataset.range||button.dataset.usdRange;});
@@ -3343,7 +3343,7 @@ const voiceTrash=$('#voiceTrash');
 function updateVoiceCancelGesture(clientX,clientY){
   if(voiceGestureStartY==null)return;
   const rect=voiceTrash?.getBoundingClientRect?.();
-  const armed=!!rect && clientX>=rect.left-18 && clientX<=rect.right+18 && clientY>=rect.top-18 && clientY<=rect.bottom+18;
+  const armed=isVoiceCancelTarget(voiceGestureStartY,{clientX,clientY},rect);
   if(armed===voiceCancelArmed)return;
   voiceCancelArmed=armed;
   $('#voiceZone')?.classList.toggle('cancel-ready',armed);
@@ -3444,14 +3444,14 @@ $('#homeNotificationsBtn').onclick=()=>{
   if($('#notificationUnclassified'))$('#notificationUnclassified').onclick=()=>{$('#notificationsDialog').close();goView('unclassified');};
   $('#notificationDues').innerHTML=state.cards.filter((c)=>c.type==='Crédito').map((card)=>{
     const due=nextDue(card);return `<article class="payment-alert"><div><strong>${escape(card.name)}</strong><p>Vence ${due.toLocaleDateString('es-AR')}</p><small>${totalsHTML(monthlyCardTotal(card,due))}</small></div></article>`;
-  }).join('')||'<p class="muted">Sin tarjetas de crédito cargadas.</p>';
+  }).join('')||'<p class="muted notification-empty">Sin tarjetas de crédito cargadas.</p>';
   const dismissed=state.settings.dismissedNotifications||[];
   const boxes=['#notificationSafety','#unclassifiedReminder','#paymentReminders','#budgetAlert','#unusual','#notificationOther','#notificationDues'];
   for(const selector of boxes){
     const box=$(selector);if(box.classList.contains('hidden'))continue;
     const items=box.children.length?[...box.children]:box.textContent.trim()?[box]:[];
     for(const item of items){
-      if(!item.textContent.trim())continue;
+      if(!item.textContent.trim()||item.classList.contains('notification-empty'))continue;
       const key=selector+'|'+currentMonthKey()+'|'+item.textContent.trim();
       if(dismissed.includes(key)){item.classList.add('notification-dismissed');continue;}
       item.classList.remove('notification-dismissed');

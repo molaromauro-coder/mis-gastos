@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {normalizeTextScale,scaledFontRules,installTextScaling,pinchGeometry,installViewZoom,installButtonFeedback,homeLayoutDensity,installHomeLayout} from '../display-controls.js';
+import {normalizeTextScale,scaledFontRules,installTextScaling,pinchGeometry,installViewZoom,installButtonFeedback,homeLayoutDensity,installHomeLayout,isVoiceCancelTarget} from '../display-controls.js';
 const font=(selector,value,important='')=>({selectorText:selector,style:{getPropertyValue:()=>value,getPropertyPriority:()=>important}});
 function harness(){
   const events={},timers=new Map();let next=1;
@@ -95,4 +95,14 @@ test('the home controller is versioned and precached so an older cached module c
  const module=app.match(/from '\.\/display-controls\.js\?v=(\d+)'/)[1];
  assert.equal(module,html.match(/app\.js\?v=(\d+)/)[1]);
  assert.ok(sw.includes(`'./display-controls.js?v=${module}'`));
+});
+
+test('audio cancellation requires a deliberate upward drag inside the visible trash target',()=>{
+ const rect={left:100,right:200,top:100,bottom:148,width:100,height:48};
+ assert.equal(isVoiceCancelTarget(230,{clientX:150,clientY:125},rect),true);
+ assert.equal(isVoiceCancelTarget(150,{clientX:150,clientY:125},rect),false);
+ assert.equal(isVoiceCancelTarget(230,{clientX:95,clientY:125},rect),false);
+ assert.equal(isVoiceCancelTarget(230,{clientX:150,clientY:155},rect),false);
+ assert.equal(isVoiceCancelTarget(null,{clientX:150,clientY:125},rect),false);
+ assert.equal(isVoiceCancelTarget(230,{clientX:150,clientY:125},{...rect,width:0}),false);
 });

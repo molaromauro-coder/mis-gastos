@@ -198,3 +198,7 @@ export function installHomeLayout(doc,win){
   win.addEventListener('resize',refresh);win.visualViewport?.addEventListener('resize',refresh);refresh();
   return {refresh};
 }
+
+export function isVoiceCancelTarget(startY,point,rect){
+  return Number.isFinite(startY)&&Number.isFinite(point?.clientX)&&Number.isFinite(point?.clientY)&&!!rect&&rect.width>0&&rect.height>0&&startY-point.clientY>=64&&point.clientX>=rect.left&&point.clientX<=rect.right&&point.clientY>=rect.top&&point.clientY<=rect.bottom;
+}
