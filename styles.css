@@ -750,3 +750,13 @@ img,svg,canvas,video{
 #home[data-density="tight"] .home-month-net>div:not(:first-child){display:flex;align-items:baseline;gap:5px;flex-wrap:wrap}
 #home[data-density="tight"] .home-action{grid-template-columns:minmax(0,1fr);text-align:center}
 #home[data-density="tight"] .home-action-icon{display:none}
+/* Compact recent rows: amount and both actions share one line. */
+#home.active .recent-card{flex:0 1 auto;min-height:96px;padding:6px 9px}
+#home.active .recent-list{flex:0 1 auto;max-height:calc(2 * 54px)}
+#home.active.recent-expanded .recent-list{max-height:none;flex:1 1 auto}
+#home.active.recent-expanded .recent-card{flex:1 1 auto}
+#home.active .recent-movement,:root[data-large-text] #home.active .recent-movement{grid-template-columns:minmax(0,1fr) auto auto!important;gap:5px;padding:4px 0}
+#home.active .recent-movement>div{grid-column:1;grid-row:1}
+#home.active .recent-amount{grid-column:2;grid-row:1}
+#home.active .recent-movement>.expense-actions{grid-column:3;grid-row:1;gap:4px}
+#home.active .voice-zone{margin-top:auto!important}
