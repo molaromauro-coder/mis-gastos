@@ -1685,13 +1685,19 @@ function resalePartyMetricsHTML(party,split){
   const m=partyMetrics(party,split);
   return `<div><small>Costo recuperado</small><strong>${money(m.recovered,'ARS')}</strong></div><div><small>Ventas</small><strong>${money(m.sales,'ARS')}</strong></div><div class="metric-wide"><small>Ganancia neta</small><strong>${money(m.netGain,'ARS')}</strong><em>${pct(m.gainPercent)} general</em></div><div><small>Total Mauro</small><strong>${money(m.totalForOwner,'ARS')}</strong></div><div><small>Total vendedor</small><strong>${money(m.sellerGain,'ARS')}</strong></div>`;
 }
+function currentResaleTicketForRow(row){
+  const party=state.resale.parties.find((item)=>item.id===row.dataset.partyId);
+  const index=Number(row.dataset.ticketIndex);
+  return Number.isInteger(index)&&index>=0?party?.tickets[index]:null;
+}
 function bindResaleTicketEditors(row,party,ticket){
   const price=row.querySelector('.resale-price');
   const status=row.querySelector('.resale-status');
   const persistPrice=()=>{
     const value=parseLocalizedNumber(price.value);
     if(!Number.isFinite(value)||value<0)return;
-    ticket.salePrice=value;
+    const current=currentResaleTicketForRow(row);if(!current)return;
+    current.salePrice=value;
     save();
     renderResale({totalsOnly:true});
   };
@@ -1700,13 +1706,37 @@ function bindResaleTicketEditors(row,party,ticket){
   price.addEventListener('change',persistPrice);
   price.addEventListener('blur',persistPrice);
   status.onchange=()=>{
-    ticket.status=status.value;
+    const current=currentResaleTicketForRow(row);if(!current)return;
+    current.status=status.value;
     save();
     renderResale({totalsOnly:true});
-    if(ticket.status==='Vendida'&&Number(ticket.salePrice||0)<=0){
+    if(current.status==='Vendida'&&Number(current.salePrice||0)<=0){
       price.focus();price.select();showToast('Ingresá el precio de venta');
     }
   };
+}
+function saveAllResaleSales(){
+  for(const row of document.querySelectorAll('.resale-ticket')){
+    const ticket=currentResaleTicketForRow(row);if(!ticket)continue;
+    const price=parseLocalizedNumber(row.querySelector('.resale-price').value);
+    if(!Number.isFinite(price)||price<0)return showToast('Revisá los importes de venta');
+  }
+  const expected=[];
+  for(const row of document.querySelectorAll('.resale-ticket')){
+    const ticket=currentResaleTicketForRow(row);if(!ticket)continue;
+    ticket.salePrice=parseLocalizedNumber(row.querySelector('.resale-price').value);
+    ticket.status=row.querySelector('.resale-status').value;
+    expected.push({partyId:row.dataset.partyId,index:Number(row.dataset.ticketIndex),price:ticket.salePrice,status:ticket.status});
+  }
+  save();
+  const stored=parseStoredState(localStorage.getItem(STORAGE_KEY));
+  const verified=expected.every((item)=>{
+    const ticket=stored?.resale?.parties?.find((party)=>party.id===item.partyId)?.tickets?.[item.index];
+    return ticket?.salePrice===item.price&&ticket?.status===item.status;
+  });
+  if(!verified)return showToast('No se pudo verificar el guardado. Mantené esta pantalla abierta.');
+  renderResale({totalsOnly:true});
+  showToast('✓ Todas las ventas guardadas y verificadas');
 }
 function renderResale({ totalsOnly = false } = {}) {
   if (sharedMode || !$('#resaleList') || !resaleApi) return;
@@ -1759,7 +1789,7 @@ function renderResale({ totalsOnly = false } = {}) {
       if(!party)return;
       card.querySelector('.resale-metrics').innerHTML=resalePartyMetricsHTML(party,split);
       card.querySelectorAll('.resale-ticket').forEach((row)=>{
-        const ticket=party.tickets.find((item)=>item.id===row.dataset.ticketId);
+        const ticket=currentResaleTicketForRow(row);
         if(ticket)row.querySelector('.resale-ticket-result').innerHTML=resaleTicketResultHTML(ticket,split);
       });
     });
@@ -1771,8 +1801,8 @@ function renderResale({ totalsOnly = false } = {}) {
   }
   $('#resaleList').innerHTML = orderedParties.map((party) => {
     const m = partyMetrics(party, split);
-    const tickets = party.tickets.map((ticket) => {
-      return `<div class="resale-ticket" data-ticket-id="${escape(ticket.id)}" data-party-id="${escape(party.id)}">
+    const tickets = party.tickets.map((ticket,ticketIndex) => {
+      return `<div class="resale-ticket" data-ticket-index="${ticketIndex}" data-ticket-id="${escape(ticket.id)}" data-party-id="${escape(party.id)}">
         <div class="resale-ticket-head"><div><strong>${escape(ticket.type)} · #${integerText(ticket.number)}</strong><small>Costo ${money(ticket.cost, 'ARS')}</small></div><select class="resale-status">
           ${['Disponible','Vendida','Uso personal'].map((s) => `<option ${ticket.status === s ? 'selected' : ''}>${s}</option>`).join('')}
         </select></div>
@@ -1790,7 +1820,7 @@ function renderResale({ totalsOnly = false } = {}) {
   bindLocalizedNumberInputs($('#resaleList'));
   document.querySelectorAll('.resale-ticket').forEach((row) => {
     const party = state.resale.parties.find((p) => p.id === row.dataset.partyId);
-    const ticket = party?.tickets.find((t) => t.id === row.dataset.ticketId);
+    const ticket = currentResaleTicketForRow(row);
     if (!ticket) return;
     bindResaleTicketEditors(row, party, ticket);
   });
@@ -3378,6 +3408,7 @@ $('#resaleSplitForm').onsubmit = (event) => {
   state.resale.ownerPercent = split.ownerPercent; state.resale.sellerPercent = split.sellerPercent;
   save(); $('#resaleSplitDialog').close(); renderResale(); showToast('Reparto actualizado en toda Reventa');
 };
+$('#saveResaleSales').onclick=saveAllResaleSales;
 $('#exportResale').onclick = exportResaleCsv;
 $('#importResaleExcel').onclick=()=>$('#resaleImportFile').click();
 $('#resaleImportFile').onchange=(event)=>readResaleExcelFile(event.target.files?.[0]);

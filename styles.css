@@ -612,3 +612,5 @@ img,svg,canvas,video{
 .reorderable,.reorderable *{-webkit-touch-callout:none}
 .reorder-ghost{position:fixed!important;z-index:2147483647!important;pointer-events:none!important;margin:0!important;box-sizing:border-box;opacity:.92;transition:none!important;box-shadow:0 12px 30px #173f3750!important;outline:2px solid #2f806f}
 .reorderable.drag-selected{opacity:.35;transform:none!important}
+
+.resale-save-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 14px}.resale-save-bar button{background:#173f37;color:white;border:0;border-radius:12px;padding:10px 12px;font-weight:700}
