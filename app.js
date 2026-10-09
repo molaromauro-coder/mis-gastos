@@ -1677,7 +1677,38 @@ function showPending() {
 const uid = () => crypto.randomUUID?.() || ('id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
 const pct = (n) => `${Number(n || 0).toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`;
 function resaleSplit() { return normalizeSplit(state.resale.ownerPercent, state.resale.sellerPercent); }
-function renderResale() {
+function resaleTicketResultHTML(ticket,split){
+  const tm=ticketMetrics(ticket,split);
+  return `<span>Recuperado <strong>${money(tm.recovered,'ARS')}</strong></span><span>Ganancia <strong>${money(tm.netGain,'ARS')}</strong></span><span>% <strong>${ticket.status==='Vendida'?pct(tm.gainPercent):'—'}</strong></span><span>Mauro <strong>${money(tm.ownerGain,'ARS')}</strong></span><span>Vendedor <strong>${money(tm.sellerGain,'ARS')}</strong></span>`;
+}
+function resalePartyMetricsHTML(party,split){
+  const m=partyMetrics(party,split);
+  return `<div><small>Costo recuperado</small><strong>${money(m.recovered,'ARS')}</strong></div><div><small>Ventas</small><strong>${money(m.sales,'ARS')}</strong></div><div class="metric-wide"><small>Ganancia neta</small><strong>${money(m.netGain,'ARS')}</strong><em>${pct(m.gainPercent)} general</em></div><div><small>Total Mauro</small><strong>${money(m.totalForOwner,'ARS')}</strong></div><div><small>Total vendedor</small><strong>${money(m.sellerGain,'ARS')}</strong></div>`;
+}
+function bindResaleTicketEditors(row,party,ticket){
+  const price=row.querySelector('.resale-price');
+  const status=row.querySelector('.resale-status');
+  const persistPrice=()=>{
+    const value=parseLocalizedNumber(price.value);
+    if(!Number.isFinite(value)||value<0)return;
+    ticket.salePrice=value;
+    save();
+    renderResale({totalsOnly:true});
+  };
+  // Save every edit before focus moves to the next ticket. Keep all inputs alive.
+  price.addEventListener('input',persistPrice);
+  price.addEventListener('change',persistPrice);
+  price.addEventListener('blur',persistPrice);
+  status.onchange=()=>{
+    ticket.status=status.value;
+    save();
+    renderResale({totalsOnly:true});
+    if(ticket.status==='Vendida'&&Number(ticket.salePrice||0)<=0){
+      price.focus();price.select();showToast('Ingresá el precio de venta');
+    }
+  };
+}
+function renderResale({ totalsOnly = false } = {}) {
   if (sharedMode || !$('#resaleList') || !resaleApi) return;
   const split = resaleSplit();
   const orderedParties = orderResalePartiesByDate ? orderResalePartiesByDate(state.resale.parties, new Date()) : [...state.resale.parties];
@@ -1722,6 +1753,18 @@ function renderResale() {
   if ($('#resaleBalanceTotal')) {
     $('#resaleBalanceTotal').innerHTML = `<tr><th>TOTAL GENERAL</th><th>${money(total.investment,'ARS')}</th><th>${money(total.recovered,'ARS')}</th><th>${money(total.sales,'ARS')}</th><th>${money(total.totalForOwner,'ARS')}</th><th>${money(total.netGain,'ARS')}</th><th>${pct(total.gainPercent)}</th><th>${money(total.ownerGain,'ARS')}</th><th>${money(total.sellerGain,'ARS')}</th></tr>`;
   }
+  if (totalsOnly) {
+    document.querySelectorAll('.resale-party').forEach((card) => {
+      const party=state.resale.parties.find((item)=>item.id===card.dataset.partyId);
+      if(!party)return;
+      card.querySelector('.resale-metrics').innerHTML=resalePartyMetricsHTML(party,split);
+      card.querySelectorAll('.resale-ticket').forEach((row)=>{
+        const ticket=party.tickets.find((item)=>item.id===row.dataset.ticketId);
+        if(ticket)row.querySelector('.resale-ticket-result').innerHTML=resaleTicketResultHTML(ticket,split);
+      });
+    });
+    return;
+  }
   if (!state.resale.parties.length) {
     $('#resaleList').innerHTML = '<div class="empty">Todavía no cargaste ninguna fiesta. Tocá “＋ Compra” para empezar.</div>';
     return;
@@ -1729,20 +1772,18 @@ function renderResale() {
   $('#resaleList').innerHTML = orderedParties.map((party) => {
     const m = partyMetrics(party, split);
     const tickets = party.tickets.map((ticket) => {
-      const tm = ticketMetrics(ticket, split);
-      const sold = ticket.status === 'Vendida';
       return `<div class="resale-ticket" data-ticket-id="${escape(ticket.id)}" data-party-id="${escape(party.id)}">
         <div class="resale-ticket-head"><div><strong>${escape(ticket.type)} · #${integerText(ticket.number)}</strong><small>Costo ${money(ticket.cost, 'ARS')}</small></div><select class="resale-status">
           ${['Disponible','Vendida','Uso personal'].map((s) => `<option ${ticket.status === s ? 'selected' : ''}>${s}</option>`).join('')}
         </select></div>
         <div class="resale-ticket-sale"><label>Precio de venta<span class="resale-money-input"><b>$</b><input class="resale-price" type="text" inputmode="decimal" data-local-number="2" value="${formatNumericInputValue(ticket.salePrice||0,{maximumFractionDigits:2})}"></span></label>
-        <div class="resale-ticket-result"><span>Recuperado <strong>${money(tm.recovered, 'ARS')}</strong></span><span>Ganancia <strong>${money(tm.netGain, 'ARS')}</strong></span><span>% <strong>${sold ? pct(tm.gainPercent) : '—'}</strong></span><span>Mauro <strong>${money(tm.ownerGain, 'ARS')}</strong></span><span>Vendedor <strong>${money(tm.sellerGain, 'ARS')}</strong></span></div></div>
+        <div class="resale-ticket-result">${resaleTicketResultHTML(ticket,split)}</div></div>
       </div>`;
     }).join('');
     const partyDateLabel=party.date ? new Date(party.date + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin fecha';
     return `<details class="resale-party" data-party-id="${escape(party.id)}"><summary><strong>${escape(party.name)}</strong><small class="resale-party-date">${escape(partyDateLabel)}</small><span>›</span></summary>
       <div class="resale-party-meta">${partyDateLabel} · ${integerText(m.totalTickets)} entradas</div>
-      <div class="resale-metrics"><div><small>Costo recuperado</small><strong>${money(m.recovered,'ARS')}</strong></div><div><small>Ventas</small><strong>${money(m.sales,'ARS')}</strong></div><div class="metric-wide"><small>Ganancia neta</small><strong>${money(m.netGain,'ARS')}</strong><em>${pct(m.gainPercent)} general</em></div><div><small>Total Mauro</small><strong>${money(m.totalForOwner,'ARS')}</strong></div><div><small>Total vendedor</small><strong>${money(m.sellerGain,'ARS')}</strong></div></div>
+      <div class="resale-metrics">${resalePartyMetricsHTML(party,split)}</div>
       <div class="resale-tickets">${tickets || '<div class="empty">Todavía no cargaste entradas para esta fiesta.</div>'}</div>
       <div class="resale-party-actions"><button class="resale-add-tickets" type="button">＋ Agregar entradas</button><button class="delete-party" type="button">Eliminar fiesta</button></div></details>`;
   }).join('');
@@ -1751,32 +1792,7 @@ function renderResale() {
     const party = state.resale.parties.find((p) => p.id === row.dataset.partyId);
     const ticket = party?.tickets.find((t) => t.id === row.dataset.ticketId);
     if (!ticket) return;
-    const refreshKeepingPartyOpen = (update, { focusPrice = false } = {}) => {
-      const partyId = row.dataset.partyId;
-      const ticketId = row.dataset.ticketId;
-      const scrollTop = document.scrollingElement?.scrollTop ?? window.scrollY;
-      update();
-      save();
-      renderResale();
-      const updatedParty = [...document.querySelectorAll('.resale-party')].find((card) => card.dataset.partyId === partyId);
-      if (updatedParty) updatedParty.open = true;
-      requestAnimationFrame(() => {
-        window.scrollTo({ top: scrollTop, left: 0, behavior: 'instant' });
-        if (focusPrice) {
-          const updatedRow = [...document.querySelectorAll('.resale-ticket')].find((item) => item.dataset.ticketId === ticketId);
-          const priceInput = updatedRow?.querySelector('.resale-price');
-          priceInput?.focus();
-          priceInput?.select();
-          showToast('Ingresá el precio de venta');
-        }
-      });
-    };
-    row.querySelector('.resale-status').onchange = (e) => {
-      const nextStatus = e.target.value;
-      const needsPrice = nextStatus === 'Vendida' && Number(ticket.salePrice || 0) <= 0;
-      refreshKeepingPartyOpen(() => { ticket.status = nextStatus; }, { focusPrice: needsPrice });
-    };
-    row.querySelector('.resale-price').onchange = (e) => refreshKeepingPartyOpen(() => { ticket.salePrice = parseLocalizedNumber(e.target.value); });
+    bindResaleTicketEditors(row, party, ticket);
   });
   document.querySelectorAll('.resale-party').forEach((card) => {
     card.querySelector('.resale-add-tickets').onclick = () => {
