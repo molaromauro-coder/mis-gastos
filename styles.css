@@ -815,3 +815,7 @@ img,svg,canvas,video{
 .notification-row>:first-child{flex:1;min-width:0}
 .notification-delete{flex:0 0 38px;width:38px;height:38px;border:0;border-radius:50%;background:#fbe5e3;color:#b8443e;font-size:24px}
 .notification-dismissed{display:none!important}
+
+#home.active #manualBtn{grid-column:1;grid-row:1}
+#home.active .home-category-shortcuts{grid-column:2;grid-row:1;grid-template-rows:40px 38px;align-content:start}
+#home.active .home-notifications{height:38px;min-height:38px;margin:0}
