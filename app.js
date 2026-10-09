@@ -1,4 +1,4 @@
-import { cardPurchasesInMonth, upcomingCardPayments } from './card-summary.js';
+import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel } from './category-display.js';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
@@ -44,7 +44,7 @@ function bestLocalSnapshot(){
   return retainedExpenseCount(best)>retainedExpenseCount(primary||{})?best:(primary||best);
 }
 function permitDestructiveWriteOnce(){destructiveWriteAllowed=true;}
-const defaults = { expenses: [], cards: [], categories: [], subcategories: {}, categoryRules: [], stock: [], recoveries: [], budgets: {}, recurring: [], fixedExpenses: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 5 };
+const defaults = { expenses: [], cards: [], cardPayments: [], categories: [], subcategories: {}, categoryRules: [], stock: [], recoveries: [], budgets: {}, recurring: [], fixedExpenses: [], trash: [], security: { enabled: false, pinHash: '', pinSalt: '', credentialId: '' }, settings: { reminderDays: [3, 2, 1], usdRateType: 'oficial', usdRateCache: {}, budgetAlerts: [80, 90, 100], hideAmounts: false, consultSpeak: true }, resale: { ownerPercent: 70, sellerPercent: 30, parties: [] }, schemaVersion: 5 };
 function loadState() {
   try {
     const old = bestLocalSnapshot();
@@ -68,6 +68,7 @@ function loadState() {
       ...old,
       expenses: old.expenses || [],
       cards: old.cards || [],
+      cardPayments: Array.isArray(old.cardPayments)?old.cardPayments:[],
       categories: old.categories || [],
       subcategories: old.subcategories || {},
       categoryRules: old.categoryRules || [],
@@ -1006,7 +1007,32 @@ function renderCards() {
 
   const credit=state.cards.filter((c)=>c.type==='Crédito');
   $('#dueList').innerHTML=credit.length?credit.map((c)=>{const due=nextDue(c),items=monthlyCardTotal(c,due).slice().sort((a,b)=>effectiveDate(a)-effectiveDate(b));const details=items.length?items.map((e)=>`<div class="due-line"><span>${escape(e.concept||'Sin detalle')}${e.installments>1?` · cuota ${integerText(e.installment||1)} de ${integerText(e.installments)}`:''}</span><strong>${money(e.amount,e.currency)}</strong></div>`).join(''):'<small class="muted">Sin consumos para este vencimiento.</small>';return `<article class="due-item"><div class="due-main"><strong>${escape(c.name)}</strong><p>Próximo vencimiento: ${due.toLocaleDateString('es-AR')}</p><strong class="due-total">${totalsHTML(items)}</strong><div class="due-lines">${details}</div></div></article>`;}).join(''):'<div class="empty">Agregá una tarjeta de crédito para ver vencimientos.</div>';
-  $('#cardHistory').innerHTML=credit.map((c)=>`<details class="history-card"><summary>${escape(c.name)}</summary>${Array.from({length:6},(_,i)=>{const d=new Date(now.getFullYear(),now.getMonth()-i,1),items=monthlyCardTotal(c,d),lines=items.map((e)=>`<small>${escape(e.concept||'Sin detalle')}${e.installments>1?` · ${integerText(e.installment||1)} de ${integerText(e.installments)}`:''}: ${money(e.amount,e.currency)}</small>`).join('');return `<div class="history-row"><div><span>${d.toLocaleDateString('es-AR',{month:'long',year:'numeric'})}</span>${lines}</div><strong>${totalsHTML(items)}</strong></div>`;}).join('')}</details>`).join('');
+  renderCardStatements(credit,now);
+}
+function cardInstallmentLines(items,purchases=false){
+  return items.length?items.map((item)=>`<div class="due-line"><span>${escape(item.concept||'Sin detalle')}${item.installments>1?` · ${purchases?integerText(item.installments)+' cuotas':'cuota '+integerText(item.installment||1)+' de '+integerText(item.installments)}`:''}</span><strong>${money(item.amount,item.currency)}</strong></div>`).join(''):'<small class="muted">Sin movimientos.</small>';
+}
+function renderCardStatements(cards,now=new Date()){
+  const payments=state.cardPayments||[];
+  $('#cardForecast').innerHTML=cards.length?cards.map((card)=>`<details class="history-card"><summary>${escape(card.name)} · resúmenes futuros</summary>${cardStatementProjection(state.expenses,card,now).map(({date,items})=>`<details class="card-month"><summary><span>${date.toLocaleDateString('es-AR',{month:'long',year:'numeric'})}<small>Vence ${date.toLocaleDateString('es-AR')}</small></span><strong>${totalsHTML(items)}</strong></summary><div class="card-month-content">${cardInstallmentLines(items)}</div></details>`).join('')}</details>`).join(''):'<div class="empty">Agregá una tarjeta de crédito.</div>';
+  const openCards=new Set(Array.from($('#cardHistory').querySelectorAll('details[data-history-card][open]')).map((node)=>node.dataset.historyCard));
+  const openMonths=new Set(Array.from($('#cardHistory').querySelectorAll('details[data-history-month][open]')).map((node)=>node.dataset.historyMonth));
+  $('#cardHistory').innerHTML=cards.map((card)=>`<details class="history-card" data-history-card="${escape(card.id)}" ${openCards.has(card.id)?'open':''}><summary>${escape(card.name)}</summary>${cardHistoryMonths(state.expenses,payments,card,now).map((date)=>{
+    const key=monthKey(date),row=cardMonthSummary(state.expenses,payments,card,date),openKey=card.id+'|'+key;
+    return `<details class="card-month" data-history-month="${escape(openKey)}" ${openMonths.has(openKey)?'open':''}><summary><span>${date.toLocaleDateString('es-AR',{month:'long',year:'numeric'})}<small>Compras: ${totalsHTML(row.purchases)}</small><small>Pagos registrados: ${totalsHTML(row.payments)}</small></span></summary><div class="card-month-content"><div class="card-month-totals"><div><small>Compras realizadas en el mes</small><strong>${totalsHTML(row.purchases)}</strong></div><div><small>Resumen con vencimiento en el mes</small><strong>${totalsHTML(row.dueItems)}</strong></div><div><small>Pagos registrados en el mes</small><strong>${totalsHTML(row.payments)}</strong>${row.payments.length?'':'<small class="muted">Sin pagos registrados</small>'}</div></div><details><summary>Ver compras</summary>${cardInstallmentLines(row.purchases,true)}</details><details><summary>Ver cuotas del resumen</summary>${cardInstallmentLines(row.dueItems)}</details>${row.payments.map((payment)=>`<div class="card-payment-record"><span>${new Date(payment.date+'T12:00:00').toLocaleDateString('es-AR')} · ${money(payment.amount,payment.currency)}<small>Aplicado al resumen ${escape(payment.statementMonth)}</small></span><button type="button" data-delete-card-payment="${escape(payment.id)}" aria-label="Eliminar registro de pago">×</button></div>`).join('')}<details class="card-payment-editor"><summary>＋ Registrar pago de este resumen</summary><form class="card-payment-form" data-card-id="${escape(card.id)}" data-statement-month="${key}"><label>Fecha del pago<input name="date" type="date" value="${dateInputValue(now)}" required></label><label>Moneda<select name="currency"><option value="ARS">Pesos</option><option value="USD">Dólares</option></select></label><label>Importe pagado ($)<input name="amount" type="text" data-local-number="2" inputmode="decimal" placeholder="0,00" required></label><button type="submit" class="primary">Guardar pago</button><small class="muted">Se registra el pago sin sumar otro gasto.</small></form></details></div></details>`;
+  }).join('')}</details>`).join('');
+  bindLocalizedNumberInputs($('#cardHistory'));
+  $('#cardHistory').querySelectorAll('.card-payment-form').forEach((form)=>{form.onsubmit=(event)=>{
+    event.preventDefault();
+    try{
+      const payment=createCardPayment({id:uid(),cardId:form.dataset.cardId,statementMonth:form.dataset.statementMonth,date:form.elements.date.value,amount:parseLocalizedNumber(form.elements.amount.value),currency:form.elements.currency.value});
+      state.cardPayments||=[];state.cardPayments.push(payment);save();renderCardStatements(cards,now);showToast(`Pago registrado en ${new Date(payment.date+'T12:00:00').toLocaleDateString('es-AR',{month:'long',year:'numeric'})}.`);
+    }catch(error){showToast(error.message);}
+  };});
+  $('#cardHistory').querySelectorAll('[data-delete-card-payment]').forEach((button)=>{button.onclick=()=>{
+    if(!confirm('¿Eliminar este registro de pago? Los gastos y las cuotas se conservan.'))return;
+    state.cardPayments=(state.cardPayments||[]).filter((payment)=>payment.id!==button.dataset.deleteCardPayment);save();renderCardStatements(cards,now);showToast('Registro de pago eliminado');
+  };});
 }
 function renderPaymentReminders() { const today = new Date(); today.setHours(12, 0, 0, 0); const allowed = state.settings.reminderDays; const reminders = state.cards.filter((c) => c.type === 'Crédito').map((card) => ({ card, due: nextDue(card, today) })).map((x) => ({ ...x, days: Math.round((x.due - today) / 86400000) })).filter((x) => allowed.includes(x.days)); $('#paymentReminders').innerHTML = reminders.map(({ card, due, days }) => `<article class="payment-alert"><span>▰</span><div><strong>${days ? `Vence en ${integerText(days)} día${days > 1 ? 's' : ''}` : 'Vence hoy'} · ${escape(card.name)}</strong><small>Disponible necesario: ${totalsHTML(monthlyCardTotal(card, due))}</small></div></article>`).join(''); }
 function years() { const now = new Date().getFullYear(); return Array.from(new Set([now, ...state.expenses.map((e) => effectiveDate(e).getFullYear())])).sort((a, b) => b - a); }
