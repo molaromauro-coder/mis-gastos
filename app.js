@@ -1,3 +1,4 @@
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback } from './display-controls.js';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -11,7 +12,7 @@ import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrash
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
 import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=107');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=108');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -207,6 +208,7 @@ importJohnDigweedPurchasesOnce();
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
 let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, selectedFixedExpenseOrderId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 2;
 const $ = (s) => document.querySelector(s);
+let displayFeatures=null;
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
 const numberText=(n,maximumFractionDigits=2)=>formatLocalizedNumber(n,{maximumFractionDigits});
 const integerText=(n)=>formatLocalizedInteger(n);
@@ -639,7 +641,7 @@ function renderHomeRecent(){
   }
   $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>4);
 }
-function render() { if(reclassifyUncategorizedExpenses())save(); renderHomeClock();renderMonthlyNetSummary(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderUnclassifiedReminder(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderTrash(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
+function render() { displayFeatures?.setTextScale(state.settings.textScale); if(reclassifyUncategorizedExpenses())save(); renderHomeClock();renderMonthlyNetSummary(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderUnclassifiedReminder(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderTrash(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function subcategoriesFor(category){
   const values=state.subcategories?.[category];
@@ -1287,20 +1289,6 @@ function historyBounds() { const now = new Date(); if (historyRange === 'today')
 function renderHistory() { $('#historyYear').innerHTML = years().map((y) => `<option>${y}</option>`).join(''); const [from, to] = historyBounds(); const items = state.expenses.filter((e) => effectiveDate(e) >= from && effectiveDate(e) <= to).sort((a, b) => effectiveDate(b) - effectiveDate(a)); const [ars, usd] = totals(items); $('#historyArs').textContent = money(ars, 'ARS'); $('#historyUsd').textContent = money(usd, 'USD'); $('#historyList').innerHTML = items.length ? items.map((e) => expenseHTML(e, true)).join('') : '<div class="empty">No hay movimientos en este período.</div>'; }
 function showToast(message, undo = false) { const toast = $('#toast'); toast.textContent = undo ? `${message} · DESHACER` : message; toast.classList.add('show'); toast.style.pointerEvents = undo ? 'auto' : 'none'; toast.onclick = undo ? () => { if (discarded) pending.splice(discarded.index, 0, discarded.item); discarded = null; showPending(); showToast('Gasto recuperado'); } : null; clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove('show'), 3500); }
 function feedback(ok) { navigator.vibrate?.(ok ? 50 : [120, 50, 120]); try { const ctx = new AudioContext(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.frequency.value = ok ? 720 : 180; gain.gain.value = .035; osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + (ok ? .08 : .16)); } catch {} }
-let tapAudioContext=null;
-function softTapFeedback(){
-  navigator.vibrate?.(10);
-  try {
-    const AudioCtx=window.AudioContext||window.webkitAudioContext;
-    if(!AudioCtx)return;
-    if(!tapAudioContext)tapAudioContext=new AudioCtx();
-    if(tapAudioContext.state==='suspended')tapAudioContext.resume?.().catch?.(()=>{});
-    const osc=tapAudioContext.createOscillator(),gain=tapAudioContext.createGain();
-    osc.frequency.value=520; gain.gain.value=.012;
-    osc.connect(gain).connect(tapAudioContext.destination); osc.start(); osc.stop(tapAudioContext.currentTime+.025);
-  } catch {}
-}
-document.addEventListener('pointerdown',(event)=>{const button=event.target.closest?.('button');if(!button||button.disabled)return;softTapFeedback();},{passive:true});
 function openExpense(data = {}) {
   $('#expenseForm').reset();
   setLocalizedInput('#amount',data.amount||'',2);
@@ -3063,7 +3051,18 @@ $('#quickCategory').onclick = () => { const category=createCategoryFromPrompt('#
 $('#quickSubcategory').onclick = () => createSubcategoryFromPrompt('#category','#subcategory','#subcategoryWrap');
 $('#editSelectedCategory').onclick=()=>{if(editCategoryFromSelect('#category'))fillSubcategories();};
 $('#editSelectedSubcategory').onclick=()=>editSubcategoryFromSelect('#category','#subcategory','#subcategoryWrap');
-function renderReminderSettings() { const labels = { 3: '3 días antes', 2: '2 días antes', 1: '1 día antes' }; $('#reminderSettings').innerHTML = [3, 2, 1].map((d) => `<label><input type="checkbox" value="${d}" ${state.settings.reminderDays.includes(d) ? 'checked' : ''}>${labels[d]}</label>`).join(''); $('#reminderSettings').onchange = () => { state.settings.reminderDays = [...$('#reminderSettings').querySelectorAll(':checked')].map((i) => Number(i.value)); save(); renderPaymentReminders(); }; }
+function renderReminderSettings() { $('#fontScale').value=String(normalizeTextScale(state.settings.textScale)); const labels = { 3: '3 días antes', 2: '2 días antes', 1: '1 día antes' }; $('#reminderSettings').innerHTML = [3, 2, 1].map((d) => `<label><input type="checkbox" value="${d}" ${state.settings.reminderDays.includes(d) ? 'checked' : ''}>${labels[d]}</label>`).join(''); $('#reminderSettings').onchange = () => { state.settings.reminderDays = [...$('#reminderSettings').querySelectorAll(':checked')].map((i) => Number(i.value)); save(); renderPaymentReminders(); }; }
+$('#fontScale').onchange=()=>{
+  const previous=state.settings.textScale;
+  state.settings.textScale=normalizeTextScale($('#fontScale').value);
+  displayFeatures?.setTextScale(state.settings.textScale);
+  if(save()===false){
+    if(previous===undefined)delete state.settings.textScale;else state.settings.textScale=previous;
+    displayFeatures?.setTextScale(previous);$('#fontScale').value=String(normalizeTextScale(previous));
+    showToast('No se pudo guardar el tamaño. Tus datos se conservaron.');
+  }
+};
+$('#resetViewZoom').onclick=(event)=>displayFeatures?.zoom.reset(event.target);
 function cloneState(snapshot=state){return typeof structuredClone==='function'?structuredClone(snapshot):JSON.parse(JSON.stringify(snapshot));}
 function restoreState(snapshot){
   const restored=cloneState(snapshot);
@@ -3647,6 +3646,8 @@ $('#cancelResaleImport').onclick=()=>{pendingResaleImport=null;$('#resaleImportR
 
 window.addEventListener('pagehide',()=>{try{save();}catch{}}); document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){try{save();}catch{}}});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then((registration) => registration.update());
+displayFeatures={setTextScale:installTextScaling(document),zoom:installViewZoom(document,window),buttons:installButtonFeedback(document,window)};
+displayFeatures.setTextScale(state.settings.textScale);
 bindLocalizedNumberInputs();
 const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.slice(0,7); $('#historyDate').value = todayISO; $('#historyMonth').value = monthISO; $('#historyFrom').value = todayISO; $('#historyTo').value = todayISO; $('#fromDate').value = todayISO.slice(0,8)+'01'; $('#toDate').value = todayISO; $('#usdFromDate').value = todayISO.slice(0,8)+'01'; $('#usdToDate').value = todayISO; $('#stockPaidDate').value=todayISO; $('#recoveryDate').value=todayISO; $('#recoveryMonth').value=monthISO; $('#budgetMonth').value=monthISO; $('#fixedExpenseMonth').value=monthISO; $('#consultFrom').value=''; $('#consultTo').value=''; $('#compareMonthA').value=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)); $('#compareMonthB').value=monthISO; $('#consultSpeak').checked=state.settings.consultSpeak!==false; document.body.classList.toggle('hide-amounts',!!state.settings.hideAmounts); $('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁'; save(); render(); void attemptIndexedRecovery().then(async()=>{
   if(Number(state.settings?.fullRecoverySweepVersion||0)<1){
