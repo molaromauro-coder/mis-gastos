@@ -639,7 +639,7 @@ function renderHomeRecent(){
     more.classList.toggle('hidden',all.length<=2);
     more.textContent=all.length>2?(expanded?'⌃ Ver menos':'⌄ Ver más'):'';
   }
-  $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>4);
+  $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>2);
   displayFeatures?.home?.refresh();
 }
 function render() { displayFeatures?.setTextScale(state.settings.textScale); if(reclassifyUncategorizedExpenses())save(); renderHomeClock();renderMonthlyNetSummary(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderUnclassifiedReminder(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderTrash(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
@@ -3091,7 +3091,7 @@ $('#settingsBtn').onclick = () => {
 };
 function closeDialogById(id){const dialog=$(id);if(dialog?.open)dialog.close();}
 function refreshAfterExpenseReset(){
-  recentHomeLimit=4;
+  recentHomeLimit=2;
   if($('#confirmDialog')?.open)$('#confirmDialog').close();
   save();
   renderTrash();
