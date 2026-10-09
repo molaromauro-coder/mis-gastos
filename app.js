@@ -1,5 +1,5 @@
 import { cardPurchasesInMonth, upcomingCardPayments } from './card-summary.js';
-import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
+import { categoryDisplayLabel } from './category-display.js';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -2770,7 +2770,7 @@ function addCategory() {
   if(created&&input)input.value='';
   return created;
 }
-function isFixedExpenseMasterCategory(category){return categoryBaseName(category)==='GASTOS FIJOS';}
+function isFixedExpenseMasterCategory(category){return normalizedCategoryName(category)===normalizedCategoryName('GASTOS FIJOS');}
 function ensureFixedExpenseForSubcategory(category,subcategory){
   if(!isFixedExpenseMasterCategory(category)||!subcategory)return false;
   if(!Array.isArray(state.fixedExpenses))state.fixedExpenses=[];
