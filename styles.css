@@ -614,3 +614,8 @@ img,svg,canvas,video{
 .reorderable.drag-selected{opacity:.35;transform:none!important}
 
 .resale-save-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 14px}.resale-save-bar button{background:#173f37;color:white;border:0;border-radius:12px;padding:10px 12px;font-weight:700}
+
+/* Entradas alternadas: el patrón comienza de nuevo en cada fiesta. */
+.resale-tickets>.resale-ticket{padding:12px 8px;border-bottom:1px solid #d9e2df}
+.resale-tickets>.resale-ticket:nth-child(odd){background:#fff}
+.resale-tickets>.resale-ticket:nth-child(even){background:#e5ede9}
