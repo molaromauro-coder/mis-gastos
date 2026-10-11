@@ -18,7 +18,7 @@ function dateISO(value,year){
   }
   const raw=String(value??'').trim();
   const iso=raw.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/);
-  if(iso)return `${iso[1]}-${iso[2].padStart(2,'0')}-${iso[3].padStart(2,'0')}`;
+  if(iso){const y=Number(iso[1]),m=Number(iso[2]),day=Number(iso[3]),d=new Date(y,m-1,day);return d.getFullYear()===y&&d.getMonth()===m-1&&d.getDate()===day?`${iso[1]}-${iso[2].padStart(2,'0')}-${iso[3].padStart(2,'0')}`:'';}
   const match=raw.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
   if(!match)return '';
   let y=match[3]?Number(match[3]):Number(year);
@@ -58,18 +58,18 @@ function importedStatus(value,salePrice){
 export function parseResaleTable(matrix,existingParties=[],todayYear=new Date().getFullYear()){
   const header=detectHeader(matrix);
   if(!header)return {rows:[],warnings:['No encontré columnas Fiesta, Tipo de entrada y Costo de compra. Revisá la hoja Ventas.']};
-  const {cols}=header,warnings=[],rows=[],seen=new Set(),counts=new Map();
+  const {cols}=header,warnings=[],rows=[],seen=new Set(),counts=new Map(),batches=new Map(),dateWarnings=new Set();
   const existingYear=new Map(existingParties.map((p)=>[norm(p.name),Number(String(p.date||'').slice(0,4))||todayYear]));
-  let lastParty='';
+  let lastParty='',block=0;
   for(let i=header.row+1;i<matrix.length;i++){
     const cells=matrix[i]||[];
     const get=(field)=>cols[field]>=0?cells[cols[field]]:'';
     const name=String(get('party')??'').trim()||lastParty;
-    if(/^total(?:\s|\s*-)/i.test(name)||/^subtotal/i.test(name)){lastParty='';continue;}
+    if(/^total(?:\s|\s*-)/i.test(name)||/^subtotal/i.test(name)){lastParty='';block++;continue;}
     if(!name)continue;
     if(!isBlank(get('party')))lastParty=name;
     const type=String(get('type')??'').trim();
-    if(!type||/^total/i.test(type))continue;
+    if(!type||/^total/i.test(type)){block++;continue;}
     if(isBlank(get('cost'))){warnings.push(`Fila ${i+1}: ${name} / ${type} sin costo de compra; se omitió.`);continue;}
     const cost=decimal(get('cost')),salePrice=decimal(get('sale'));
     if(cost<0||salePrice<0){warnings.push(`Fila ${i+1}: importe negativo; se omitió.`);continue;}
@@ -79,15 +79,19 @@ export function parseResaleTable(matrix,existingParties=[],todayYear=new Date().
     const explicit=cols.number>=0&&Number.isInteger(rawNumber)&&rawNumber>0;
     const qty=explicit?1:(cols.qty>=0?Math.max(1,Math.min(1000,Math.floor(decimal(get('qty'))||1))):1);
     const date=dateISO(get('date'),existingYear.get(norm(name))||todayYear);
-    const dateExplicit=/\b(?:19|20)\d{2}\b/.test(String(get('date')??''))||get('date') instanceof Date||typeof get('date')==='number';
+    const dateExplicit=/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b(?:19|20)\d{2}[/-]\d{1,2}[/-]\d{1,2}\b/.test(String(get('date')??''))||get('date') instanceof Date||typeof get('date')==='number';
+    if(!isBlank(get('date'))&&!date&&!dateWarnings.has(norm(name))){warnings.push(`${name}: fecha de fiesta inválida (${String(get('date'))}); se conserva la fecha de la app o queda sin fecha.`);dateWarnings.add(norm(name));}
+    let batch=batches.get(key)||{last:0,offset:0,cost,block};
+    if(explicit&&rawNumber<=batch.last&&(cost!==batch.cost||block!==batch.block)){batch={last:0,offset:current,cost,block};}
+    if(explicit){batch.last=rawNumber;batch.cost=cost;batch.block=block;batches.set(key,batch);}
     for(let j=0;j<qty;j++){
-      const number=explicit?rawNumber:current+j+1;
+      const number=explicit?rawNumber+batch.offset:current+j+1;
       const ticketKey=`${key}|${number}`;
       if(seen.has(ticketKey)){warnings.push(`Fila ${i+1}: entrada repetida ${name} / ${type} #${number}; se omitió.`);continue;}
       seen.add(ticketKey);
       rows.push({partyName:name,date,dateExplicit,type,number,cost,salePrice,status:importedStatus(get('status'),salePrice),row:i+1});
     }
-    counts.set(key,Math.max(current+qty,explicit?rawNumber:0));
+    counts.set(key,Math.max(current,explicit?rawNumber+batch.offset:current+qty));
   }
   if(!rows.length&&!warnings.length)warnings.push('La hoja no contiene entradas reconocibles.');
   return {rows,warnings};
@@ -141,5 +145,16 @@ export function applyResaleImport(existingParties,issues,decisions,makeId){
     if(ticket)Object.assign(ticket,{type:row.type,number:row.number,cost:row.cost,salePrice:row.salePrice,status:row.status});
     else party.tickets.push({id:makeId(),type:row.type,number:row.number,cost:row.cost,salePrice:row.salePrice,status:row.status});
   }
-  return parties.filter((p)=>p.tickets.length>0);
+  return parties;
+}
+
+export function parseResaleUpdate(payload){
+ if(payload?.format!=='mis-gastos-resale-import-v1'||!Array.isArray(payload.rows)||!payload.rows.length||payload.rows.length>10000)throw new Error('No es un archivo de actualización de Reventa válido.');
+ const seen=new Set();const rows=payload.rows.map((r,i)=>{
+  if(!r||typeof r.partyName!=='string'||!r.partyName.trim()||typeof r.type!=='string'||!r.type.trim()||!Number.isInteger(r.number)||r.number<1||!Number.isFinite(r.cost)||r.cost<0||!Number.isFinite(r.salePrice)||r.salePrice<0||!['Disponible','Vendida','Uso personal'].includes(r.status))throw new Error(`Entrada ${i+1}: datos inválidos.`);
+  const date=r.date||'';if(date&&(!/^20\d{2}-\d{2}-\d{2}$/.test(date)||dateISO(date,2026)!==date))throw new Error(`Entrada ${i+1}: fecha inválida.`);
+  const key=`${norm(r.partyName)}|${norm(r.type)}|${r.number}`;if(seen.has(key))throw new Error(`Entrada ${i+1}: entrada duplicada.`);seen.add(key);
+  return {partyName:r.partyName.trim(),type:r.type.trim(),number:r.number,cost:r.cost,salePrice:r.salePrice,status:r.status,date,dateExplicit:!!date,row:i+1};
+ });
+ return {rows,warnings:Array.isArray(payload.warnings)?payload.warnings.filter(w=>typeof w==='string'):[]};
 }

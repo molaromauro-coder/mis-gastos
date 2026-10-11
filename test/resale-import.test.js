@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseResaleTable, compareResaleImport, applyResaleImport } from '../resale-import.js';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate } from '../resale-import.js';
 
 // Reproduce la disposición real de la hoja VENTAS (cabeceras comienzan en columna C).
 const workbookRows=[
@@ -66,4 +66,25 @@ test('una entrada vendida sin costo informado no se importa a ciegas',()=>{
   const parsed=parseResaleTable(broken,[],2026);
   assert.equal(parsed.rows.length,2);
   assert.ok(parsed.warnings.some(w=>w.includes('sin costo')));
+});
+
+test('compras sucesivas con numeración reiniciada conservan todas las entradas e importan una sola vez',()=>{
+ const matrix=[['Fiesta','Fecha fiesta','Tipo','N° entrada','Costo compra','Precio venta','Estado'],['FIESTA','23/01/27','EARLY',1,50,0,'Disponible'],['FIESTA','23/01/27','EARLY',2,50,0,'Disponible'],[],['FIESTA','23/01/27','EARLY',1,60,90,'Vendida'],['FIESTA','23/01/27','EARLY',2,60,0,'Disponible']];
+ const parsed=parseResaleTable(matrix,[],2026);assert.equal(parsed.warnings.length,0);assert.deepEqual(parsed.rows.map(r=>r.number),[1,2,3,4]);assert.equal(parsed.rows[0].date,'2027-01-23');assert.equal(parsed.rows[0].dateExplicit,true);
+ const current=[{id:'party',name:'FIESTA',date:'2026-01-23',tickets:[]}];const c=compareResaleImport(parsed.rows,current);let id=0;const parties=applyResaleImport(current,c.issues,Object.fromEntries(c.issues.map(i=>[i.id,'excel'])),()=>String(++id));assert.equal(parties[0].date,'2027-01-23');assert.equal(parties[0].tickets.length,4);assert.equal(compareResaleImport(parsed.rows,parties).issues.length,0);
+});
+test('filas duplicadas idénticas no crean entradas nuevas y fechas inválidas se advierten',()=>{
+ const matrix=[['Fiesta','Fecha fiesta','Tipo','N° entrada','Costo compra','Estado'],['FIESTA','26/26','VIP',1,100,'Disponible'],['FIESTA','26/26','VIP',1,100,'Disponible']];
+ const parsed=parseResaleTable(matrix,[],2026);assert.equal(parsed.rows.length,1);assert.equal(parsed.rows[0].date,'');assert.ok(parsed.warnings.some(w=>w.includes('fecha de fiesta inválida')));assert.ok(parsed.warnings.some(w=>w.includes('entrada repetida')));
+});
+test('importar mantiene fiestas vacías o ausentes del archivo y sus identificadores',()=>{
+ const current=[...initial(),{id:'empty',name:'FIESTA NUEVA',date:'2027-01-01',tickets:[]}];
+ assert.deepEqual(applyResaleImport(current,[],{},()=>crypto.randomUUID()),current);
+});
+
+test('actualización exclusiva de reventa valida los registros e ignora campos personales',()=>{
+ const row={partyName:'FIESTA',type:'VIP',number:1,cost:100,salePrice:150,status:'Vendida',date:'2027-01-23'};
+ const input={format:'mis-gastos-resale-import-v1',rows:[row],expenses:[{amount:999999}],cards:[{dueDay:31}]};
+ const result=parseResaleUpdate(input);assert.equal(result.rows.length,1);assert.equal(result.expenses,undefined);assert.equal(result.cards,undefined);
+ assert.throws(()=>parseResaleUpdate({...input,rows:[row,row]}),/duplicada/);assert.throws(()=>parseResaleUpdate({...input,rows:[{...row,date:'2027-02-31'}]}),/fecha inválida/);assert.throws(()=>parseResaleUpdate({...input,rows:[{...row,cost:-1}]}),/datos inválidos/);
 });

@@ -99,7 +99,7 @@ test('Nacho Scoppa coincide con las 8 ventas de la planilla final',()=>{
 
 test('datos iniciales coinciden con la planilla final corregida',()=>{
   const m=withPortfolioPercent(portfolioMetrics(INITIAL_RESALE_PARTIES,{ownerPercent:70,sellerPercent:30}));
-  assert.equal(m.investment,2392000);
+  assert.equal(m.investment,2311500);
   assert.equal(m.sales,600000);
   assert.equal(m.recovered,326600);
   assert.equal(m.netGain,273400);
@@ -132,4 +132,9 @@ test('fiestas se ordenan con próximas primero, luego pasadas recientes y sin fe
   ];
   const ordered=orderResalePartiesByDate(parties,new Date('2026-10-01T12:00:00-03:00'));
   assert.deepEqual(ordered.map((p)=>p.name),['PROXIMA','LEJANA','PASADA RECIENTE','PASADA LEJANA','SIN FECHA']);
+});
+
+test('uso personal queda fuera de la inversión comercial y mantiene su registro',()=>{
+ const party={tickets:[{cost:100,salePrice:150,status:'Vendida'},{cost:200,status:'Disponible'},{cost:1000,salePrice:900,status:'Uso personal'}]};const m=partyMetrics(party,{ownerPercent:70,sellerPercent:30});
+ assert.equal(m.investment,300);assert.equal(m.sales,150);assert.equal(m.recovered,100);assert.equal(m.netGain,50);assert.equal(m.personal,1);assert.equal(party.tickets.length,3);
 });

@@ -1,4 +1,4 @@
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=120';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=122';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -10,9 +10,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport } from './resale-import.js';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate } from './resale-import.js?v=122';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=120');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=122');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -1759,7 +1759,7 @@ function resaleTicketResultHTML(ticket,split){
 }
 function resalePartyMetricsHTML(party,split){
   const m=partyMetrics(party,split);
-  return `<div><small>Costo recuperado</small><strong>${money(m.recovered,'ARS')}</strong></div><div><small>Ventas</small><strong>${money(m.sales,'ARS')}</strong></div><div class="metric-wide"><small>Ganancia neta</small><strong>${money(m.netGain,'ARS')}</strong><em>${pct(m.gainPercent)} general</em></div><div><small>Total Mauro</small><strong>${money(m.totalForOwner,'ARS')}</strong></div><div><small>Total vendedor</small><strong>${money(m.sellerGain,'ARS')}</strong></div>`;
+  return `<div><small>Costo recuperado</small><strong>${money(m.recovered,'ARS')}</strong></div><div><small>Ventas</small><strong>${money(m.sales,'ARS')}</strong></div><div class="metric-wide"><small>Ganancia neta</small><strong>${money(m.netGain,'ARS')}</strong><em>${pct(m.gainPercent)} general</em></div><div class="metric-wide"><small>Ganancia Mauro (${numberText(resaleSplit().ownerPercent,1)}%)</small><strong>${money(m.ownerGain,'ARS')}</strong></div><div><small>Total Mauro</small><strong>${money(m.totalForOwner,'ARS')}</strong></div><div><small>Total vendedor</small><strong>${money(m.sellerGain,'ARS')}</strong></div>`;
 }
 function currentResaleTicketForRow(row){
   const party=state.resale.parties.find((item)=>item.id===row.dataset.partyId);
@@ -1855,6 +1855,8 @@ function renderResale({ totalsOnly = false } = {}) {
   $('#resaleSales').textContent = money(total.sales, 'ARS');
   $('#resaleNet').textContent = money(total.netGain, 'ARS');
   $('#resaleGainPercent').textContent = `${pct(total.gainPercent)} global de ganancias`;
+  $('#resaleOwnerGain').textContent=money(total.ownerGain,'ARS');
+  $('#resaleOwnerGainLabel').textContent=`Ganancia Mauro (${numberText(split.ownerPercent,1)}%)`;
   $('#resaleOwner').textContent = money(total.totalForOwner, 'ARS');
   $('#resaleSeller').textContent = money(total.sellerGain, 'ARS');
   $('#resaleSplitLabel').textContent = `${numberText(split.ownerPercent,1)}% Mauro · ${numberText(split.sellerPercent,1)}% vendedor`;
@@ -2006,12 +2008,16 @@ async function readResaleExcelFile(file){
   if(!file)return;
   try{
     $('#importResaleExcel').disabled=true;
-    const XLSX=await ensureExcelReader();
-    const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
-    const sheetName=wb.SheetNames.find((name)=>/ventas?/i.test(name))||wb.SheetNames[0];
-    if(!sheetName)throw new Error('El archivo no contiene hojas.');
-    const matrix=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:true});
-    const parsed=parseResaleTable(matrix,state.resale.parties);
+    let parsed;
+    if(/\.json$/i.test(file.name))parsed=parseResaleUpdate(JSON.parse(await file.text()));
+    else{
+      const XLSX=await ensureExcelReader();
+      const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
+      const sheetName=wb.SheetNames.find((name)=>/ventas?/i.test(name))||wb.SheetNames[0];
+      if(!sheetName)throw new Error('El archivo no contiene hojas.');
+      const matrix=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:true});
+      parsed=parseResaleTable(matrix,state.resale.parties);
+    }
     if(!parsed.rows.length)throw new Error(parsed.warnings.join(' ')||'No pude encontrar entradas en la planilla.');
     const comparison=compareResaleImport(parsed.rows,state.resale.parties);
     showResaleImportReview(file.name,parsed,comparison);
@@ -3677,10 +3683,13 @@ $('#applyResaleImport').onclick=()=>{
     issue.imported={...issue.imported,cost,salePrice:sale,status};
   }
   const applied=issues.filter((issue)=>['excel','manual','remove'].includes(decisions[issue.id])).length;
+  const previous=cloneState();
   state.resale.parties=applyResaleImport(state.resale.parties,issues,decisions,uid);
-  save();renderResale();$('#resaleImportReview').close();pendingResaleImport=null;
+  try{if(save()===false)throw new Error('No se pudo verificar el guardado');}catch(error){restoreState(previous);renderResale();showToast('No se pudo guardar la importación. Tus datos anteriores se conservan.');return;}
+  renderResale();$('#resaleImportReview').close();pendingResaleImport=null;
   showToast(`Reventa actualizada: ${integerText(applied)} diferencias resueltas`);
 };
+$('#useResaleFile').onclick=()=>{$('#resaleImportDifferences').querySelectorAll('.resale-import-decision').forEach((select)=>{const issue=pendingResaleImport?.comparison.issues.find((i)=>i.id===select.dataset.importId);select.value=issue?.kind==='onlyApp'?'app':'excel';select.onchange?.();});};
 $('#cancelResaleImport').onclick=()=>{pendingResaleImport=null;$('#resaleImportReview').close();};
 }
 
