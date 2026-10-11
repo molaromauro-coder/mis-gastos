@@ -1,4 +1,4 @@
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=123';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=124';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -10,9 +10,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook } from './resale-import.js?v=123';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties } from './resale-import.js?v=124';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=123');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=124');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -1876,9 +1876,10 @@ function renderResale({ totalsOnly = false } = {}) {
           ? 'Sin fecha'
           : new Date(key + '-01T12:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
         const displayLabel = label.charAt(0).toUpperCase() + label.slice(1);
-        return `<tr><td><strong>${escape(displayLabel)}</strong></td><td>${money(m.investment,'ARS')}</td><td>${money(m.recovered,'ARS')}</td><td>${money(m.sales,'ARS')}</td><td>${money(m.netGain,'ARS')}</td><td>${pct(m.gainPercent)}</td></tr>`;
+        return `<tr><td><strong>${escape(displayLabel)}</strong></td><td>${money(m.investment,'ARS')}</td><td>${money(m.recovered,'ARS')}</td><td>${money(m.sales,'ARS')}</td><td>${money(m.netGain,'ARS')}</td><td>${pct(m.gainPercent)}</td><td>${money(m.ownerGain,'ARS')}</td></tr>`;
       }).join('');
   }
+  if($('#resaleMonthlyOwnerHead'))$('#resaleMonthlyOwnerHead').textContent=`Ganancia Mauro (${numberText(split.ownerPercent,1)}%)`;
   if ($('#resaleOwnerHead')) $('#resaleOwnerHead').textContent = `Ganancia Mauro (${numberText(split.ownerPercent,1)}%)`;
   if ($('#resaleSellerHead')) $('#resaleSellerHead').textContent = `Total vendedor (${numberText(split.sellerPercent,1)}%)`;
   if ($('#resaleBalanceBody')) {
@@ -1970,8 +1971,8 @@ function resaleImportTicketLabel(row){
 function showResaleImportReview(fileName,parsed,comparison){
   pendingResaleImport={fileName,parsed,comparison};
   $('#resaleImportSummary').textContent=`${integerText(parsed.rows.length)} entradas leídas · ${integerText(comparison.matched)} coinciden · ${integerText(comparison.issues.length)} diferencias para revisar.`;
-  $('#resaleImportWarnings').innerHTML=parsed.warnings.length?
-    `<strong>Advertencias del archivo</strong>${parsed.warnings.map((warning)=>`<p>${escape(warning)}</p>`).join('')}`:'';
+  $('#resaleImportWarnings').innerHTML=(parsed.warnings.length||parsed.partyMerges?.length)?
+    `<strong>Revisión del archivo</strong>${(parsed.partyMerges||[]).map(m=>`<p>Se unen ${escape(m.sourceNames.join(' y '))} en ${escape(m.targetName)}, conservando cada entrada.</p>`).join('')}${parsed.warnings.map((warning)=>`<p>${escape(warning)}</p>`).join('')}`:'';
   $('#resaleImportDifferences').innerHTML=comparison.issues.length?
     comparison.issues.map((issue)=>{
       const source=issue.imported;
@@ -2019,7 +2020,7 @@ async function readResaleExcelFile(file){
       parsed=parseResaleWorkbook(sheets,state.resale.parties);
     }
     if(!parsed.rows.length)throw new Error(parsed.warnings.join(' ')||'No pude encontrar entradas en la planilla.');
-    const comparison=compareResaleImport(parsed.rows,state.resale.parties);
+    const comparison=compareResaleImport(parsed.rows,mergeResaleParties(state.resale.parties,parsed.partyMerges||[]));
     showResaleImportReview(file.name,parsed,comparison);
   }catch(error){showToast(error.message||'No pude leer el archivo.');}
   finally{$('#importResaleExcel').disabled=false;$('#resaleImportFile').value='';}
@@ -3684,8 +3685,7 @@ $('#applyResaleImport').onclick=()=>{
   }
   const applied=issues.filter((issue)=>['excel','manual','remove'].includes(decisions[issue.id])).length;
   const previous=cloneState();
-  state.resale.parties=applyResaleImport(state.resale.parties,issues,decisions,uid);
-  try{if(save()===false)throw new Error('No se pudo verificar el guardado');}catch(error){restoreState(previous);renderResale();showToast('No se pudo guardar la importación. Tus datos anteriores se conservan.');return;}
+  try{state.resale.parties=applyResaleImport(mergeResaleParties(state.resale.parties,pendingResaleImport.parsed.partyMerges||[]),issues,decisions,uid);if(save()===false)throw new Error('No se pudo verificar el guardado');}catch(error){restoreState(previous);renderResale();showToast('No se pudo guardar la importación. Tus datos anteriores se conservan.');return;}
   renderResale();$('#resaleImportReview').close();pendingResaleImport=null;
   showToast(`Reventa actualizada: ${integerText(applied)} diferencias resueltas`);
 };

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook } from '../resale-import.js';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, canonicalizeResaleRows, mergeResaleParties } from '../resale-import.js';
 
 // Reproduce la disposición real de la hoja VENTAS (cabeceras comienzan en columna C).
 const workbookRows=[
@@ -93,4 +93,13 @@ test('COMPRAS conserva fechas y permite dos lotes con números reiniciados inclu
  const sheets={COMPRAS:[['FECHA COMPRA','FIESTA','FECHA','','CANTIDAD','','PRECIO COMPRA'],['','','','EARLY','G1','VIP','EARLY','GRAL 1','VIP'],['01/10/2026','FIESTA','23/01/27',2,0,0,100,0,0],['02/10/2026','FIESTA','23/01/27',2,0,0,100,0,0]],VENTAS:[['Fiesta','Fecha fiesta','Tipo','N° entrada','Costo compra','Precio venta','Estado'],['FIESTA','23/01/27','EARLY',1,100,0,'Disponible'],['FIESTA','23/01/27','EARLY',2,100,0,'Disponible'],['FIESTA','23/01/27','EARLY',1,100,150,'Vendida'],['FIESTA','23/01/27','EARLY',2,100,0,'Disponible']]};
  const parsed=parseResaleWorkbook(sheets,[],2026);assert.equal(parsed.warnings.length,0);assert.deepEqual(parsed.rows.map(r=>r.number),[1,2,3,4]);assert.deepEqual(parsed.rows.map(r=>r.purchaseDate),['2026-10-01','2026-10-01','2026-10-02','2026-10-02']);
  const compared=compareResaleImport(parsed.rows,[]);let n=0;const merged=applyResaleImport([],compared.issues,Object.fromEntries(compared.issues.map(i=>[i.id,'excel'])),()=>String(++n));assert.equal(merged[0].tickets[2].purchaseDate,'2026-10-02');assert.equal(compareResaleImport(parsed.rows,merged).issues.length,0);
+});
+
+test('unir dos nombres de una fiesta conserva todas las compras, estados e identificadores',()=>{
+ const parties=[{id:'bombo',name:'MISS MONIQ BOMBO',date:'',tickets:[{id:'a',type:'EARLY',number:1,cost:100,purchaseDate:'2026-10-01',salePrice:150,status:'Vendida'},{id:'b',type:'VIP',number:1,cost:200,status:'Uso personal'}]},{id:'turbo',name:'MISS MONIQ TURBO',date:'',tickets:[{id:'c',type:'EARLY',number:1,cost:90,purchaseDate:'2026-10-02',salePrice:0,status:'Disponible'},{id:'d',type:'VIP',number:1,cost:190,status:'Disponible'}]},{id:'other',name:'OTRA',date:'2026-11-01',tickets:[]}];const original=structuredClone(parties);
+ const merged=mergeResaleParties(parties);assert.equal(merged.length,2);assert.equal(merged[0].name,'MISS MONIQUE');assert.deepEqual(merged[0].tickets.map(t=>t.id),['a','b','c','d']);assert.equal(merged[0].tickets[2].number,2);assert.equal(merged[0].tickets[2].cost,90);assert.equal(merged[0].tickets[2].purchaseDate,'2026-10-02');assert.equal(merged[0].tickets[1].status,'Uso personal');assert.deepEqual(parties,original);assert.deepEqual(mergeResaleParties(merged),merged);assert.equal(merged[1].id,'other');
+ const rows=canonicalizeResaleRows(parties.slice(0,2).flatMap(p=>p.tickets.map(t=>({...t,partyName:p.name}))));assert.deepEqual(rows.map(r=>r.number),[1,1,2,2]);assert.ok(rows.every(r=>r.partyName==='MISS MONIQUE'));
+});
+test('la unificación no elige a ciegas entre fechas de fiesta contradictorias',()=>{
+ assert.throws(()=>mergeResaleParties([{id:'a',name:'MISS MONIQ BOMBO',date:'2027-01-01',tickets:[]},{id:'b',name:'MISS MONIQ TURBO',date:'2027-01-02',tickets:[]}]),/fechas distintas/);
 });

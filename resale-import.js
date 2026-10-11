@@ -160,7 +160,8 @@ export function parseResaleUpdate(payload){
   const key=`${norm(r.partyName)}|${norm(r.type)}|${r.number}`;if(seen.has(key))throw new Error(`Entrada ${i+1}: entrada duplicada.`);seen.add(key);
   return {partyName:r.partyName.trim(),type:r.type.trim(),number:r.number,cost:r.cost,salePrice:r.salePrice,status:r.status,date,dateExplicit:!!date,...(purchaseDate?{purchaseDate}:{}),row:i+1};
  });
- return {rows,warnings:Array.isArray(payload.warnings)?payload.warnings.filter(w=>typeof w==='string'):[]};
+ const partyMerges=Array.isArray(payload.partyMerges)?payload.partyMerges.map(m=>{if(!m||typeof m.targetName!=='string'||!m.targetName.trim()||!Array.isArray(m.sourceNames)||!m.sourceNames.length||m.sourceNames.some(n=>typeof n!=='string'||!n.trim()))throw new Error('Agrupación de fiestas inválida.');return {targetName:m.targetName.trim(),sourceNames:m.sourceNames.map(n=>n.trim())};}):[];
+ return {rows,warnings:Array.isArray(payload.warnings)?payload.warnings.filter(w=>typeof w==='string'):[],partyMerges};
 }
 
 export function parseResaleWorkbook(sheets,existingParties=[],year=new Date().getFullYear()){
@@ -186,5 +187,30 @@ export function parseResaleWorkbook(sheets,existingParties=[],year=new Date().ge
  const parsed=parseResaleTable(sales,existingParties,year,batches),queues=new Map();
  for(const batch of batches){const key=`${norm(batch.partyName)}|${norm(batch.type)}|${batch.cost}`;if(!queues.has(key))queues.set(key,[]);queues.get(key).push({...batch,remaining:batch.quantity});}
  for(const row of parsed.rows){const key=`${norm(row.partyName)}|${norm(row.type)}|${row.cost}`,queue=queues.get(key);while(queue?.length&&queue[0].remaining<=0)queue.shift();const batch=queue?.[0];if(batch){if(batch.purchaseDate)row.purchaseDate=batch.purchaseDate;batch.remaining--;}}
- return {rows:parsed.rows,warnings:[...new Set([...parsed.warnings,...warnings])]};
+ const merges=RESALE_PARTY_MERGES.filter(m=>parsed.rows.some(r=>m.sourceNames.some(n=>norm(n)===norm(r.partyName))));
+ return {rows:canonicalizeResaleRows(parsed.rows,merges),warnings:[...new Set([...parsed.warnings,...warnings])],partyMerges:merges};
+}
+
+export const RESALE_PARTY_MERGES=[{targetName:'MISS MONIQUE',sourceNames:['MISS MONIQ BOMBO','MISS MONIQ TURBO']}];
+export function canonicalizeResaleRows(rows,merges=RESALE_PARTY_MERGES){
+ const counters=new Map();return rows.map(original=>{
+  const row={...original},merge=merges.find(m=>m.sourceNames.some(n=>norm(n)===norm(row.partyName))||norm(m.targetName)===norm(row.partyName));
+  if(!merge)return row;row.partyName=merge.targetName;
+  const key=`${norm(row.partyName)}|${norm(row.type)}`,number=(counters.get(key)||0)+1;counters.set(key,number);row.number=number;return row;
+ });
+}
+export function mergeResaleParties(existingParties,merges=RESALE_PARTY_MERGES){
+ let parties=structuredClone(existingParties);
+ for(const merge of merges){
+  const matches=name=>norm(name)===norm(merge.targetName)||merge.sourceNames.some(n=>norm(n)===norm(name));
+  const group=parties.filter(p=>matches(p.name));if(!group.length||group.length===1&&norm(group[0].name)===norm(merge.targetName))continue;
+  const dates=[...new Set(group.map(p=>p.date).filter(Boolean))];if(dates.length>1)throw new Error(`${merge.targetName}: las fiestas a unir tienen fechas distintas. Corregí la fecha antes de importarlas.`);
+  const target=group.find(p=>norm(p.name)===norm(merge.targetName))||group.find(p=>norm(p.name)===norm(merge.sourceNames[0]))||group[0];
+  const ordered=[target,...group.filter(p=>p!==target)],counts=new Map(),seenIds=new Set(),tickets=[];
+  for(const party of ordered)for(const ticket of party.tickets||[]){
+   if(seenIds.has(ticket.id))continue;seenIds.add(ticket.id);const key=norm(ticket.type),number=(counts.get(key)||0)+1;counts.set(key,number);tickets.push({...ticket,number});
+  }
+  const merged={...target,name:merge.targetName,date:dates[0]||'',tickets};const index=parties.findIndex(p=>group.some(g=>g.id===p.id));parties=parties.filter(p=>!group.some(g=>g.id===p.id));parties.splice(index,0,merged);
+ }
+ return parties;
 }
