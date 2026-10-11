@@ -1,4 +1,4 @@
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=122';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=123';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -10,9 +10,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate } from './resale-import.js?v=122';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook } from './resale-import.js?v=123';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=122');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=123');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -1818,7 +1818,7 @@ function resalePartyCardHTML(party,split,open=false){
     const m = partyMetrics(party, split);
     const tickets = party.tickets.map((ticket,ticketIndex) => {
       return `<div class="resale-ticket" data-ticket-index="${ticketIndex}" data-ticket-id="${escape(ticket.id)}" data-party-id="${escape(party.id)}">
-        <div class="resale-ticket-head"><div><strong>${escape(ticket.type)} · #${integerText(ticket.number)}</strong><small>Costo ${money(ticket.cost, 'ARS')}</small></div><select class="resale-status">
+        <div class="resale-ticket-head"><div><strong>${escape(ticket.type)} · #${integerText(ticket.number)}</strong><small>Costo ${money(ticket.cost, 'ARS')}</small>${ticket.purchaseDate?`<small>Compra: ${escape(ticket.purchaseDate.split('-').reverse().join('/'))}</small>`:''}</div><select class="resale-status">
           ${['Disponible','Vendida','Uso personal'].map((s) => `<option ${ticket.status === s ? 'selected' : ''}>${s}</option>`).join('')}
         </select></div>
         <div class="resale-ticket-sale"><label>Precio de venta<span class="resale-money-input"><b>$</b><input class="resale-price" type="text" inputmode="decimal" data-local-number="2" value="${formatNumericInputValue(ticket.salePrice||0,{maximumFractionDigits:2})}"></span></label>
@@ -1965,7 +1965,7 @@ async function ensureExcelReader(){
 }
 function resaleImportTicketLabel(row){
   if(!row)return 'No figura';
-  return `${row.partyName?row.partyName+' · ':''}${row.type} #${row.number} · Costo ${money(row.cost,'ARS')} · Venta ${money(row.salePrice,'ARS')} · ${row.status}`;
+  return `${row.partyName?row.partyName+' · ':''}${row.type} #${row.number}${row.purchaseDate?' · Compra '+row.purchaseDate:''} · Costo ${money(row.cost,'ARS')} · Venta ${money(row.salePrice,'ARS')} · ${row.status}`;
 }
 function showResaleImportReview(fileName,parsed,comparison){
   pendingResaleImport={fileName,parsed,comparison};
@@ -2015,8 +2015,8 @@ async function readResaleExcelFile(file){
       const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
       const sheetName=wb.SheetNames.find((name)=>/ventas?/i.test(name))||wb.SheetNames[0];
       if(!sheetName)throw new Error('El archivo no contiene hojas.');
-      const matrix=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:true});
-      parsed=parseResaleTable(matrix,state.resale.parties);
+      const sheets=Object.fromEntries(wb.SheetNames.map((name)=>[name,XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:'',raw:true})]));
+      parsed=parseResaleWorkbook(sheets,state.resale.parties);
     }
     if(!parsed.rows.length)throw new Error(parsed.warnings.join(' ')||'No pude encontrar entradas en la planilla.');
     const comparison=compareResaleImport(parsed.rows,state.resale.parties);

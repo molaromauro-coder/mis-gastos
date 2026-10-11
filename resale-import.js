@@ -55,11 +55,13 @@ function importedStatus(value,salePrice){
   if(s.includes('dispon')||s.includes('pendien'))return 'Disponible';
   return salePrice>0?'Vendida':'Disponible';
 }
-export function parseResaleTable(matrix,existingParties=[],todayYear=new Date().getFullYear()){
+export function parseResaleTable(matrix,existingParties=[],todayYear=new Date().getFullYear(),purchaseBatches=[]){
   const header=detectHeader(matrix);
   if(!header)return {rows:[],warnings:['No encontré columnas Fiesta, Tipo de entrada y Costo de compra. Revisá la hoja Ventas.']};
   const {cols}=header,warnings=[],rows=[],seen=new Set(),counts=new Map(),batches=new Map(),dateWarnings=new Set();
   const existingYear=new Map(existingParties.map((p)=>[norm(p.name),Number(String(p.date||'').slice(0,4))||todayYear]));
+  const restartAt=new Set(),purchaseCounts=new Map();
+  for(const batch of purchaseBatches){const k=`${norm(batch.partyName)}|${norm(batch.type)}`,count=purchaseCounts.get(k)||0;if(count)restartAt.add(`${k}|${count}|${batch.cost}`);purchaseCounts.set(k,count+batch.quantity);}
   let lastParty='',block=0;
   for(let i=header.row+1;i<matrix.length;i++){
     const cells=matrix[i]||[];
@@ -82,7 +84,7 @@ export function parseResaleTable(matrix,existingParties=[],todayYear=new Date().
     const dateExplicit=/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b(?:19|20)\d{2}[/-]\d{1,2}[/-]\d{1,2}\b/.test(String(get('date')??''))||get('date') instanceof Date||typeof get('date')==='number';
     if(!isBlank(get('date'))&&!date&&!dateWarnings.has(norm(name))){warnings.push(`${name}: fecha de fiesta inválida (${String(get('date'))}); se conserva la fecha de la app o queda sin fecha.`);dateWarnings.add(norm(name));}
     let batch=batches.get(key)||{last:0,offset:0,cost,block};
-    if(explicit&&rawNumber<=batch.last&&(cost!==batch.cost||block!==batch.block)){batch={last:0,offset:current,cost,block};}
+    if(explicit&&rawNumber<=batch.last&&(cost!==batch.cost||block!==batch.block||restartAt.has(`${key}|${current}|${cost}`))){batch={last:0,offset:current,cost,block};}
     if(explicit){batch.last=rawNumber;batch.cost=cost;batch.block=block;batches.set(key,batch);}
     for(let j=0;j<qty;j++){
       const number=explicit?rawNumber+batch.offset:current+j+1;
@@ -111,6 +113,7 @@ export function compareResaleImport(importedRows,existingParties=[]){
       if(Math.abs(Number(ticket.cost||0)-row.cost)>0.01)diffs.push('costo');
       if(Math.abs(Number(ticket.salePrice||0)-row.salePrice)>0.01)diffs.push('precio de venta');
       if((ticket.status||'Disponible')!==row.status)diffs.push('estado');
+      if(row.purchaseDate&&ticket.purchaseDate!==row.purchaseDate)diffs.push('fecha de compra');
       if(row.dateExplicit&&row.date&&party.date&&party.date!==row.date)diffs.push('fecha de fiesta');
     }
     if(!ticket||diffs.length){
@@ -142,8 +145,8 @@ export function applyResaleImport(existingParties,issues,decisions,makeId){
     if(row.date&&(!party.date||row.dateExplicit))party.date=row.date;
     const ticket=party.tickets.find((t)=>t.id===issue.ticketId)||
       party.tickets.find((t)=>norm(t.type)===norm(row.type)&&Number(t.number)===Number(row.number));
-    if(ticket)Object.assign(ticket,{type:row.type,number:row.number,cost:row.cost,salePrice:row.salePrice,status:row.status});
-    else party.tickets.push({id:makeId(),type:row.type,number:row.number,cost:row.cost,salePrice:row.salePrice,status:row.status});
+    if(ticket)Object.assign(ticket,{type:row.type,number:row.number,cost:row.cost,salePrice:row.salePrice,status:row.status,...(row.purchaseDate?{purchaseDate:row.purchaseDate}:{})});
+    else party.tickets.push({id:makeId(),type:row.type,number:row.number,cost:row.cost,salePrice:row.salePrice,status:row.status,...(row.purchaseDate?{purchaseDate:row.purchaseDate}:{})});
   }
   return parties;
 }
@@ -152,9 +155,36 @@ export function parseResaleUpdate(payload){
  if(payload?.format!=='mis-gastos-resale-import-v1'||!Array.isArray(payload.rows)||!payload.rows.length||payload.rows.length>10000)throw new Error('No es un archivo de actualización de Reventa válido.');
  const seen=new Set();const rows=payload.rows.map((r,i)=>{
   if(!r||typeof r.partyName!=='string'||!r.partyName.trim()||typeof r.type!=='string'||!r.type.trim()||!Number.isInteger(r.number)||r.number<1||!Number.isFinite(r.cost)||r.cost<0||!Number.isFinite(r.salePrice)||r.salePrice<0||!['Disponible','Vendida','Uso personal'].includes(r.status))throw new Error(`Entrada ${i+1}: datos inválidos.`);
+  const purchaseDate=r.purchaseDate||'';if(purchaseDate&&(!/^20\d{2}-\d{2}-\d{2}$/.test(purchaseDate)||dateISO(purchaseDate,2026)!==purchaseDate))throw new Error(`Entrada ${i+1}: fecha de compra inválida.`);
   const date=r.date||'';if(date&&(!/^20\d{2}-\d{2}-\d{2}$/.test(date)||dateISO(date,2026)!==date))throw new Error(`Entrada ${i+1}: fecha inválida.`);
   const key=`${norm(r.partyName)}|${norm(r.type)}|${r.number}`;if(seen.has(key))throw new Error(`Entrada ${i+1}: entrada duplicada.`);seen.add(key);
-  return {partyName:r.partyName.trim(),type:r.type.trim(),number:r.number,cost:r.cost,salePrice:r.salePrice,status:r.status,date,dateExplicit:!!date,row:i+1};
+  return {partyName:r.partyName.trim(),type:r.type.trim(),number:r.number,cost:r.cost,salePrice:r.salePrice,status:r.status,date,dateExplicit:!!date,...(purchaseDate?{purchaseDate}:{}),row:i+1};
  });
  return {rows,warnings:Array.isArray(payload.warnings)?payload.warnings.filter(w=>typeof w==='string'):[]};
+}
+
+export function parseResaleWorkbook(sheets,existingParties=[],year=new Date().getFullYear()){
+ const entries=Object.entries(sheets||{}),sales=entries.find(([name])=>/ventas?/i.test(name))?.[1]||entries[0]?.[1]||[],purchases=entries.find(([name])=>/compras?/i.test(name))?.[1]||[];
+ const header=purchases.findIndex(r=>(r||[]).some(c=>norm(c)==='fechacompra'));
+ const batches=[],warnings=[];
+ if(header>=0){
+  const top=(purchases[header]||[]).map(norm),types=(purchases[header+1]||[]).map(norm),partyCol=top.indexOf('fiesta'),dateCol=top.indexOf('fechacompra'),priceStart=top.indexOf('preciocompra');
+  const typeKey=v=>v==='g1'?'gral1':v==='g2'?'gral2':v==='g3'?'gral3':v;
+  if(partyCol>=0&&dateCol>=0&&priceStart>=0)for(let i=header+2;i<purchases.length;i++){
+   const r=purchases[i]||[],partyName=String(r[partyCol]||'').trim();if(!partyName||/^total/i.test(partyName))continue;
+   const purchaseDate=dateISO(r[dateCol],year);
+   for(let q=0;q<priceStart;q++){
+    const k=typeKey(types[q]);if(!['early','gral1','gral2','gral3','vip'].includes(k))continue;
+    const quantity=decimal(r[q]);if(!Number.isInteger(quantity)||quantity<=0)continue;
+    const priceCol=types.findIndex((v,index)=>index>=priceStart&&typeKey(v)===k);if(priceCol<0||isBlank(r[priceCol]))continue;
+    const cost=decimal(r[priceCol]);if(cost<0)continue;
+    batches.push({partyName,type:k==='early'?'EARLY':k==='vip'?'VIP':k.replace('gral','GRAL '),cost,quantity,purchaseDate,row:i+1});
+    if(!purchaseDate)warnings.push(`Compras fila ${i+1}: fecha de compra inválida; no se reemplaza la fecha existente.`);
+   }
+  }
+ }
+ const parsed=parseResaleTable(sales,existingParties,year,batches),queues=new Map();
+ for(const batch of batches){const key=`${norm(batch.partyName)}|${norm(batch.type)}|${batch.cost}`;if(!queues.has(key))queues.set(key,[]);queues.get(key).push({...batch,remaining:batch.quantity});}
+ for(const row of parsed.rows){const key=`${norm(row.partyName)}|${norm(row.type)}|${row.cost}`,queue=queues.get(key);while(queue?.length&&queue[0].remaining<=0)queue.shift();const batch=queue?.[0];if(batch){if(batch.purchaseDate)row.purchaseDate=batch.purchaseDate;batch.remaining--;}}
+ return {rows:parsed.rows,warnings:[...new Set([...parsed.warnings,...warnings])]};
 }

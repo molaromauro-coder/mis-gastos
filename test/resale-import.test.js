@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate } from '../resale-import.js';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook } from '../resale-import.js';
 
 // Reproduce la disposición real de la hoja VENTAS (cabeceras comienzan en columna C).
 const workbookRows=[
@@ -87,4 +87,10 @@ test('actualización exclusiva de reventa valida los registros e ignora campos p
  const input={format:'mis-gastos-resale-import-v1',rows:[row],expenses:[{amount:999999}],cards:[{dueDay:31}]};
  const result=parseResaleUpdate(input);assert.equal(result.rows.length,1);assert.equal(result.expenses,undefined);assert.equal(result.cards,undefined);
  assert.throws(()=>parseResaleUpdate({...input,rows:[row,row]}),/duplicada/);assert.throws(()=>parseResaleUpdate({...input,rows:[{...row,date:'2027-02-31'}]}),/fecha inválida/);assert.throws(()=>parseResaleUpdate({...input,rows:[{...row,cost:-1}]}),/datos inválidos/);
+});
+
+test('COMPRAS conserva fechas y permite dos lotes con números reiniciados incluso al mismo precio',()=>{
+ const sheets={COMPRAS:[['FECHA COMPRA','FIESTA','FECHA','','CANTIDAD','','PRECIO COMPRA'],['','','','EARLY','G1','VIP','EARLY','GRAL 1','VIP'],['01/10/2026','FIESTA','23/01/27',2,0,0,100,0,0],['02/10/2026','FIESTA','23/01/27',2,0,0,100,0,0]],VENTAS:[['Fiesta','Fecha fiesta','Tipo','N° entrada','Costo compra','Precio venta','Estado'],['FIESTA','23/01/27','EARLY',1,100,0,'Disponible'],['FIESTA','23/01/27','EARLY',2,100,0,'Disponible'],['FIESTA','23/01/27','EARLY',1,100,150,'Vendida'],['FIESTA','23/01/27','EARLY',2,100,0,'Disponible']]};
+ const parsed=parseResaleWorkbook(sheets,[],2026);assert.equal(parsed.warnings.length,0);assert.deepEqual(parsed.rows.map(r=>r.number),[1,2,3,4]);assert.deepEqual(parsed.rows.map(r=>r.purchaseDate),['2026-10-01','2026-10-01','2026-10-02','2026-10-02']);
+ const compared=compareResaleImport(parsed.rows,[]);let n=0;const merged=applyResaleImport([],compared.issues,Object.fromEntries(compared.issues.map(i=>[i.id,'excel'])),()=>String(++n));assert.equal(merged[0].tickets[2].purchaseDate,'2026-10-02');assert.equal(compareResaleImport(parsed.rows,merged).issues.length,0);
 });
