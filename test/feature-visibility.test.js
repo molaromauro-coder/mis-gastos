@@ -16,3 +16,7 @@ test('empty explicit preferences remain visible after reload and protected navig
 test('reordering visible functions preserves hidden positions for later restoration',()=>{
  const order=['cards','savings','budget','stock','hiddenFunctions'];assert.deepEqual(mergeVisibleFeatureOrder(order,['stock','cards','hiddenFunctions']),['stock','savings','budget','cards','hiddenFunctions']);assert.deepEqual(order,['cards','savings','budget','stock','hiddenFunctions']);
 });
+
+test('future functions initially hidden join the folder without changing existing shown preferences',()=>{
+ const settings=setFeatureHidden({},'savings',false,available,['savings','budget']);assert.deepEqual(hiddenFeatureIds(settings,[...available,'recurring'],['savings','budget','recurring']),['budget','recurring']);
+});
