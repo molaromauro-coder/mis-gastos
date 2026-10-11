@@ -13,3 +13,9 @@ export function mergeVisibleFeatureOrder(order,visibleOrder){
  const visible=new Set(visibleOrder),queue=[...visibleOrder];
  return order.map(id=>visible.has(id)?queue.shift():id);
 }
+export function repairLegacyFeatureVisibility(settings,available,defaults=[]){
+ if(Number(settings?.featureVisibilityControlVersion||0)>=2)return settings;
+ const hidden=hiddenFeatureIds(settings,available,defaults),usual=available.filter(id=>!defaults.includes(id)&&!['home','hiddenFunctions'].includes(id));
+ const inverted=Array.isArray(settings?.hiddenFeatureIds)&&usual.length>=4&&usual.every(id=>hidden.includes(id))&&['savings','budget'].every(id=>available.includes(id)&&!hidden.includes(id));
+ return {...settings,...(inverted?{hiddenFeatureIds:[...new Set(defaults.filter(id=>available.includes(id)))],featureVisibilityKnownIds:[...available]}:{}),featureVisibilityControlVersion:2};
+}

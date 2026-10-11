@@ -1,5 +1,5 @@
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder} from './feature-visibility.js?v=127';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=127';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=128';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=128';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -11,9 +11,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties } from './resale-import.js?v=127';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties } from './resale-import.js?v=128';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=127');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=128');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -914,16 +914,21 @@ function featureCatalog(){
  });
 }
 function renderHiddenFeatures(){
- const catalog=featureCatalog(),available=catalog.map(f=>f.id),hidden=hiddenFeatureIds(state.settings,available,initialHiddenFeatures);
+ const catalog=featureCatalog(),available=catalog.map(f=>f.id);
+ state.settings=repairLegacyFeatureVisibility(state.settings,available,initialHiddenFeatures);
+ const hidden=hiddenFeatureIds(state.settings,available,initialHiddenFeatures);
+ const folder=$('#menuDialog [data-menu-view="hiddenFunctions"]');if(folder)folder.hidden=false;
  catalog.forEach(f=>f.button.hidden=hidden.includes(f.id));
  $('#hiddenFeatureList').innerHTML=catalog.filter(f=>hidden.includes(f.id)).map(f=>`<button type="button" data-open-hidden-feature="${escape(f.id)}"><span class="menu-icon">${escape(f.icon)}</span><span class="menu-copy"><strong>${escape(f.title)}</strong><small>Abrir función oculta</small></span><b>›</b></button>`).join('')||'<p class="muted">No hay funciones ocultas.</p>';
- $('#featureVisibilityList').innerHTML=catalog.map(f=>`<div class="feature-visibility-row"><span>${escape(f.icon)} ${escape(f.title)}<small>${hidden.includes(f.id)?'Oculta':'Visible en el menú principal'}</small></span><button type="button" data-toggle-feature="${escape(f.id)}" aria-label="${hidden.includes(f.id)?'Mostrar':'Ocultar'} ${escape(f.title)}">${hidden.includes(f.id)?'Mostrar':'Ocultar'}</button></div>`).join('');
+ $('#featureVisibilityList').innerHTML=catalog.map(f=>`<label class="feature-visibility-row"><span>${escape(f.icon)} ${escape(f.title)}<small>${hidden.includes(f.id)?'Dentro de Funciones ocultas':'En el menú principal'}</small></span><select data-feature-visibility="${escape(f.id)}" aria-label="Visibilidad de ${escape(f.title)}"><option value="visible" ${!hidden.includes(f.id)?'selected':''}>Visible</option><option value="hidden" ${hidden.includes(f.id)?'selected':''}>Oculta</option></select></label>`).join('');
  $('#hiddenFeatureList').querySelectorAll('[data-open-hidden-feature]').forEach(b=>b.onclick=()=>{hiddenFeatureOrigin=b.dataset.openHiddenFeature;goView(hiddenFeatureOrigin);});
- $('#featureVisibilityList').querySelectorAll('[data-toggle-feature]').forEach(b=>b.onclick=()=>{
-  const old=state.settings;state.settings=setFeatureHidden(old,b.dataset.toggleFeature,!hidden.includes(b.dataset.toggleFeature),available,initialHiddenFeatures);
+ const storeVisibility=(next)=>{const old=state.settings;state.settings=next;
   try{if(save()===false)throw new Error('Guardado rechazado');}catch{state.settings=old;showToast('No se pudo guardar el cambio.');return;}
   renderHiddenFeatures();installMainMenuReorder();showToast('Visibilidad guardada');
- });
+ };
+ $('#featureVisibilityList').querySelectorAll('[data-feature-visibility]').forEach(select=>select.onchange=()=>storeVisibility(setFeatureHidden(state.settings,select.dataset.featureVisibility,select.value==='hidden',available,initialHiddenFeatures)));
+ $('#restoreFunctionMenu').onclick=()=>storeVisibility({...state.settings,hiddenFeatureIds:initialHiddenFeatures.filter(id=>available.includes(id)),featureVisibilityKnownIds:[...available],featureVisibilityControlVersion:2});
+
 }
 function installMainMenuReorder(){
   renderHiddenFeatures();
