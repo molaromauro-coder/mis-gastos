@@ -819,3 +819,13 @@ img,svg,canvas,video{
 #home.active #manualBtn{grid-column:1;grid-row:1}
 #home.active .home-category-shortcuts{grid-column:2;grid-row:1;grid-template-rows:40px 38px;align-content:start}
 #home.active .home-notifications{height:38px;min-height:38px;margin:0}
+
+#menuDialog [data-menu-view][hidden]{display:none!important}
+#hiddenFunctions>h2{margin:18px 0 8px}
+#hiddenFunctions .menu-list{margin:14px 0}
+.feature-manager{background:#fff;border:1px solid #dae7e0;border-radius:16px;padding:14px;margin-top:18px}
+.feature-manager>summary{font-weight:800;cursor:pointer;font-size:15px}
+.feature-visibility-row{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:12px 0;border-bottom:1px solid #e1e9e4}
+.feature-visibility-row>span{flex:1;min-width:0;font-weight:700;overflow-wrap:anywhere}
+.feature-visibility-row small{display:block;font-size:10px;margin-top:4px}
+.feature-visibility-row button{border:0;border-radius:12px;padding:10px 12px;min-height:44px;background:#e2eee8;font-weight:700;flex-shrink:0}

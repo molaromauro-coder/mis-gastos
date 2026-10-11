@@ -1,4 +1,5 @@
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=124';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder} from './feature-visibility.js?v=125';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=125';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -10,9 +11,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties } from './resale-import.js?v=124';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties } from './resale-import.js?v=125';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=124');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=125');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -490,7 +491,7 @@ const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateStrin
 const escape = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const effectiveDate = (e) => new Date(e.dueDate || e.date);
 document.querySelectorAll('dialog .close').forEach((button)=>{button.textContent='←';button.setAttribute('aria-label','Volver');button.classList.add('back-button');});
-let previousViewId='home';
+let previousViewId='home',hiddenFeatureOrigin='';
 const menuViewIds=new Set([...document.querySelectorAll('[data-menu-view]')].map((button)=>button.dataset.menuView).filter(Boolean));
 function returnToMainMenu(){
   goView('home');
@@ -512,6 +513,7 @@ document.querySelectorAll('main > .view:not(#home)').forEach((view)=>{
   const button=document.createElement('button');
   button.type='button';button.className='view-back';button.textContent='← Atrás';button.setAttribute('aria-label','Volver a la pantalla anterior');
   button.onclick=()=>{
+    if(hiddenFeatureOrigin===view.id){hiddenFeatureOrigin='';goView('hiddenFunctions');return;}
     if(menuViewIds.has(view.id)){
       returnToMainMenu();
       return;
@@ -642,7 +644,7 @@ function renderHomeRecent(){
   $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>2);
   displayFeatures?.home?.refresh();
 }
-function render() { displayFeatures?.setTextScale(state.settings.textScale); if(reclassifyUncategorizedExpenses())save(); renderHomeClock();renderMonthlyNetSummary(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderUnclassifiedReminder(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderTrash(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
+function render() { displayFeatures?.setTextScale(state.settings.textScale); if(reclassifyUncategorizedExpenses())save(); renderHomeClock();renderMonthlyNetSummary(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderUnclassifiedReminder(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderHiddenFeatures(); renderTrash(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
 function detectUnusual(day) { const past = state.expenses.filter((e) => !sameDay(e.purchaseDate || e.date, new Date()) && (!e.parentId || e.installment === 1)); const values = past.map(purchaseAmount).sort((a, b) => a - b); const median = values.length ? values[Math.floor(values.length / 2)] : Infinity; $('#unusual').classList.toggle('hidden', !day.some((e) => purchaseAmount(e) > median * 3 && values.length >= 5)); }
 function subcategoriesFor(category){
   const values=state.subcategories?.[category];
@@ -900,7 +902,31 @@ function installPointerReorder(container,selector,onMove,ignore='button,input,se
     }
   });
 }
+const initialHiddenFeatures=['savings','budget',...[...document.querySelectorAll('main>.view')].map(v=>v.id).filter(id=>id!=='home'&&id!=='hiddenFunctions'&&!document.querySelector(`#menuDialog [data-menu-view="${id}"]`))];
+function featureCatalog(){
+ const list=$('#menuDialog .menu-list');
+ return [...document.querySelectorAll('main>.view')].filter(view=>!['home','hiddenFunctions'].includes(view.id)).map(view=>{
+  let button=list.querySelector(`[data-menu-view="${view.id}"]`);
+  const title=button?.querySelector('strong')?.textContent||view.querySelector('h2')?.textContent||view.id;
+  const icon=button?.querySelector('.menu-icon')?.textContent||({stock:'📦',recoveries:'↩️',history:'📅'}[view.id])||'🧩';
+  if(!button){button=document.createElement('button');button.type='button';button.dataset.menuView=view.id;button.innerHTML=`<span class="menu-icon">${escape(icon)}</span><span class="menu-copy"><strong>${escape(title)}</strong><small>Abrir ${escape(title)}</small></span><b>›</b>`;button.onclick=()=>{hiddenFeatureOrigin='';$('#menuDialog').close();goView(view.id);};list.append(button);menuViewIds.add(view.id);}
+  return {id:view.id,title,icon,button};
+ });
+}
+function renderHiddenFeatures(){
+ const catalog=featureCatalog(),available=catalog.map(f=>f.id),hidden=hiddenFeatureIds(state.settings,available,initialHiddenFeatures);
+ catalog.forEach(f=>f.button.hidden=hidden.includes(f.id));
+ $('#hiddenFeatureList').innerHTML=catalog.filter(f=>hidden.includes(f.id)).map(f=>`<button type="button" data-open-hidden-feature="${escape(f.id)}"><span class="menu-icon">${escape(f.icon)}</span><span class="menu-copy"><strong>${escape(f.title)}</strong><small>Abrir función oculta</small></span><b>›</b></button>`).join('')||'<p class="muted">No hay funciones ocultas.</p>';
+ $('#featureVisibilityList').innerHTML=catalog.map(f=>`<div class="feature-visibility-row"><span>${escape(f.icon)} ${escape(f.title)}<small>${hidden.includes(f.id)?'Oculta':'Visible en el menú principal'}</small></span><button type="button" data-toggle-feature="${escape(f.id)}" aria-label="${hidden.includes(f.id)?'Mostrar':'Ocultar'} ${escape(f.title)}">${hidden.includes(f.id)?'Mostrar':'Ocultar'}</button></div>`).join('');
+ $('#hiddenFeatureList').querySelectorAll('[data-open-hidden-feature]').forEach(b=>b.onclick=()=>{hiddenFeatureOrigin=b.dataset.openHiddenFeature;goView(hiddenFeatureOrigin);});
+ $('#featureVisibilityList').querySelectorAll('[data-toggle-feature]').forEach(b=>b.onclick=()=>{
+  const old=state.settings;state.settings=setFeatureHidden(old,b.dataset.toggleFeature,!hidden.includes(b.dataset.toggleFeature),available,initialHiddenFeatures);
+  try{if(save()===false)throw new Error('Guardado rechazado');}catch{state.settings=old;showToast('No se pudo guardar el cambio.');return;}
+  renderHiddenFeatures();installMainMenuReorder();showToast('Visibilidad guardada');
+ });
+}
 function installMainMenuReorder(){
+  renderHiddenFeatures();
   const list=$('#menuDialog .menu-list');if(!list)return;
   const buttons=[...list.querySelectorAll(':scope > [data-menu-view]')];
   const available=buttons.map((button)=>button.dataset.menuView).filter(Boolean);
@@ -911,11 +937,13 @@ function installMainMenuReorder(){
     if(button)list.appendChild(button);
   });
   const ordered=[...list.querySelectorAll(':scope > [data-menu-view]')];
-  ordered.forEach((button,index)=>{button.dataset.reorderIndex=String(index);button.classList.add('menu-reorderable');});
+  ordered.forEach(button=>button.classList.remove('menu-reorderable'));
+  ordered.filter(button=>!button.hidden).forEach((button,index)=>{button.dataset.reorderIndex=String(index);button.classList.add('menu-reorderable');});
   installPointerReorder(list,'.menu-reorderable',(from,to)=>{
     const current=[...list.querySelectorAll(':scope > .menu-reorderable')].map((button)=>button.dataset.menuView);
     const [item]=current.splice(from,1);current.splice(to,0,item);
-    state.settings={...state.settings,mainMenuOrder:current};
+    const reordered=mergeVisibleFeatureOrder(ordered.map(button=>button.dataset.menuView),current);
+    state.settings={...state.settings,mainMenuOrder:reordered};
     save();installMainMenuReorder();showToast('✓ Orden del menú guardado');
   },'');
 }
@@ -3612,7 +3640,7 @@ bindHoldToTalk($('#consultMic'),{
 });
 
 
-document.querySelectorAll('[data-menu-view]').forEach((button) => { button.onclick = () => { const dialog=button.closest('dialog'); if(dialog?.open)dialog.close(); if($('#menuDialog')?.open)$('#menuDialog').close(); goView(button.dataset.menuView); }; });
+document.querySelectorAll('[data-menu-view]').forEach((button) => { button.onclick = () => { hiddenFeatureOrigin='';const dialog=button.closest('dialog'); if(dialog?.open)dialog.close(); if($('#menuDialog')?.open)$('#menuDialog').close(); goView(button.dataset.menuView); }; });
 document.querySelectorAll('[data-menu-coming]').forEach((button) => { button.onclick = () => showToast(`${button.dataset.menuComing}: lo terminamos en la siguiente revisión`); });
 if(!sharedMode && resaleApi){
 $('#addResaleParty').onclick = () => {

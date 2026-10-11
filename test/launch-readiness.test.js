@@ -179,7 +179,7 @@ test('lanzamiento: cada gasto visible tiene X y el toque lo manda directo a Pape
 test('lanzamiento: filas ya cargadas se reordenan manteniendo presionado y arrastrando',()=>{
   assert.ok(app.includes('setTimeout(()=>activate(row),380)'));
   assert.ok(app.includes('installMainMenuReorder'));
-  assert.ok(app.includes('mainMenuOrder:current'));
+  assert.ok(app.includes('mainMenuOrder:reordered'));
   assert.ok(app.includes("installPointerReorder($('#fixedExpenseList'),'.fixed-expense-card'"));
   assert.ok(app.includes("installPointerReorder(list,'.card-item'"));
   assert.ok(app.includes("installPointerReorder(list,'.category-folder-row'"));
