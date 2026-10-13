@@ -32,3 +32,13 @@ La conservación de la información es obligatoria en cada cambio del proyecto, 
 - Antes de publicar cambios que afecten persistencia: probar importación parcial, repetida y conflictiva; fallos de almacenamiento; recuperación; conservación de campos; y separación entre gastos personales y Reventa.
 - Comprobar recuperación real desde un respaldo íntegro y ofrecer exportación fuera del almacenamiento del navegador. Una copia en el mismo dispositivo no cubre borrado de datos, pérdida del dispositivo o fallos físicos.
 - No afirmar protección absoluta, sincronización remota ni restauración del dispositivo del usuario sin verificarlas. Distinguir implementación, publicación y comprobación de los datos locales.
+
+## Requisito permanente — sincronización PC / iPhone
+La app debe sincronizar automáticamente todos los datos del usuario entre su PC y su iPhone mediante una misma identidad autenticada. Guardado local o cuenta de ChatGPT no equivalen a sincronización.
+- Incorporar respaldo remoto y conservar funcionamiento sin conexión con una cola persistente de cambios pendientes.
+- Sincronizar al reconectar y detectar revisiones concurrentes. Nunca reemplazar datos locales por un estado remoto vacío u obsoleto ni sobrescribir cambios del otro dispositivo.
+- Antes de la primera vinculación, respaldar ambos dispositivos y reconciliar registros y conflictos; no usar el último estado completo como reemplazo silencioso.
+- Mostrar estado verificable: sincronizado, cambios pendientes, sin conexión o error. Confirmar sincronización solo tras lectura de comprobación del servidor.
+- Verificar PC→iPhone e iPhone→PC, desconexión/reconexión y ediciones simultáneas antes de declarar el requisito cumplido.
+- Mantener los gastos personales y Reventa independientes también en la sincronización.
+- Estado comprobado al 13/10/2026: README y app siguen usando persistencia local, sin cliente remoto integrado. Proyecto Supabase "Mis Gastos Sync" encontrado inactivo y solicitud de reactivación aceptada; esto no implica que la app esté sincronizando.
