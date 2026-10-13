@@ -107,7 +107,7 @@ export function compareResaleImport(importedRows,existingParties=[]){
   importedRows.forEach((row,index)=>{
     const party=byParty.get(norm(row.partyName));
     const ticket=party?.tickets?.find((t)=>norm(t.type)===norm(row.type)&&Number(t.number)===Number(row.number));
-    const key=keyFor(row.partyName,row.type,row.number);importedKeys.add(key);
+    const key=keyFor(row.partyName,row.type,row.number);if(importedKeys.has(key))throw new Error(row.partyName+': entrada duplicada en la planilla '+row.type+' #'+row.number);importedKeys.add(key);
     const diffs=[];
     if(ticket){
       if(Math.abs(Number(ticket.cost||0)-row.cost)>0.01)diffs.push('costo');
@@ -187,8 +187,10 @@ export function parseResaleWorkbook(sheets,existingParties=[],year=new Date().ge
  const parsed=parseResaleTable(sales,existingParties,year,batches),queues=new Map();
  for(const batch of batches){const key=`${norm(batch.partyName)}|${norm(batch.type)}|${batch.cost}`;if(!queues.has(key))queues.set(key,[]);queues.get(key).push({...batch,remaining:batch.quantity});}
  for(const row of parsed.rows){const key=`${norm(row.partyName)}|${norm(row.type)}|${row.cost}`,queue=queues.get(key);while(queue?.length&&queue[0].remaining<=0)queue.shift();const batch=queue?.[0];if(batch){if(batch.purchaseDate)row.purchaseDate=batch.purchaseDate;batch.remaining--;}}
+ const blockers=[];
+ for(const queue of queues.values())for(const batch of queue)if(batch.remaining>0)blockers.push(`${batch.partyName}: faltan ${batch.remaining} entradas ${batch.type} de Compras en Ventas.`);
  const merges=RESALE_PARTY_MERGES.filter(m=>parsed.rows.some(r=>m.sourceNames.some(n=>norm(n)===norm(r.partyName))));
- return {rows:canonicalizeResaleRows(parsed.rows,merges),warnings:[...new Set([...parsed.warnings,...warnings])],partyMerges:merges};
+ return {blockers,rows:canonicalizeResaleRows(parsed.rows,merges),warnings:[...new Set([...parsed.warnings,...warnings])],partyMerges:merges};
 }
 
 export const RESALE_PARTY_MERGES=[{targetName:'MISS MONIQUE',sourceNames:['MISS MONIQ BOMBO','MISS MONIQ TURBO']}];
@@ -232,4 +234,21 @@ export function verifyResaleImport(parties,issues,decisions={}){
   if(Math.abs(Number(ticket.cost)-row.cost)>.01||Math.abs(Number(ticket.salePrice||0)-row.salePrice)>.01||ticket.status!==row.status||row.purchaseDate&&ticket.purchaseDate!==row.purchaseDate||row.date&&row.dateExplicit&&party.date!==row.date)throw new Error(row.partyName+': no coinciden los datos guardados de '+row.type+' #'+row.number);
  }
  return {verified:selected.length,pending:issues.filter(issue=>issue.imported&&!['excel','manual'].includes(decisions[issue.id])).length,parties:parties.length,tickets:parties.reduce((sum,p)=>sum+(p.tickets||[]).length,0)};
+}
+
+// Preserve every existing ticket unless the user explicitly selects its change.
+export function verifyResalePreservation(before,after,issues,decisions={}){
+ const allowed=new Set(issues.filter(i=>['excel','manual','remove'].includes(decisions[i.id])).map(i=>i.ticketId).filter(Boolean));
+ const saved=after.flatMap(p=>p.tickets||[]);
+ for(const party of before)for(const ticket of party.tickets||[]){
+  const matches=saved.filter(t=>t.id===ticket.id);
+  if(allowed.has(ticket.id))continue;
+  if(matches.length!==1||JSON.stringify(matches[0])!==JSON.stringify(ticket))throw new Error('Protección: una entrada existente fue eliminada o modificada sin elegirlo.');
+ }
+ return true;
+}
+export function saveVerifiedResaleBackup(storage,key,resale){
+ const content=JSON.stringify({createdAt:new Date().toISOString(),resale});
+ storage.setItem(key,content);
+ if(storage.getItem(key)!==content)throw new Error('No se pudo verificar el respaldo previo. No se importó la planilla.');
 }

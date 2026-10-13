@@ -15,3 +15,6 @@
 
 ## Alcance
 No sustituir los datos actuales del usuario por respaldos anteriores completos para importar Reventa. Usar importación limitada a Reventa y conservar el resto de la app.
+
+## Incidente registrado — 13/10/2026
+Las capturas mostraban fiestas importadas ausentes y entradas VIP debajo de EARLY. No confundir publicación del código con actualización de los datos locales. Las importaciones futuras deben guardar y releer un respaldo independiente de Reventa antes de modificarla; conservar por defecto todas las entradas actuales y sus ventas; rechazar revisiones obsoletas; verificar cada entrada no autorizada a cambiar y registrar archivo, fecha, diferencias y decisiones. El botón de selección global solo agrega entradas nuevas: los reemplazos se deciden individualmente. Si Compras contiene entradas ausentes de Ventas, bloquear la importación y explicar el faltante. No prometer que nunca habrá errores: mantener pruebas de regresión y comprobación del guardado.

@@ -1,6 +1,6 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=133';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=133';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=133';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=134';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=134';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=134';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -12,9 +12,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport } from './resale-import.js?v=133';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=134';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=133');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=134');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -2006,7 +2006,7 @@ function resaleImportTicketLabel(row){
   return `${row.partyName?row.partyName+' · ':''}${row.type} #${row.number}${row.purchaseDate?' · Compra '+row.purchaseDate:''} · Costo ${money(row.cost,'ARS')} · Venta ${money(row.salePrice,'ARS')} · ${row.status}`;
 }
 function showResaleImportReview(fileName,parsed,comparison){
-  pendingResaleImport={fileName,parsed,comparison};
+  pendingResaleImport={fileName,parsed,comparison,baseline:JSON.stringify(state.resale)};
   $('#resaleImportSummary').textContent=`${integerText(parsed.rows.length)} entradas leídas · ${integerText(comparison.matched)} coinciden · ${integerText(comparison.issues.length)} diferencias para revisar.`;
   $('#resaleImportWarnings').innerHTML=(parsed.warnings.length||parsed.partyMerges?.length)?
     `<strong>Revisión del archivo</strong>${(parsed.partyMerges||[]).map(m=>`<p>Se unen ${escape(m.sourceNames.join(' y '))} en ${escape(m.targetName)}, conservando cada entrada.</p>`).join('')}${parsed.warnings.map((warning)=>`<p>${escape(warning)}</p>`).join('')}`:'';
@@ -2056,6 +2056,7 @@ async function readResaleExcelFile(file){
       const sheets=Object.fromEntries(wb.SheetNames.map((name)=>[name,XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:'',raw:true})]));
       parsed=parseResaleWorkbook(sheets,state.resale.parties);
     }
+    if(parsed.blockers?.length)throw new Error('Importación bloqueada: '+parsed.blockers.join(' '));
     if(!parsed.rows.length)throw new Error(parsed.warnings.join(' ')||'No pude encontrar entradas en la planilla.');
     const comparison=compareResaleImport(parsed.rows,mergeResaleParties(state.resale.parties,parsed.partyMerges||[]));
     showResaleImportReview(file.name,parsed,comparison);
@@ -3702,6 +3703,7 @@ $('#importResaleExcel').onclick=()=>$('#resaleImportFile').click();
 $('#resaleImportFile').onchange=(event)=>readResaleExcelFile(event.target.files?.[0]);
 $('#applyResaleImport').onclick=()=>{
   if(!pendingResaleImport)return;
+  if(JSON.stringify(state.resale)!==pendingResaleImport.baseline)return showToast('La Reventa cambió durante la revisión. Volvé a abrir la planilla para comparar los datos actuales.');
   const issues=pendingResaleImport.comparison.issues.map((issue)=>({...issue,imported:issue.imported?{...issue.imported}:null}));
   const decisions={};
   for(const select of $('#resaleImportDifferences').querySelectorAll('.resale-import-decision')){
@@ -3724,17 +3726,20 @@ $('#applyResaleImport').onclick=()=>{
   const previous=cloneState();
   let verified;
   try{
+    saveVerifiedResaleBackup(localStorage,STORAGE_KEY+'-resale-before-import',previous.resale);
     state.resale.parties=applyResaleImport(mergeResaleParties(state.resale.parties,pendingResaleImport.parsed.partyMerges||[]),issues,decisions,uid);
     verifyResaleImport(state.resale.parties,issues,decisions);
+    verifyResalePreservation(mergeResaleParties(previous.resale.parties,pendingResaleImport.parsed.partyMerges||[]),state.resale.parties,issues,decisions);
+    state.resale.importHistory=[...(previous.resale.importHistory||[]),{date:new Date().toISOString(),file:pendingResaleImport.fileName,rows:pendingResaleImport.parsed.rows.length,decisions,changes:issues,partial:issues.some(i=>i.imported&&!['excel','manual'].includes(decisions[i.id]))}];
     if(save()===false)throw new Error('No se pudo verificar el guardado');
     const stored=parseStoredState(safeStoredValue(STORAGE_KEY));
     if(!stored?.resale||JSON.stringify(stored.resale.parties)!==JSON.stringify(state.resale.parties))throw new Error('El respaldo guardado no coincide con la importación');
     verified=verifyResaleImport(stored.resale.parties,issues,decisions);
-  }catch(error){restoreState(previous);renderResale();showToast('Importación no completada: '+error.message);return;}
+  }catch(error){restoreState(previous);save();renderResale();showToast('Importación no completada: '+error.message);return;}
   renderResale();$('#resaleImportReview').close();pendingResaleImport=null;
   showToast(verified.pending?`Actualización parcial: ${integerText(applied)} cambios guardados · ${integerText(verified.pending)} diferencias conservadas sin importar`:`✓ Importación verificada: ${integerText(verified.parties)} fiestas · ${integerText(verified.tickets)} entradas`);
 };
-$('#useResaleFile').onclick=()=>{$('#resaleImportDifferences').querySelectorAll('.resale-import-decision').forEach((select)=>{const issue=pendingResaleImport?.comparison.issues.find((i)=>i.id===select.dataset.importId);select.value=issue?.kind==='onlyApp'?'app':'excel';select.onchange?.();});};
+$('#useResaleFile').onclick=()=>{$('#resaleImportDifferences').querySelectorAll('.resale-import-decision').forEach((select)=>{const issue=pendingResaleImport?.comparison.issues.find((i)=>i.id===select.dataset.importId);select.value=issue?.kind==='new'?'excel':'app';select.onchange?.();});};
 $('#cancelResaleImport').onclick=()=>{pendingResaleImport=null;$('#resaleImportReview').close();};
 }
 
