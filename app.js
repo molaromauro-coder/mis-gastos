@@ -1,11 +1,12 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=138';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=138';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=138';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=139';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=139';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=139';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=138';
+import { installCloudSync } from './cloud-sync.js?v=139';
+import { createAccessLock } from './access-lock.js?v=139';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -13,9 +14,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=138';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=139';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=138');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=139');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -2442,10 +2443,10 @@ async function authenticateBiometric(){
   try{
     const credential=await navigator.credentials.get({publicKey:{
       challenge:randomBytes(32),
-      allowCredentials:[{type:'public-key',id:base64ToBytes(state.security.credentialId)}],
+      allowCredentials:[{type:'public-key',id:base64ToBytes(state.security.credentialId),transports:['internal']}],
       userVerification:'required',timeout:60000
     }});
-    return !!credential;
+    return !!credential&&credential.type==='public-key'&&bytesToBase64(credential.rawId)===state.security.credentialId;
   }catch{return false;}
 }
 function renderSecurityStatus(){
@@ -2453,6 +2454,8 @@ function renderSecurityStatus(){
   const enabled=!!state.security.enabled;
   $('#securityStatus').textContent=enabled?(state.security.credentialId?'Face ID activo · PIN de respaldo':'PIN activo · Face ID no configurado'):'Sin protección configurada';
   $('#disableSecurityBtn').classList.toggle('hidden',!enabled);
+  $('#securityToggle').checked=enabled;
+  $('#biometricBtn').textContent=state.security.pinHash?'Configurar Face ID / cambiar PIN':'Configurar Face ID y PIN';
 }
 function openSecuritySetup(){
   $('#securitySetupForm').reset();
@@ -2463,18 +2466,29 @@ async function unlockWithPin(){
   if(!/^(?:\d{4}|\d{6})$/.test(pin)){ $('#lockMessage').textContent='Ingresá tu PIN de 6 dígitos (o el PIN anterior de 4).'; return false; }
   const hash=await hashPin(pin,state.security.pinSalt);
   if(hash!==state.security.pinHash){ $('#lockMessage').textContent='PIN incorrecto.'; $('#unlockPin').value=''; return false; }
-  $('#lockDialog').close(); $('#unlockPin').value=''; $('#lockMessage').textContent=''; setTimeout(prepareRecurringDue,100); return true;
+  accessLock.unlock(); return true;
 }
-async function showAppLock(){
-  if(!state.security.enabled||!$('#lockDialog'))return;
-  if(!$('#lockDialog').open) $('#lockDialog').showModal();
-  $('#lockMessage').textContent='';
-  if(state.security.credentialId){
-    $('#lockMessage').textContent='Verificando Face ID…';
-    const ok=await authenticateBiometric();
-    if(ok){$('#lockDialog').close();$('#lockMessage').textContent='';setTimeout(prepareRecurringDue,100);return;}
-    $('#lockMessage').textContent='Usá tu PIN de 4 dígitos.';
+function renderAccessLock(mode){
+  if(mode==='unlocked'){
+    $('#lockDialog').close();$('#unlockPin').value='';$('#lockMessage').textContent='';return;
   }
+  if(!$('#lockDialog').open)$('#lockDialog').showModal();
+  const fallback=mode==='pin';
+  $('#pinUnlockFields').classList.toggle('hidden',!fallback);
+  $('#unlockBiometric').classList.toggle('hidden',!fallback||!state.security.credentialId);
+  $('#lockPrompt').textContent=fallback?'Ingresá tu PIN de 6 dígitos.':'Verificando Face ID…';
+  $('#lockMessage').textContent=fallback&&state.security.credentialId?'Face ID no se completó. Usá tu PIN de respaldo.':'';
+  if(fallback)$('#unlockPin').focus();
+}
+const accessLock=createAccessLock({getSecurity:()=>state.security,authenticate:authenticateBiometric,view:renderAccessLock,afterUnlock:()=>setTimeout(prepareRecurringDue,100)});
+async function showAppLock(){return accessLock.open();}
+function setSecurityEnabled(enabled){
+  if(enabled&&!state.security.pinHash){$('#securityToggle').checked=false;openSecuritySetup();return false;}
+  const previous=structuredClone(state.security);
+  state.security={...state.security,enabled};
+  if(!save()){state.security=previous;renderSecurityStatus();showToast('No se pudo guardar la protección. Se conservó la configuración anterior.');return false;}
+  if(!enabled)accessLock.pause();
+  renderSecurityStatus();showToast(enabled?'Protección activada · Face ID primero':'Protección desactivada · PIN y Face ID conservados');return true;
 }
 function currentMonthKey() { return monthKey(new Date()); }
 function budgetFor(key) { return state.budgets[key] || { amount: 0, reason: '', history: [] }; }
@@ -3461,25 +3475,45 @@ micBtn.onselectstart=(e)=>e.preventDefault();
 
 
 
+let securitySetupBusy=false;
 $('#securitySetupForm').onsubmit=async(e)=>{
   e.preventDefault();
+  if(securitySetupBusy)return;
   const p1=$('#securityPin').value.trim(),p2=$('#securityPin2').value.trim();
   if(!/^\d{6}$/.test(p1))return showToast('El PIN debe tener 6 dígitos');
   if(p1!==p2)return showToast('Los PIN no coinciden');
-  const salt=bytesToBase64(randomBytes(16));
-  state.security.pinSalt=salt;
-  state.security.pinHash=await hashPin(p1,salt);
-  state.security.enabled=true;
-  let face=false;
-  try{face=await registerBiometric();}catch{}
-  save();renderSecurityStatus();$('#securitySetupDialog').close();
-  showToast(face?'Face ID y PIN activados':'PIN activado; Face ID no disponible en este dispositivo');
+  const previous=structuredClone(state.security),submit=$('#securitySetupForm').querySelector('button.primary');
+  securitySetupBusy=true;submit.disabled=true;
+  let registration=Promise.resolve(false);
+  try{
+    // Invoke WebAuthn directly within the tap, before hashing the fallback PIN.
+    registration=registerBiometric().catch(()=>false);
+    const salt=bytesToBase64(randomBytes(16)),hash=await hashPin(p1,salt);
+    state.security={...state.security,pinSalt:salt,pinHash:hash,pinDigits:6,enabled:true};
+    const face=await registration;
+    if(!save()){state.security=previous;renderSecurityStatus();showToast('No se pudo guardar. Se conservó tu configuración anterior.');return;}
+    renderSecurityStatus();$('#securitySetupDialog').close();
+    showToast(face||state.security.credentialId?'Face ID y PIN activados':'PIN activado; Face ID no disponible en este dispositivo');
+  }catch{
+    await registration;
+    state.security=previous;renderSecurityStatus();showToast('No se pudo completar la configuración. Tus datos se conservaron.');
+  }finally{securitySetupBusy=false;submit.disabled=false;}
 };
-$('#disableSecurityBtn').onclick=()=>{if(!confirm('¿Desactivar la protección de acceso?'))return;state.security={...defaults.security};save();renderSecurityStatus();showToast('Protección desactivada');};
-$('#unlockBiometric').onclick=async()=>{ $('#lockMessage').textContent='Verificando…'; const ok=await authenticateBiometric(); if(ok){$('#lockDialog').close();$('#lockMessage').textContent='';setTimeout(prepareRecurringDue,100);}else $('#lockMessage').textContent='No se pudo validar. Usá tu PIN.'; };
+$('#disableSecurityBtn').onclick=()=>setSecurityEnabled(false);
+$('#securityToggle').onchange=(event)=>setSecurityEnabled(event.target.checked);
+$('#unlockBiometric').onclick=()=>void accessLock.retry();
 $('#unlockPinBtn').onclick=unlockWithPin;
 $('#unlockPin').onkeydown=(e)=>{if(e.key==='Enter'){e.preventDefault();unlockWithPin();}};
 $('#lockDialog').addEventListener('cancel',(e)=>e.preventDefault());
+let securityHiddenAt=0;
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){
+    if(state.security.enabled&&!accessLock.locked&&!$('#securitySetupDialog').open)securityHiddenAt=Date.now();
+  }else if(securityHiddenAt){
+    securityHiddenAt=0;
+    if(state.security.enabled)void showAppLock();
+  }
+});
 
 $('#privacyBtn').onclick=()=>{state.settings.hideAmounts=!state.settings.hideAmounts;document.body.classList.toggle('hide-amounts',state.settings.hideAmounts);$('#privacyBtn').textContent=state.settings.hideAmounts?'🙈':'👁';save();};
 $('#globalSearchBtn').onclick=()=>{goView('consultations');setTimeout(()=>$('#consultQuery')?.focus(),0);};

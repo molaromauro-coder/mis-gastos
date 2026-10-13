@@ -95,3 +95,9 @@ Las pruebas cubren números e importes en español, múltiples gastos en una fra
 - SDK navegador @supabase/supabase-js 2.57.4 vendorizado y versionado, sin descarga de dependencias al iniciar.
 - Validación automatizada: combinación inicial y concurrente, conflicto, baja autorizada, campos desconocidos, respaldo fallido, relectura fallida, escritura durante descarga y carga repetida. Prueba transaccional del servidor verifica revisión, archivo de estados, prohibición de borrar respaldos y aislamiento entre dos usuarios; fixtures revertidos.
 - La prueba final en los dispositivos reales requiere iniciar sesión en ambos y verificar PC→iPhone e iPhone→PC con datos identificables. No afirmar que los datos locales ya se sincronizaron antes de esa comprobación.
+
+## Protección de acceso (versión 139)
+
+Configurar Face ID y un PIN de seis dígitos desde Configuración. El interruptor permite desactivar y volver a activar la protección sin borrar sus credenciales. La app intenta primero la credencial biométrica guardada, restringida al autenticador interno, al iniciar y al volver del segundo plano. El PIN aparece si la autenticación falla, se cancela o no está configurada. Evita solicitudes simultáneas. Si falla el guardado de una configuración, conserva la anterior.
+
+Es una protección de acceso local de la PWA, no un cifrado integral del almacenamiento ni una sustitución del inicio de sesión remoto. Safari/iOS controla la interfaz de llave de acceso y sus métodos de verificación; no puede garantizarse eliminar la hoja del sistema ni forzar exclusivamente Face ID mediante WebAuthn. Una app iOS nativa con LocalAuthentication es necesaria para ese flujo específico. Prueba real del iPhone pendiente; flujo de éxito, fallo, cancelación, solicitudes simultáneas, interruptor y reversión ante fallo de guardado cubiertos por las pruebas automáticas.
