@@ -230,6 +230,7 @@ export function portfolioMetrics(parties = [], split) {
 export function withPortfolioPercent(metrics) {
   return {
     ...metrics,
+    currentInvestment: metrics.investment - metrics.recovered,
     gainPercent: metrics.recovered ? (metrics.netGain / metrics.recovered) * 100 : 0
   };
 }

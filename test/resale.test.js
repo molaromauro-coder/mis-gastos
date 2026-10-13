@@ -138,3 +138,16 @@ test('uso personal queda fuera de la inversión comercial y mantiene su registro
  const party={tickets:[{cost:100,salePrice:150,status:'Vendida'},{cost:200,status:'Disponible'},{cost:1000,salePrice:900,status:'Uso personal'}]};const m=partyMetrics(party,{ownerPercent:70,sellerPercent:30});
  assert.equal(m.investment,300);assert.equal(m.sales,150);assert.equal(m.recovered,100);assert.equal(m.netGain,50);assert.equal(m.personal,1);assert.equal(party.tickets.length,3);
 });
+
+
+test('capital actual se actualiza con compras, ventas válidas y uso personal sin descontar ganancias',()=>{
+ const parties=[{tickets:[{cost:100,salePrice:0,status:'Disponible'},{cost:200,salePrice:350,status:'Vendida'},{cost:500,salePrice:0,status:'Uso personal'}]}];
+ const current=()=>withPortfolioPercent(portfolioMetrics(parties)).currentInvestment;
+ assert.equal(current(),100);
+ parties[0].tickets.push({cost:50,salePrice:0,status:'Disponible'});assert.equal(current(),150);
+ parties[0].tickets[0].salePrice=150;parties[0].tickets[0].status='Vendida';assert.equal(current(),50);
+ parties[0].tickets[0].status='Disponible';assert.equal(current(),150);
+ parties[0].tickets[0].status='Uso personal';assert.equal(current(),50);
+ parties[0].tickets[3].status='Vendida';assert.equal(current(),50); // Sin precio todavía no hay venta confirmada.
+ assert.equal(withPortfolioPercent(portfolioMetrics([])).currentInvestment,0);
+});
