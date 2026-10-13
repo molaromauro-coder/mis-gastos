@@ -1931,7 +1931,10 @@ function renderResale({ totalsOnly = false } = {}) {
       orderResaleBalanceParties(section.parties).map((party) => {
       const m = partyMetrics(party, split);
       return `<tr><td><strong>${escape(party.name)}</strong></td><td>${money(m.investment,'ARS')}</td><td>${money(m.recovered,'ARS')}</td><td>${money(m.sales,'ARS')}</td><td>${money(m.totalForOwner,'ARS')}</td><td>${money(m.netGain,'ARS')}</td><td>${pct(m.gainPercent)}</td><td>${money(m.ownerGain,'ARS')}</td><td>${money(m.sellerGain,'ARS')}</td></tr>`;
-    }).join('')).join('');
+    }).join('') + (section.title === 'PRÓXIMAS FIESTAS' ? (() => {
+      const m = withPortfolioPercent(portfolioMetrics(section.parties, split));
+      return `<tr class="resale-balance-subtotal"><th>TOTAL PRÓXIMAS FIESTAS</th><th>${money(m.investment,'ARS')}</th><th>${money(m.recovered,'ARS')}</th><th>${money(m.sales,'ARS')}</th><th>${money(m.totalForOwner,'ARS')}</th><th>${money(m.netGain,'ARS')}</th><th>${pct(m.gainPercent)}</th><th>${money(m.ownerGain,'ARS')}</th><th>${money(m.sellerGain,'ARS')}</th></tr>`;
+    })() : '')).join('');
   }
   if ($('#resaleBalanceTotal')) {
     $('#resaleBalanceTotal').innerHTML = `<tr><th>TOTAL GENERAL</th><th>${money(total.investment,'ARS')}</th><th>${money(total.recovered,'ARS')}</th><th>${money(total.sales,'ARS')}</th><th>${money(total.totalForOwner,'ARS')}</th><th>${money(total.netGain,'ARS')}</th><th>${pct(total.gainPercent)}</th><th>${money(total.ownerGain,'ARS')}</th><th>${money(total.sellerGain,'ARS')}</th></tr>`;
