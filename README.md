@@ -81,7 +81,7 @@ Las pruebas cubren números e importes en español, múltiples gastos en una fra
 - Si ves una versión anterior, recargá Safari; el service worker utiliza una caché versionada y elimina las versiones previas.
 - Si no aparece una tarjeta al cargar un gasto, verificá que esté configurada con el mismo tipo de medio de pago: Débito o Crédito.
 
-## Sincronización (versión 137)
+## Sincronización (versión 138)
 
 - Se activa una vez por dispositivo en Configuración → Sincronización PC y celular. No depende de la cuenta de ChatGPT.
 - Envía cambios después de guardar y consulta cambios remotos cada 10 segundos con la app abierta; también al reconectar o volver a abrir. iOS puede suspender la app cerrada.
