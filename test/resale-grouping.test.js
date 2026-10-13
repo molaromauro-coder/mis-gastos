@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
-import {groupResalePartiesByDate,orderResaleBalanceParties,partyMetrics} from '../resale.js';
+import {groupResalePartiesByDate,orderResaleBalanceParties,portfolioMetrics,withPortfolioPercent,partyMetrics} from '../resale.js';
 import {formatNumericInputValue} from '../numeric-format.js';
 const now=new Date(2026,9,9,23,30);
 const parties=[
@@ -30,7 +30,7 @@ test('undated or invalid events remain accessible without being marked finished 
 });
 function renderer(){
  const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');const start=app.indexOf('function resalePartyCardHTML('),end=app.indexOf('function renderResale(',start);
- const context={groupResalePartiesByDate,orderResaleBalanceParties,partyMetrics,formatNumericInputValue,escape:(s)=>String(s||'').replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;'),integerText:String,money:(n)=>String(n),resaleTicketResultHTML:()=>'',resalePartyMetricsHTML:()=>''};
+ const context={groupResalePartiesByDate,orderResaleBalanceParties,portfolioMetrics,withPortfolioPercent,partyMetrics,formatNumericInputValue,escape:(s)=>String(s||'').replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;'),integerText:String,money:(n)=>String(n),resaleTicketResultHTML:()=>'',resalePartyMetricsHTML:()=>''};
  vm.createContext(context);vm.runInContext(app.slice(start,end),context);return context.resaleGroupedCardsHTML;
 }
 test('two expandable cards preserve each event detail, saved sale price and open states after rendering',()=>{
@@ -57,7 +57,7 @@ test('balance table always displays upcoming then finished titles and chronologi
  const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
  const start=app.indexOf("  if ($('#resaleBalanceBody')) {"),end=app.indexOf("  if ($('#resaleBalanceTotal')) {",start);
  const body={innerHTML:''},split={ownerPercent:70,sellerPercent:30};
- vm.runInNewContext(app.slice(start,end),{$:()=>body,state:{resale:{parties}},now,groupResalePartiesByDate,orderResaleBalanceParties,partyMetrics,split,money:String,pct:String,escape:String});
+ vm.runInNewContext(app.slice(start,end),{$:()=>body,state:{resale:{parties}},now,groupResalePartiesByDate,orderResaleBalanceParties,portfolioMetrics,withPortfolioPercent,partyMetrics,split,money:String,pct:String,escape:String});
  const names=[...body.innerHTML.matchAll(/<strong>(.*?)<\/strong>/g)].map(match=>match[1]);
  assert.deepEqual(names,['HOY','KEVIN DI SERNA','JOHN DIGWEED','MAX STYLER','NACHO SCOPPA']);
  assert.match(body.innerHTML,/colspan="9">PRÓXIMAS FIESTAS<\/th>/);

@@ -2,7 +2,7 @@
 
 PWA móvil para registrar y analizar gastos personales en pesos argentinos y dólares. Incluye carga manual, carga por voz en español argentino, tarjetas de débito y crédito, cuotas, informes, presupuesto, ahorro, stock, recuperos, papelera, exportación y un módulo privado de reventa de entradas.
 
-Los datos se guardan localmente en el navegador del dispositivo. La sincronización automática entre iPhone y computadora todavía no forma parte de esta versión.
+Los datos se guardan localmente y, al vincular una cuenta en Configuración → Sincronización PC y celular, se sincronizan automáticamente con el servicio remoto. Usá el mismo correo y contraseña de Mis Gastos en ambos dispositivos. La contraseña pertenece a Mis Gastos, no a Gmail. La primera creación requiere confirmar el correo. El proveedor debe tener habilitado el envío de confirmaciones (SMTP configurado o correo autorizado por el servicio).
 
 ## Probarla en computadora
 
@@ -53,7 +53,7 @@ Los **recuperos** cargados durante el mes al que corresponden reducen el gasto n
 
 Cada modificación relevante se guarda inmediatamente en `localStorage`, y se vuelve a persistir al ocultar o cerrar la aplicación. Una actualización del código no cambia la clave de almacenamiento, por lo que no debería borrar los datos del mismo origen/navegador.
 
-Importante: Safari y una PWA instalada pueden comportarse como contextos de almacenamiento distintos según la versión/configuración de iOS. Para datos reales conviene elegir el acceso que se va a usar habitualmente y continuar allí hasta incorporar sincronización en la nube.
+Importante: Safari y una PWA instalada pueden comportarse como contextos de almacenamiento distintos según la versión/configuración de iOS. Vinculá cada contexto que uses con la misma cuenta. Hasta verificar la primera sincronización de los dos dispositivos, conservá copias externas y no borres ningún acceso.
 
 ## Exportación
 
@@ -80,3 +80,18 @@ Las pruebas cubren números e importes en español, múltiples gastos en una fra
 - Si el micrófono no responde, comprobá permiso de micrófono y que la URL use HTTPS.
 - Si ves una versión anterior, recargá Safari; el service worker utiliza una caché versionada y elimina las versiones previas.
 - Si no aparece una tarjeta al cargar un gasto, verificá que esté configurada con el mismo tipo de medio de pago: Débito o Crédito.
+
+## Sincronización (versión 137)
+
+- Se activa una vez por dispositivo en Configuración → Sincronización PC y celular. No depende de la cuenta de ChatGPT.
+- Envía cambios después de guardar y consulta cambios remotos cada 10 segundos con la app abierta; también al reconectar o volver a abrir. iOS puede suspender la app cerrada.
+- Sin conexión, conserva los datos locales pendientes. El estado visible distingue sincronizado, pendiente, sin conexión, error y diferencias.
+- La primera vinculación une registros de ambas copias por ID y no interpreta listas vacías como eliminaciones. Distintos IDs se conservan: revisar posibles compras repetidas cargadas por separado en ambos dispositivos.
+- La comparación de tres versiones conserva campos desconocidos y combina cambios independientes. Los conflictos entre edición/eliminación o valores distintos se revisan individualmente; se respaldan ambas versiones.
+- Guardado remoto con control de revisión y relectura de la versión guardada. Una revisión desactualizada no puede sustituir la actual.
+- Historial remoto inmutable para la app y copia local verificada antes de incorporar cambios remotos. El historial no tiene limpieza automática en esta versión; controlar el espacio del servicio.
+- RLS limita las filas a su propietario autenticado. No incluye claves privadas ni service-role. Face ID, PIN y credenciales biométricas permanecen en su dispositivo.
+- Esquema del servidor documentado en sync-schema.sql; migraciones aplicadas mediante Supabase MCP. El prototipo anterior vacío se conserva, con sus RPC públicos deshabilitados (sync-retire-legacy.sql).
+- SDK navegador @supabase/supabase-js 2.57.4 vendorizado y versionado, sin descarga de dependencias al iniciar.
+- Validación automatizada: combinación inicial y concurrente, conflicto, baja autorizada, campos desconocidos, respaldo fallido, relectura fallida, escritura durante descarga y carga repetida. Prueba transaccional del servidor verifica revisión, archivo de estados, prohibición de borrar respaldos y aislamiento entre dos usuarios; fixtures revertidos.
+- La prueba final en los dispositivos reales requiere iniciar sesión en ambos y verificar PC→iPhone e iPhone→PC con datos identificables. No afirmar que los datos locales ya se sincronizaron antes de esa comprobación.

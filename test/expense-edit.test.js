@@ -119,7 +119,7 @@ function editorFixture(options={}){
     escape:String,displayCategory:String,displaySubcategory:String,uid,settingsSnapshot:null,mirrorResetIntoSnapshot(){},render(){},feedback(){},runConsultation(){},showToast(){},
     stampUsdExpense:options.stamp|| (async(patch)=>({...patch,fxRate:1200})),firstDueDateForCard(){},dateInputValue(){},createCategoryFromPrompt(){},createSubcategoryFromPrompt(){},
     STORAGE_KEY:'main',BACKUP_KEY:'backup',HISTORY_KEY:'history',safeStoredValue:(key)=>stored.get(key)||null,parseStoredState:(s)=>s?JSON.parse(s):null,localHistorySnapshots:()=>[],localStorage:{setItem:(key,raw)=>{if(options.fail&&key==='main')throw Error('quota');stored.set(key,raw);}},
-    retainedExpenseCount:(s)=>s.expenses.length+(s.trash||[]).flatMap((r)=>r.items||[]).length,isValidSnapshot,protectExpenseRecords,destructiveWriteAllowed:false,window:{},renderDataSafetyStatus(){},persistIndexedSnapshot:async()=>true,
+    retainedExpenseCount:(s)=>s.expenses.length+(s.trash||[]).flatMap((r)=>r.items||[]).length,isValidSnapshot,protectExpenseRecords,destructiveWriteAllowed:false,cloudSyncController:null,window:{},renderDataSafetyStatus(){},persistIndexedSnapshot:async()=>true,
     permitDestructiveWriteOnce(){context.destructiveWriteAllowed=true;}
   };
   vm.createContext(context);
