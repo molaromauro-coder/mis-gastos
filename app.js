@@ -2056,7 +2056,8 @@ async function readResaleExcelFile(file){
       const sheets=Object.fromEntries(wb.SheetNames.map((name)=>[name,XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:'',raw:true})]));
       parsed=parseResaleWorkbook(sheets,state.resale.parties);
     }
-    if(parsed.blockers?.length)throw new Error('Importación bloqueada: '+parsed.blockers.join(' '));
+    const blockers=[...(parsed.blockers||[]),...(parsed.warnings||[]).filter(w=>/se omiti[oó]/i.test(w))];
+    if(blockers.length)throw new Error('Importación bloqueada: '+blockers.join(' '));
     if(!parsed.rows.length)throw new Error(parsed.warnings.join(' ')||'No pude encontrar entradas en la planilla.');
     const comparison=compareResaleImport(parsed.rows,mergeResaleParties(state.resale.parties,parsed.partyMerges||[]));
     showResaleImportReview(file.name,parsed,comparison);
