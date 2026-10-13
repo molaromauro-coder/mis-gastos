@@ -18,3 +18,17 @@ No sustituir los datos actuales del usuario por respaldos anteriores completos p
 
 ## Incidente registrado — 13/10/2026
 Las capturas mostraban fiestas importadas ausentes y entradas VIP debajo de EARLY. No confundir publicación del código con actualización de los datos locales. Las importaciones futuras deben guardar y releer un respaldo independiente de Reventa antes de modificarla; conservar por defecto todas las entradas actuales y sus ventas; rechazar revisiones obsoletas; verificar cada entrada no autorizada a cambiar y registrar archivo, fecha, diferencias y decisiones. El botón de selección global solo agrega entradas nuevas: los reemplazos se deciden individualmente. Si Compras contiene entradas ausentes de Ventas, bloquear la importación y explicar el faltante. No prometer que nunca habrá errores: mantener pruebas de regresión y comprobación del guardado.
+
+## Regla permanente del usuario — conservación de TODOS los datos (13/10/2026)
+La conservación de la información es obligatoria en cada cambio del proyecto, aunque el usuario no vuelva a mencionarla. Se aplica a gastos, pagos, tarjetas, categorías, subcategorías, fechas, estados, compras, ventas, fiestas, entradas, recuperos, stock, configuraciones, funciones ocultas y papelera.
+
+- Antes de cualquier migración, importación, restauración o modificación masiva, crear un respaldo completo y releerlo para verificar su integridad. Si falla la creación o la comprobación, bloquear la operación.
+- Preparar los cambios en una copia; validar esquema, identidad de registros y diferencias antes de guardar. Conservar campos desconocidos y datos que no estén presentes en el archivo importado.
+- Nunca interpretar una lista vacía, una columna ausente, un error de lectura o un archivo parcial como una orden de borrar. No reemplazar el estado completo para actualizar un módulo.
+- Cada baja o reemplazo requiere una acción explícita del usuario y una copia recuperable previa. Conservar las funciones de eliminación autorizadas, sus confirmaciones y el período seleccionado.
+- Mantener registros estables y evitar duplicados al repetir una importación. Conservar por defecto datos locales posteriores y pedir resolución individual de conflictos.
+- Registrar origen del archivo, fecha, inventario antes/después, diferencias, decisiones, resultado y respaldo relacionado. Nunca registrar éxito si el guardado o la relectura no coinciden.
+- Ante errores o falta de espacio, mostrar el fallo y preservar el último estado verificado; no continuar con un estado vacío ni sobrescribir respaldos válidos con datos incompletos.
+- Antes de publicar cambios que afecten persistencia: probar importación parcial, repetida y conflictiva; fallos de almacenamiento; recuperación; conservación de campos; y separación entre gastos personales y Reventa.
+- Comprobar recuperación real desde un respaldo íntegro y ofrecer exportación fuera del almacenamiento del navegador. Una copia en el mismo dispositivo no cubre borrado de datos, pérdida del dispositivo o fallos físicos.
+- No afirmar protección absoluta, sincronización remota ni restauración del dispositivo del usuario sin verificarlas. Distinguir implementación, publicación y comprobación de los datos locales.
