@@ -1,12 +1,12 @@
 // Missing purchases verified against REVENTA_ENTRADAS 11-10-26.xlsx, Ventas and Compras.
 // Additions only: existing costs, sales, statuses and personal expenses are preserved.
-import {compareResaleImport,applyResaleImport,mergeResaleParties} from './resale-import.js?v=129';
-export const RESALE_EXCEL_OCT11_VERSION=1;
+import {compareResaleImport,applyResaleImport,mergeResaleParties} from './resale-import.js?v=130';
+export const RESALE_EXCEL_OCT11_VERSION=2;
 export const missingPurchaseRows=[
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 1,
     "cost": 63250,
@@ -17,8 +17,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 2,
     "cost": 63250,
@@ -29,8 +29,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 3,
     "cost": 63250,
@@ -41,8 +41,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 4,
     "cost": 63250,
@@ -53,8 +53,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 5,
     "cost": 63250,
@@ -65,8 +65,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 6,
     "cost": 63250,
@@ -77,8 +77,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 7,
     "cost": 63250,
@@ -89,8 +89,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 8,
     "cost": 63250,
@@ -101,8 +101,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 9,
     "cost": 63250,
@@ -113,8 +113,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 10,
     "cost": 63250,
@@ -125,8 +125,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 11,
     "cost": 63250,
@@ -137,8 +137,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 12,
     "cost": 63250,
@@ -149,8 +149,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 13,
     "cost": 63250,
@@ -161,8 +161,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 14,
     "cost": 63250,
@@ -173,8 +173,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 15,
     "cost": 63250,
@@ -185,8 +185,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 16,
     "cost": 63250,
@@ -197,8 +197,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 17,
     "cost": 63250,
@@ -209,8 +209,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 18,
     "cost": 63250,
@@ -221,8 +221,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 19,
     "cost": 63250,
@@ -233,8 +233,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 20,
     "cost": 63250,
@@ -245,8 +245,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 21,
     "cost": 63250,
@@ -257,8 +257,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 22,
     "cost": 63250,
@@ -269,8 +269,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 23,
     "cost": 63250,
@@ -281,8 +281,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 24,
     "cost": 63250,
@@ -293,8 +293,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "VIP",
     "number": 1,
     "cost": 80500,
@@ -305,8 +305,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "VIP",
     "number": 2,
     "cost": 80500,
@@ -317,8 +317,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 25,
     "cost": 54550,
@@ -329,8 +329,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 26,
     "cost": 54550,
@@ -341,8 +341,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 27,
     "cost": 54550,
@@ -353,8 +353,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 28,
     "cost": 54550,
@@ -365,8 +365,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 29,
     "cost": 54550,
@@ -377,8 +377,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "EARLY",
     "number": 30,
     "cost": 54550,
@@ -389,8 +389,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "VIP",
     "number": 3,
     "cost": 70500,
@@ -401,8 +401,8 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "MISS MONIQUE",
-    "date": "",
-    "dateExplicit": false,
+    "date": "2026-12-26",
+    "dateExplicit": true,
     "type": "VIP",
     "number": 4,
     "cost": 70500,
@@ -438,6 +438,7 @@ export const missingPurchaseRows=[
 ];
 export function addMissingExcelPurchases(existingParties,makeId){
  const merged=mergeResaleParties(existingParties);
+ for(const party of merged)if(party.name==='MISS MONIQUE')party.date='2026-12-26';
  const comparison=compareResaleImport(missingPurchaseRows,merged);
  const additions=comparison.issues.filter(issue=>issue.kind==='new');
  const decisions=Object.fromEntries(additions.map(issue=>[issue.id,'excel']));

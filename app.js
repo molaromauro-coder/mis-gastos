@@ -1,6 +1,6 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=129';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=129';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=129';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=130';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=130';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=130';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -12,9 +12,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties } from './resale-import.js?v=129';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties } from './resale-import.js?v=130';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=129');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=130');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
