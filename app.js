@@ -1,5 +1,6 @@
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=128';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=128';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=129';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=129';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=129';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -11,9 +12,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties } from './resale-import.js?v=128';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties } from './resale-import.js?v=129';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=128');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=129');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -3742,3 +3743,22 @@ const todayISO = new Date().toISOString().slice(0, 10); const monthISO=todayISO.
   }
 }); if(window.__misGastosIntegrityBlocked)setTimeout(()=>showToast('Protección activa: se conservaron gastos que faltaban al guardar'),300); void requestDataPersistence(); setInterval(renderHomeClock,30000); ensureUsdRate(false).then(()=>renderUsd()); setTimeout(()=>{if(state.security.enabled)showAppLock();else prepareRecurringDue();},250);
 
+
+function installMissingResaleExcelPurchases(){
+ if(sharedMode||Number(state.settings?.resaleExcelOct11Version||0)>=RESALE_EXCEL_OCT11_VERSION)return;
+ const previousResale=structuredClone(state.resale),previousSettings=structuredClone(state.settings);
+ try{
+  const result=addMissingExcelPurchases(state.resale.parties,uid);
+  if(!save())return;
+  state.resale={...state.resale,parties:result.parties};
+  state.settings={...state.settings,resaleExcelOct11Version:RESALE_EXCEL_OCT11_VERSION,resaleExcelOct11Added:result.added};
+  if(!save())throw new Error('No se pudo guardar la actualización de Reventa.');
+  renderResale();
+  if(result.added)setTimeout(()=>showToast('✓ Reventa: '+integerText(result.added)+' entradas del Excel incorporadas'),600);
+ }catch(error){
+  state.resale=previousResale;state.settings=previousSettings;
+  showToast(error.message||'No se pudo incorporar el Excel. Conservá tu respaldo.');
+ }
+}
+
+installMissingResaleExcelPurchases();
