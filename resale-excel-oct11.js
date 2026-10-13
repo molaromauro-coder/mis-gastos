@@ -1,7 +1,7 @@
 // Missing purchases verified against REVENTA_ENTRADAS 11-10-26.xlsx, Ventas and Compras.
 // Additions only: existing costs, sales, statuses and personal expenses are preserved.
-import {compareResaleImport,applyResaleImport,mergeResaleParties} from './resale-import.js?v=130';
-export const RESALE_EXCEL_OCT11_VERSION=2;
+import {compareResaleImport,applyResaleImport,mergeResaleParties,verifyResaleImport} from './resale-import.js?v=131';
+export const RESALE_EXCEL_OCT11_VERSION=3;
 export const missingPurchaseRows=[
   {
     "partyName": "MISS MONIQUE",
@@ -413,7 +413,7 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "SOLOMUN - MUTE - MDQ",
-    "date": "2027-10-02",
+    "date": "2027-01-02",
     "dateExplicit": true,
     "type": "VIP",
     "number": 1,
@@ -425,7 +425,7 @@ export const missingPurchaseRows=[
   },
   {
     "partyName": "SOLOMUN - MUTE - MDQ",
-    "date": "2027-10-02",
+    "date": "2027-01-02",
     "dateExplicit": true,
     "type": "VIP",
     "number": 2,
@@ -438,9 +438,11 @@ export const missingPurchaseRows=[
 ];
 export function addMissingExcelPurchases(existingParties,makeId){
  const merged=mergeResaleParties(existingParties);
- for(const party of merged)if(party.name==='MISS MONIQUE')party.date='2026-12-26';
+ for(const party of merged){if(party.name==='MISS MONIQUE')party.date='2026-12-26';if(party.name==='SOLOMUN - MUTE - MDQ')party.date='2027-01-02';}
  const comparison=compareResaleImport(missingPurchaseRows,merged);
  const additions=comparison.issues.filter(issue=>issue.kind==='new');
  const decisions=Object.fromEntries(additions.map(issue=>[issue.id,'excel']));
- return {parties:applyResaleImport(merged,comparison.issues,decisions,makeId),added:additions.length};
+ const parties=applyResaleImport(merged,comparison.issues,decisions,makeId);
+ verifyResaleImport(parties,comparison.issues,decisions);
+ return {parties,added:additions.length};
 }

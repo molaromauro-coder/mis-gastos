@@ -214,3 +214,22 @@ export function mergeResaleParties(existingParties,merges=RESALE_PARTY_MERGES){
  }
  return parties;
 }
+
+export function verifyResaleImport(parties,issues,decisions={}){
+ const selected=issues.filter(issue=>['excel','manual','remove'].includes(decisions[issue.id]));
+ for(const issue of selected){
+  if(decisions[issue.id]==='remove'){
+   const party=parties.find(p=>p.id===issue.partyId);
+   if(party?.tickets?.some(t=>t.id===issue.ticketId))throw new Error('La entrada que se eliminó sigue cargada.');
+   continue;
+  }
+  const row=issue.imported;
+  if(!row)throw new Error('Falta el registro original de la entrada importada.');
+  const party=parties.find(p=>norm(p.name)===norm(row.partyName));
+  const matches=party?.tickets?.filter(t=>norm(t.type)===norm(row.type)&&Number(t.number)===Number(row.number))||[];
+  if(matches.length!==1)throw new Error(row.partyName+': entrada faltante o duplicada '+row.type+' #'+row.number);
+  const ticket=matches[0];
+  if(Math.abs(Number(ticket.cost)-row.cost)>.01||Math.abs(Number(ticket.salePrice||0)-row.salePrice)>.01||ticket.status!==row.status||row.purchaseDate&&ticket.purchaseDate!==row.purchaseDate||row.date&&row.dateExplicit&&party.date!==row.date)throw new Error(row.partyName+': no coinciden los datos guardados de '+row.type+' #'+row.number);
+ }
+ return {verified:selected.length,pending:issues.filter(issue=>issue.imported&&!['excel','manual'].includes(decisions[issue.id])).length,parties:parties.length,tickets:parties.reduce((sum,p)=>sum+(p.tickets||[]).length,0)};
+}

@@ -1,6 +1,6 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=130';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=130';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=130';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=131';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=131';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=131';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -12,9 +12,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties } from './resale-import.js?v=130';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport } from './resale-import.js?v=131';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=130');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=131');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -3719,9 +3719,17 @@ $('#applyResaleImport').onclick=()=>{
   }
   const applied=issues.filter((issue)=>['excel','manual','remove'].includes(decisions[issue.id])).length;
   const previous=cloneState();
-  try{state.resale.parties=applyResaleImport(mergeResaleParties(state.resale.parties,pendingResaleImport.parsed.partyMerges||[]),issues,decisions,uid);if(save()===false)throw new Error('No se pudo verificar el guardado');}catch(error){restoreState(previous);renderResale();showToast('No se pudo guardar la importación. Tus datos anteriores se conservan.');return;}
+  let verified;
+  try{
+    state.resale.parties=applyResaleImport(mergeResaleParties(state.resale.parties,pendingResaleImport.parsed.partyMerges||[]),issues,decisions,uid);
+    verifyResaleImport(state.resale.parties,issues,decisions);
+    if(save()===false)throw new Error('No se pudo verificar el guardado');
+    const stored=parseStoredState(safeStoredValue(STORAGE_KEY));
+    if(!stored?.resale||JSON.stringify(stored.resale.parties)!==JSON.stringify(state.resale.parties))throw new Error('El respaldo guardado no coincide con la importación');
+    verified=verifyResaleImport(stored.resale.parties,issues,decisions);
+  }catch(error){restoreState(previous);renderResale();showToast('Importación no completada: '+error.message);return;}
   renderResale();$('#resaleImportReview').close();pendingResaleImport=null;
-  showToast(`Reventa actualizada: ${integerText(applied)} diferencias resueltas`);
+  showToast(verified.pending?`Actualización parcial: ${integerText(applied)} cambios guardados · ${integerText(verified.pending)} diferencias conservadas sin importar`:`✓ Importación verificada: ${integerText(verified.parties)} fiestas · ${integerText(verified.tickets)} entradas`);
 };
 $('#useResaleFile').onclick=()=>{$('#resaleImportDifferences').querySelectorAll('.resale-import-decision').forEach((select)=>{const issue=pendingResaleImport?.comparison.issues.find((i)=>i.id===select.dataset.importId);select.value=issue?.kind==='onlyApp'?'app':'excel';select.onchange?.();});};
 $('#cancelResaleImport').onclick=()=>{pendingResaleImport=null;$('#resaleImportReview').close();};
