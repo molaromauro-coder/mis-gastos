@@ -75,7 +75,7 @@ export function installCloudSync({getState,applyState,canApply,localSaved}) {
         const query=revision?client.from('sync_backups').select('revision,state').eq('user_id',user.id).eq('revision',revision).order('created_at',{ascending:false}).limit(1):client.from('sync_heads').select('revision,state').eq('user_id',user.id);
         const {data,error}=await query.maybeSingle();if(error)throw error;return data;
       },archiveLocal,
-      commitRemote:async(expected,snapshot)=>{const {data,error}=await client.rpc('commit_sync',{p_expected:expected,p_state:snapshot,p_device:deviceId});if(error)throw error;return data;},
+      commitRemote:async(expected,snapshot)=>{const {data,error}=await client.rpc('commit_sync',{p_expected:expected,p_state:snapshot,p_device:deviceId,p_user:readJSON(bindingKey)});if(error)throw error;return data;},
       applyLocal:async(snapshot,captured)=>{
         if(!isValidSnapshot(snapshot))throw Error('La copia sincronizada está incompleta.');
         if(stopped||!user||!canApply()||!sameSyncValue(captured,getLocal()))throw Error('Hay una edición en curso. Se sincronizará al terminar.');
@@ -98,8 +98,8 @@ export function installCloudSync({getState,applyState,canApply,localSaved}) {
       const result=await client.auth.getUser();
       if(result.error)throw result.error;
       if(!result.data.user){user=null;status('signedout');return;}
+      const bound=readJSON(bindingKey);if(bound&&bound!==result.data.user.id)throw Error('Usá la cuenta original de este dispositivo. No se mezclaron cuentas.');
       user=result.data.user;
-      const bound=readJSON(bindingKey);if(bound&&bound!==user.id)throw Error('Usá la cuenta original de este dispositivo. No se mezclaron cuentas.');
       verifiedWrite(bindingKey,user.id);
       if(!canApply()){status('pending','Se completará al terminar la edición.');return;}
       if(!localSaved())throw Error('Guardado local pendiente. Tus datos no se reemplazaron.');
