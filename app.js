@@ -1,6 +1,6 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=132';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=132';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=132';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=133';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=133';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=133';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
@@ -12,9 +12,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport } from './resale-import.js?v=132';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport } from './resale-import.js?v=133';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=132');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=133');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -1850,7 +1850,10 @@ function saveAllResaleSales(){
 }
 function resalePartyCardHTML(party,split,open=false){
     const m = partyMetrics(party, split);
-    const tickets = party.tickets.map((ticket,ticketIndex) => {
+    const tickets = party.tickets.map((ticket,ticketIndex)=>({ticket,ticketIndex})).sort((a,b)=>{
+      const rank=(type)=>{const value=String(type||'').trim().toUpperCase();return value==='VIP'?0:value==='EARLY'?1:2;};
+      return rank(a.ticket.type)-rank(b.ticket.type)||String(a.ticket.type||'').localeCompare(String(b.ticket.type||''),'es',{sensitivity:'base',numeric:true})||Number(a.ticket.number||0)-Number(b.ticket.number||0)||a.ticketIndex-b.ticketIndex;
+    }).map(({ticket,ticketIndex}) => {
       return `<div class="resale-ticket" data-ticket-index="${ticketIndex}" data-ticket-id="${escape(ticket.id)}" data-party-id="${escape(party.id)}">
         <div class="resale-ticket-head"><div><strong>${escape(ticket.type)} · #${integerText(ticket.number)}</strong><small>Costo ${money(ticket.cost, 'ARS')}</small>${ticket.purchaseDate?`<small>Compra: ${escape(ticket.purchaseDate.split('-').reverse().join('/'))}</small>`:''}</div><select class="resale-status">
           ${['Disponible','Vendida','Uso personal'].map((s) => `<option ${ticket.status === s ? 'selected' : ''}>${s}</option>`).join('')}
