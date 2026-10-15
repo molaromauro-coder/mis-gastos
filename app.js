@@ -1,12 +1,12 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=142';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=142';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=142';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=143';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=143';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=143';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=142';
-import { createAccessLock } from './access-lock.js?v=142';
+import { installCloudSync } from './cloud-sync.js?v=143';
+import { createAccessLock } from './access-lock.js?v=143';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -14,9 +14,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=142';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=143';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=142');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=143');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -2452,7 +2452,7 @@ async function authenticateBiometric(){
 function renderSecurityStatus(){
   if(!$('#securityStatus'))return;
   const enabled=!!state.security.enabled;
-  $('#securityStatus').textContent=enabled?(state.security.credentialId?'Face ID activo · PIN de respaldo':'PIN activo · Face ID no configurado'):'Sin protección configurada';
+  $('#securityStatus').textContent=enabled?(state.security.credentialId?'Face ID una vez al día · PIN de respaldo':'PIN activo · Face ID no configurado'):'Sin protección configurada';
   $('#disableSecurityBtn').classList.toggle('hidden',!enabled);
   $('#securityToggle').checked=enabled;
   $('#biometricBtn').textContent=state.security.pinHash?'Configurar Face ID / cambiar PIN':'Configurar Face ID y PIN';
