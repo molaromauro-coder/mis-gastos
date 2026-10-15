@@ -1,12 +1,12 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=143';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=143';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=143';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=144';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=144';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=144';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=143';
-import { createAccessLock } from './access-lock.js?v=143';
+import { installCloudSync } from './cloud-sync.js?v=144';
+import { createAccessLock } from './access-lock.js?v=144';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -14,9 +14,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=143';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=144';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=143');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=144');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -455,13 +455,14 @@ async function exportSafetyBackup(){
 }
 async function updateWithoutDeleting(){
   const button=$('#updateAppSafely');button.disabled=true;
+  const lockButton=$('#lockUpdateBtn');if(lockButton)lockButton.disabled=true;
   try{
     if(!save())throw new Error('No pude verificar el guardado. Guardá un respaldo en Archivos y conservá este acceso.');
     await indexedWriteTail;
     const registration=await navigator.serviceWorker?.getRegistration?.();
     await registration?.update();
-    location.reload();
-  }catch(error){showToast(error.message||'No pude actualizar. Los datos siguen en este acceso.');button.disabled=false;}
+    const fresh=new URL(location.href);fresh.searchParams.set('appUpdate',Date.now());location.replace(fresh.href);
+  }catch(error){showToast(error.message||'No pude actualizar. Los datos siguen en este acceso.');button.disabled=false;if(lockButton)lockButton.disabled=false;}
 }
 function restoreSnapshot(snapshot,label='respaldo'){
   if(!isValidSnapshot(snapshot))return showToast('El respaldo no es válido');
@@ -2477,7 +2478,7 @@ function renderAccessLock(mode){
   $('#pinUnlockFields').classList.toggle('hidden',!fallback);
   $('#unlockBiometric').classList.toggle('hidden',!fallback||!state.security.credentialId);
   $('#lockPrompt').textContent=fallback?'Ingresá tu PIN de 6 dígitos.':'Verificando Face ID…';
-  $('#lockMessage').textContent=fallback&&state.security.credentialId?'Face ID no se completó. Usá tu PIN de respaldo.':'';
+  $('#lockMessage').textContent=fallback&&state.security.credentialId?'Usá tu PIN. Podés reintentar Face ID con el botón si lo necesitás.':'';
   if(fallback)$('#unlockPin').focus();
 }
 const accessLock=createAccessLock({getSecurity:()=>state.security,authenticate:authenticateBiometric,view:renderAccessLock,afterUnlock:()=>setTimeout(prepareRecurringDue,100)});
@@ -3502,6 +3503,7 @@ $('#securitySetupForm').onsubmit=async(e)=>{
 $('#disableSecurityBtn').onclick=()=>setSecurityEnabled(false);
 $('#securityToggle').onchange=(event)=>setSecurityEnabled(event.target.checked);
 $('#unlockBiometric').onclick=()=>void accessLock.retry();
+$('#lockUpdateBtn').onclick=updateWithoutDeleting;
 $('#unlockPinBtn').onclick=unlockWithPin;
 $('#unlockPin').onkeydown=(e)=>{if(e.key==='Enter'){e.preventDefault();unlockWithPin();}};
 $('#lockDialog').addEventListener('cancel',(e)=>e.preventDefault());
