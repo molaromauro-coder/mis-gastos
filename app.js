@@ -2281,10 +2281,21 @@ function previousMonthKey(key){
   return monthKey(date);
 }
 function fixedExpensePayments(item,key){
-  return state.expenses.filter((e)=>e.fixedExpenseId===item.id&&e.fixedExpenseMonth===key);
+  return state.expenses.filter((e)=>{
+    if(e.fixedExpenseId)return e.fixedExpenseId===item.id&&e.fixedExpenseMonth===key;
+    if(e.parentId&&e.installment!==1)return false;
+    if(String(e.purchaseDate||e.date||'').slice(0,7)!==key)return false;
+    if(!isFixedExpenseMasterCategory(e.category)||!e.subcategory)return false;
+    // Read the original movement; never copy it into another expense collection.
+    const matches=state.fixedExpenses.filter((candidate)=>
+      normalizedCategoryName(candidate.category)===normalizedCategoryName(e.category)&&
+      (candidate.currency||'ARS')===(e.currency||'ARS')&&
+      normalizedCategoryName(candidate.subcategory||candidate.concept)===normalizedCategoryName(e.subcategory));
+    return matches.length===1&&matches[0].id===item.id;
+  });
 }
 function fixedExpenseAmountForMonth(item,key){
-  return fixedExpensePayments(item,key).reduce((sum,e)=>sum+Number(e.amount||0),0);
+  return fixedExpensePayments(item,key).reduce((sum,e)=>sum+(e.fixedExpenseId?Number(e.amount||0):purchaseAmount(e)),0);
 }
 function fixedExpensePreviousAmount(item,key){
   const amount=fixedExpenseAmountForMonth(item,previousMonthKey(key));
@@ -3585,6 +3596,11 @@ $('#fixedExpensePaymentForm').onsubmit=async(event)=>{
   const item=state.fixedExpenses.find((x)=>x.id===$('#fixedExpensePaymentForm').dataset.fixedExpenseId);
   const key=$('#fixedExpensePaymentForm').dataset.month||monthKey(new Date());
   if(!item)return;
+  if(!editingFixedPaymentExpenseId&&fixedExpensePayments(item,key).length){
+    $('#fixedExpensePaymentDialog').close();
+    openExpenseEditor(fixedExpensePayments(item,key)[0].id);
+    return;
+  }
   const amount=localizedInputNumber('#fixedExpensePaymentAmount');
   if(!Number.isFinite(amount)||amount<=0)return showToast('Ingresá el importe de este mes');
   const paidDate=$('#fixedExpensePaymentDate').value||new Date().toISOString().slice(0,10);
@@ -3838,3 +3854,4 @@ if(!sharedMode)cloudSyncController=installCloudSync({
     fillCategories();render();return true;
   }
 });
+
