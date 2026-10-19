@@ -1,12 +1,12 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=148';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=148';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=148';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=149';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=149';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=149';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=148';
-import { createAccessLock } from './access-lock.js?v=148';
+import { installCloudSync } from './cloud-sync.js?v=149';
+import { createAccessLock } from './access-lock.js?v=149';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -14,9 +14,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=148';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=149';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=148');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=149');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -2335,7 +2335,7 @@ function openFixedExpenseDialog(item=null){
   $('#fixedExpenseAmountHint').textContent=payments.length===1
     ?`Pago de ${key}: al guardar se corrige el gasto original y sus totales.`
     :payments.length>1?`Hay varios pagos en ${key}. Editá cada uno desde “Ver pagos del mes”.`
-    :`Monto pendiente para ${key}. Se sumará a los gastos cuando registres el pago.`;
+    :`Impago · ${key}. Guardar este monto no registra un pago. Se sumará a los gastos cuando registres el pago.`;
   fillFixedExpenseCategoryOptions(item?.category||'');
   if(item?.category){
     $('#fixedExpenseCategory').value=item.category;
@@ -2398,7 +2398,7 @@ function renderFixedExpenses(){
   const paidCount=active.filter((item)=>fixedExpenseIsPaid(item,key)).length;
   const pendingCount=active.length-paidCount;
   $('#fixedExpenseSummary').textContent=active.length
-    ? `${integerText(paidCount)} pagado${paidCount===1?'':'s'} · ${integerText(pendingCount)} pendiente${pendingCount===1?'':'s'} en ${key}`
+    ? `${integerText(paidCount)} pagado${paidCount===1?'':'s'} · ${integerText(pendingCount)} impago${pendingCount===1?'':'s'} en ${key}`
     : 'Todavía no configuraste gastos fijos.';
   $('#fixedExpenseList').innerHTML=state.fixedExpenses.length?state.fixedExpenses.map((item,index)=>{
     const paid=fixedExpenseIsPaid(item,key);
@@ -2411,7 +2411,7 @@ function renderFixedExpenses(){
         <label class="fixed-order-picker"><input type="radio" name="fixedExpenseOrder" value="${escape(item.id)}" ${selected?'checked':''}><span>Seleccionar</span></label>
         <small>Posición ${integerText(index+1)} de ${integerText(state.fixedExpenses.length)}</small>
       </div>
-      <div class="fixed-expense-head"><div><strong>${escape(fixedExpenseDisplayLabel(item.concept))}</strong><small>${escape(category)} · día ${integerText(item.day||1)} · ${escape(item.method||'Efectivo')}${item.card?' · '+escape(item.card):''}</small></div><span class="${paid?'paid':'pending'}">${item.active===false?'Inactivo':paid?'Pagado':'Pendiente'}</span></div>
+      <div class="fixed-expense-head"><div><strong>${escape(fixedExpenseDisplayLabel(item.concept))}</strong><small>${escape(category)} · día ${integerText(item.day||1)} · ${escape(item.method||'Efectivo')}${item.card?' · '+escape(item.card):''}</small></div><span class="${paid?'paid':'pending'}">${item.active===false?'Inactivo':paid?'Pagado':'Impago'}</span></div>
       <div class="fixed-expense-values"><span>${paid?'Este mes':'Monto a pagar'} <strong>${paid?money(current,item.currency):item.plannedAmounts?.[key]!=null?money(item.plannedAmounts[key],item.currency):'—'}</strong></span><span>Mes anterior <strong>${previous?money(previous,item.currency):'Sin dato'}</strong></span></div>
       ${paid?`<details class="fixed-loaded-payments"><summary>Ver pagos del mes</summary>${fixedExpensePayments(item,key).map((expense)=>expenseHTML(expense,true)).join('')}</details>`:''}<div class="fixed-expense-actions"><button type="button" class="fixed-pay">${paid?'Editar pago':'Registrar pago'}</button><button type="button" class="fixed-edit">Editar</button><button type="button" class="fixed-toggle">${item.active===false?'Activar':'Desactivar'}</button></div>
     </article>`;
@@ -2794,7 +2794,7 @@ function renderFixedPendingConsultation(){
   $('#consultAnswer').textContent=items.length?`Tenés ${integerText(items.length)} gasto${items.length===1?'':'s'} fijo${items.length===1?'':'s'} pendiente${items.length===1?'':'s'} de pago este mes.`:'No tenés gastos fijos pendientes de pago este mes.';
   $('#consultResults').innerHTML=items.length?items.map((item)=>{
     const previous=fixedExpensePreviousAmount(item,key);
-    return `<article class="search-result-card fixed-pending-search" data-consult-fixed-id="${escape(item.id)}"><div><span class="search-result-type">Gasto fijo pendiente</span><strong>${escape(item.concept)}</strong><small>Día habitual ${integerText(item.day||1)}${previous?' · Mes anterior '+money(previous,item.currency):' · Sin importe anterior'}</small></div><button type="button">Registrar pago</button></article>`;
+    return `<article class="search-result-card fixed-pending-search" data-consult-fixed-id="${escape(item.id)}"><div><span class="search-result-type">Gasto fijo impago</span><strong>${escape(item.concept)}</strong><small>Día habitual ${integerText(item.day||1)}${previous?' · Mes anterior '+money(previous,item.currency):' · Sin importe anterior'}</small></div><button type="button">Registrar pago</button></article>`;
   }).join(''):'<div class="empty">Todo al día.</div>';
   document.querySelectorAll('[data-consult-fixed-id]').forEach((row)=>{
     const item=state.fixedExpenses.find((x)=>x.id===row.dataset.consultFixedId);
