@@ -1,12 +1,12 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=146';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=146';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=146';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=147';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=147';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=147';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
-import { categoryDisplayLabel } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=146';
-import { createAccessLock } from './access-lock.js?v=146';
+import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
+import { installCloudSync } from './cloud-sync.js?v=147';
+import { createAccessLock } from './access-lock.js?v=147';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -14,9 +14,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=146';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=147';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=146');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=147');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -2288,9 +2288,9 @@ function fixedExpensePayments(item,key){
     if(!isFixedExpenseMasterCategory(e.category)||!e.subcategory)return false;
     // Read the original movement; never copy it into another expense collection.
     const matches=state.fixedExpenses.filter((candidate)=>
-      normalizedCategoryName(candidate.category)===normalizedCategoryName(e.category)&&
+      categoryBaseName(candidate.category)===categoryBaseName(e.category)&&
       (candidate.currency||'ARS')===(e.currency||'ARS')&&
-      normalizedCategoryName(candidate.subcategory||candidate.concept)===normalizedCategoryName(e.subcategory));
+      categoryBaseName(candidate.subcategory||candidate.concept)===categoryBaseName(e.subcategory));
     return matches.length===1&&matches[0].id===item.id;
   });
 }
@@ -2378,6 +2378,7 @@ function updateFixedExpenseOrderTools(){
 function fixedExpenseDisplayLabel(concept){return displaySubcategory(concept);}
 function renderFixedExpenses(){
   if(!$('#fixedExpenseList'))return;
+  repairMissingFixedExpenseDefinitions();
   const key=$('#fixedExpenseMonth')?.value||monthKey(new Date());
   const active=state.fixedExpenses.filter((item)=>item.active!==false);
   const paidCount=active.filter((item)=>fixedExpenseIsPaid(item,key)).length;
@@ -3058,28 +3059,47 @@ function addCategory() {
   if(created&&input)input.value='';
   return created;
 }
-function isFixedExpenseMasterCategory(category){return normalizedCategoryName(category)===normalizedCategoryName('GASTOS FIJOS');}
-function ensureFixedExpenseForSubcategory(category,subcategory){
+function isFixedExpenseMasterCategory(category){return categoryBaseName(category)==='GASTOS FIJOS';}
+function ensureFixedExpenseForSubcategory(category,subcategory,snapshot=state){
   if(!isFixedExpenseMasterCategory(category)||!subcategory)return false;
-  if(!Array.isArray(state.fixedExpenses))state.fixedExpenses=[];
-  const exists=state.fixedExpenses.some((item)=>
-    normalizedCategoryName(item.category)===normalizedCategoryName(category)&&
-    (normalizedCategoryName(item.subcategory)===normalizedCategoryName(subcategory)||
-     normalizedCategoryName(item.concept)===normalizedCategoryName(subcategory))
+  if(!Array.isArray(snapshot.fixedExpenses))snapshot.fixedExpenses=[];
+  const exists=snapshot.fixedExpenses.some((item)=>
+    categoryBaseName(item.category)===categoryBaseName(category)&&
+    (categoryBaseName(item.subcategory)===categoryBaseName(subcategory)||
+     categoryBaseName(item.concept)===categoryBaseName(subcategory))
   );
   if(exists)return false;
-  state.fixedExpenses.push({
+  snapshot.fixedExpenses.push({
     id:uid(),concept:subcategory,currency:'ARS',category,subcategory,
     method:'Efectivo',card:'',day:10,active:true
   });
   return true;
 }
-function syncFixedExpenseDefinitionsFromCategories(){
-  const category=state.categories.find((value)=>isFixedExpenseMasterCategory(value));
-  if(!category)return false;
+function syncFixedExpenseDefinitionsFromCategories(snapshot=state){
   let changed=false;
-  subcategoriesFor(category).forEach((subcategory)=>{if(ensureFixedExpenseForSubcategory(category,subcategory))changed=true;});
+  Object.entries(snapshot.subcategories||{}).forEach(([category,values])=>{
+    if(!isFixedExpenseMasterCategory(category)||!Array.isArray(values))return;
+    values.forEach((subcategory)=>{if(ensureFixedExpenseForSubcategory(category,subcategory,snapshot))changed=true;});
+  });
   return changed;
+}
+function repairMissingFixedExpenseDefinitions(){
+  if(sharedMode)return;
+  const next=cloneState();
+  if(!syncFixedExpenseDefinitionsFromCategories(next))return;
+  const previous=cloneState(),serialized=JSON.stringify(previous);
+  const backupKey=STORAGE_KEY+'-before-fixed-definitions-'+uid();
+  try{
+    localStorage.setItem(backupKey,serialized);
+    if(localStorage.getItem(backupKey)!==serialized)throw new Error('Respaldo no verificado');
+    state.fixedExpenses=next.fixedExpenses;
+    if(save()===false)throw new Error('Guardado no verificado');
+    const stored=JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if(JSON.stringify(stored.fixedExpenses)!==JSON.stringify(next.fixedExpenses))throw new Error('Lectura no verificada');
+  }catch(error){
+    state.fixedExpenses=previous.fixedExpenses;
+    showToast('No pude vincular los gastos fijos: '+error.message+'. Los gastos originales se conservan.');
+  }
 }
 function addSubcategory(category,value){
   const clean=String(value||'').trim();
