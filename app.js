@@ -1,12 +1,12 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=149';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=149';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=149';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=150';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=150';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=150';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=149';
-import { createAccessLock } from './access-lock.js?v=149';
+import { installCloudSync } from './cloud-sync.js?v=150';
+import { createAccessLock } from './access-lock.js?v=150';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -14,9 +14,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=149';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=150';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=149');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=150');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -3162,6 +3162,8 @@ function editSubcategoryFromSelect(categorySelector,subcategorySelector,wrapSele
   fillScopedSubcategories(categorySelector,subcategorySelector,wrapSelector,value);showToast('✓ Subcategoría actualizada en toda la app');
 }
 function openCategoryManager(){
+  $('#settingsDialog').classList.add('categories-only');
+  $('#settingsDialog .settings-dialog-head h2').textContent='Categorías';
   settingsSnapshot=cloneState();activeSettingsCategory='';
   renderReminderSettings();fillCategories();renderTrash();renderSecurityStatus();
   $('#settingsDialog').showModal();
@@ -3198,6 +3200,8 @@ function closeSettingsDiscardingChanges(){
   settingsSnapshot=null;activeSettingsCategory='';$('#settingsSaveDialog')?.close();$('#settingsDialog').close();render();
 }
 $('#settingsBtn').onclick = () => {
+  $('#settingsDialog').classList.remove('categories-only');
+  $('#settingsDialog .settings-dialog-head h2').textContent='Configuración';
   settingsSnapshot=cloneState();activeSettingsCategory='';
   renderReminderSettings();fillCategories();renderRecurringSettings();renderTrash();renderSecurityStatus();
   $('#settingsDialog').showModal();
@@ -3295,6 +3299,7 @@ $('#settingsBack').onclick=()=>{
 };
 $('#settingsClose').onclick=()=>{
   if(!settingsHasChanges()){settingsSnapshot=null;activeSettingsCategory='';$('#settingsDialog').close();return;}
+  $('#settingsSaveDialog > p').textContent=$('#settingsDialog').classList.contains('categories-only')?'Hiciste cambios en Categorías.':'Hiciste cambios en Configuración.';
   $('#settingsSaveDialog').showModal();
 };
 $('#settingsKeep').onclick=()=>{ $('#settingsSaveDialog').close(); closeSettingsKeepingChanges(); };
