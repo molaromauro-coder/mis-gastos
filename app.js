@@ -1,12 +1,12 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=147';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=147';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=147';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=148';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=148';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=148';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=147';
-import { createAccessLock } from './access-lock.js?v=147';
+import { installCloudSync } from './cloud-sync.js?v=148';
+import { createAccessLock } from './access-lock.js?v=148';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -14,9 +14,9 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=147';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=148';
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=147');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=148');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -2323,6 +2323,19 @@ function openFixedExpenseDialog(item=null){
   $('#fixedExpenseConcept').value=item?.concept||'';
   $('#fixedExpenseCurrency').value=item?.currency||'ARS';
   $('#fixedExpenseDay').value=item?.day||10;
+  const key=$('#fixedExpenseMonth')?.value||monthKey(new Date());
+  const payments=item?fixedExpensePayments(item,key):[];
+  const form=$('#fixedExpenseForm');
+  form.dataset.amountMonth=key;
+  form.dataset.paymentId=payments.length===1?payments[0].id:'';
+  form.dataset.paymentSnapshot=payments.length===1?JSON.stringify(expenseEditModel(state.expenses,payments[0].id).items):'';
+  const amount=payments.length===1?expenseEditModel(state.expenses,payments[0].id).amount:item?.plannedAmounts?.[key];
+  setLocalizedInput('#fixedExpenseAmount',amount??'',2);
+  $('#fixedExpenseAmount').disabled=payments.length>1;
+  $('#fixedExpenseAmountHint').textContent=payments.length===1
+    ?`Pago de ${key}: al guardar se corrige el gasto original y sus totales.`
+    :payments.length>1?`Hay varios pagos en ${key}. Editá cada uno desde “Ver pagos del mes”.`
+    :`Monto pendiente para ${key}. Se sumará a los gastos cuando registres el pago.`;
   fillFixedExpenseCategoryOptions(item?.category||'');
   if(item?.category){
     $('#fixedExpenseCategory').value=item.category;
@@ -2351,6 +2364,7 @@ function openFixedExpensePayment(item,key){
     ref.classList.add('hidden');use.classList.add('hidden');
   }
   if(current)setLocalizedInput('#fixedExpensePaymentAmount',current.amount,2);
+  else if(item.plannedAmounts?.[key]!=null)setLocalizedInput('#fixedExpensePaymentAmount',item.plannedAmounts[key],2);
   $('#fixedExpensePaymentDate').value=current?.purchaseDate?.slice?.(0,10)||new Date().toISOString().slice(0,10);
   $('#fixedExpensePaymentForm').dataset.fixedExpenseId=item.id;
   $('#fixedExpensePaymentForm').dataset.month=key;
@@ -2398,7 +2412,7 @@ function renderFixedExpenses(){
         <small>Posición ${integerText(index+1)} de ${integerText(state.fixedExpenses.length)}</small>
       </div>
       <div class="fixed-expense-head"><div><strong>${escape(fixedExpenseDisplayLabel(item.concept))}</strong><small>${escape(category)} · día ${integerText(item.day||1)} · ${escape(item.method||'Efectivo')}${item.card?' · '+escape(item.card):''}</small></div><span class="${paid?'paid':'pending'}">${item.active===false?'Inactivo':paid?'Pagado':'Pendiente'}</span></div>
-      <div class="fixed-expense-values"><span>Este mes <strong>${paid?money(current,item.currency):'—'}</strong></span><span>Mes anterior <strong>${previous?money(previous,item.currency):'Sin dato'}</strong></span></div>
+      <div class="fixed-expense-values"><span>${paid?'Este mes':'Monto a pagar'} <strong>${paid?money(current,item.currency):item.plannedAmounts?.[key]!=null?money(item.plannedAmounts[key],item.currency):'—'}</strong></span><span>Mes anterior <strong>${previous?money(previous,item.currency):'Sin dato'}</strong></span></div>
       ${paid?`<details class="fixed-loaded-payments"><summary>Ver pagos del mes</summary>${fixedExpensePayments(item,key).map((expense)=>expenseHTML(expense,true)).join('')}</details>`:''}<div class="fixed-expense-actions"><button type="button" class="fixed-pay">${paid?'Editar pago':'Registrar pago'}</button><button type="button" class="fixed-edit">Editar</button><button type="button" class="fixed-toggle">${item.active===false?'Activar':'Desactivar'}</button></div>
     </article>`;
   }).join(''):'<div class="empty">Agregá tus gastos fijos para controlar cada mes cuánto pagaste.</div>';
@@ -3605,11 +3619,34 @@ $('#fixedExpenseForm').onsubmit=(event)=>{
   };
   if(!data.concept)return showToast('Ingresá el concepto');
   if(data.method!=='Efectivo'&&!data.card)return showToast('Elegí una tarjeta o cuenta');
+  const form=$('#fixedExpenseForm'),key=form.dataset.amountMonth;
+  const raw=$('#fixedExpenseAmount').value.trim(),amount=raw?localizedInputNumber('#fixedExpenseAmount'):null;
+  if(!$('#fixedExpenseAmount').disabled&&raw&&(!Number.isFinite(amount)||amount<=0))return showToast('Ingresá un monto mayor a cero');
+  const previous=cloneState();
+  try{
+    const item=state.fixedExpenses.find((x)=>x.id===editingFixedExpenseId);
+    const payments=item?fixedExpensePayments(item,key):[];
+    if(form.dataset.paymentId){
+      const model=expenseEditModel(state.expenses,form.dataset.paymentId);
+      if(JSON.stringify(model.items)!==form.dataset.paymentSnapshot)throw new Error('El pago cambió. Cerrá y volvé a abrir para revisar el importe.');
+      if(amount===null)throw new Error('El pago registrado necesita un monto mayor a cero.');
+      if(data.currency!==model.first.currency)throw new Error('Para cambiar la moneda del pago usá “Editar pago”.');
+      if(amount!==model.amount){
+        const result=buildExpenseEdit(state.expenses,model.first.id,{...model.first,amount,installments:model.installments,purchaseDate:model.purchaseDate,firstDueDate:model.firstDueDate},state.cards,uid);
+        state.expenses=result.expenses;
+      }
+    }else if(payments.length===1)throw new Error('Se registró un pago mientras editabas. Cerrá y volvé a abrir.');
+    if(!payments.length){
+      data.plannedAmounts={...(item?.plannedAmounts||{})};
+      if(amount===null)delete data.plannedAmounts[key];else data.plannedAmounts[key]=amount;
+    }
   if(editingFixedExpenseId){
     const item=state.fixedExpenses.find((x)=>x.id===editingFixedExpenseId);
     if(item)Object.assign(item,data,{active:item.active!==false});
   }else state.fixedExpenses.push({id:uid(),...data});
-  editingFixedExpenseId=null;save();$('#fixedExpenseDialog').close();renderFixedExpenses();showToast('✓ Gasto fijo guardado');
+    if(save()===false)throw new Error('No pude guardar. Se conserva el estado anterior.');
+  }catch(error){restoreState(previous);showToast(error.message);return;}
+  editingFixedExpenseId=null;$('#fixedExpenseDialog').close();render();refreshExpenseDetailViews();showToast('✓ Gasto fijo y monto guardados');
 };
 $('#fixedExpensePaymentForm').onsubmit=async(event)=>{
   event.preventDefault();
