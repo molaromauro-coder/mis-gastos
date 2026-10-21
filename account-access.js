@@ -1,5 +1,5 @@
 import { SYNC_URL, SYNC_PUBLIC_KEY } from './sync-config.js';
-import { requestPasswordRecovery } from './password-recovery.js?v=155';
+import { requestPasswordRecovery } from './password-recovery.js?v=156';
 import { createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 
 export const ACCOUNT_PREFIX='mis-gastos-sync-v1';

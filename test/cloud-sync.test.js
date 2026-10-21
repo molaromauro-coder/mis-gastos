@@ -70,3 +70,27 @@ test('conflicts cannot commit until user decisions match current snapshots',asyn
   const base=snapshot([expense('a')]),f=fixture({base,local:snapshot([expense('a',200)]),remote:{revision:2,state:snapshot([expense('a',300)])}});
   await f.engine.run();assert.equal(f.result().status,'conflict');assert.equal(f.result().commits,0);assert.equal(f.result().applies,0);assert.equal(f.result().archives,1);
 });
+
+test('reviewed decisions survive unrelated changes without dropping any expense or ticket sale',async()=>{
+ const local=snapshot([expense('phone')]),remote=snapshot([expense('pc')]);local.settings.reminderDays=[3,2,1];remote.settings.reminderDays=[5,3,2,1,0];
+ local.resale.parties=[{id:'camel',tickets:[{id:'t1',status:'Vendida',salePrice:65000}]}];remote.resale.parties=[{id:'camel',tickets:[{id:'t1',status:'Disponible',salePrice:0}]}];
+ const conflicts=mergeSyncSnapshots(null,local,remote).conflicts,choices=Object.fromEntries(conflicts.map(c=>[c.id,'local']));
+ const resolution={conflicts,choices,local:structuredClone(local),remote:structuredClone(remote)};
+ remote.settings.usdRateCache={fetchedAt:'newer'};remote.expenses.push(expense('new-pc'));
+ const f=fixture({local,remote:{revision:1,state:remote}});await f.engine.run(resolution);
+ const result=f.result();assert.equal(result.status,'synced');assert.deepEqual(new Set(result.local.expenses.map(e=>e.id)),new Set(['phone','pc','new-pc']));
+ assert.deepEqual(result.local.resale.parties[0].tickets[0],{id:'t1',status:'Vendida',salePrice:65000});assert.equal(result.local.custom.unknown,'conservar');
+});
+test('changed conflicting values invalidate just that decision and prevent all financial writes',async()=>{
+ const local=snapshot([expense('a',200)]),remote=snapshot([expense('a',300)]);local.settings.reminderDays=[3];remote.settings.reminderDays=[5];
+ const conflicts=mergeSyncSnapshots(null,local,remote).conflicts,resolution={conflicts,choices:Object.fromEntries(conflicts.map(c=>[c.id,'local']))};
+ remote.expenses[0].amount=400;
+ const f=fixture({local,remote:{revision:1,state:remote}});await f.engine.run(resolution);
+ assert.equal(f.result().status,'conflict');assert.equal(f.result().commits,0);assert.equal(f.result().applies,0);assert.equal(f.result().local.expenses[0].amount,200);
+});
+test('decisions cannot silently authorize deletion or a new conflict after review',async()=>{
+ const local=snapshot([expense('a',200)]),remote=snapshot([expense('a',300)]),conflicts=mergeSyncSnapshots(null,local,remote).conflicts;
+ const f=fixture({base:snapshot([expense('a')]),local:snapshot(),remote:{revision:2,state:remote}});
+ await f.engine.run({conflicts,choices:{[conflicts[0].id]:'remote'}});
+ assert.equal(f.result().status,'conflict');assert.equal(f.result().commits,0);assert.equal(f.result().applies,0);
+});

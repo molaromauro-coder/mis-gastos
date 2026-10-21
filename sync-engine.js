@@ -13,12 +13,14 @@ export function createSyncEngine({getLocal,getCheckpoint,readRemote,archiveLocal
         if(remote && (!remote.state || !Array.isArray(remote.state.expenses))) throw Error('La copia remota no es válida. Se conservaron tus datos locales.');
         let merged={state:local,conflicts:[]};
         if(remote) {
-          const choices=resolution&&sameSyncValue(resolution.local,local)&&sameSyncValue(resolution.remote,remote.state)?resolution.choices:{};
+          const initial=mergeSyncSnapshots(checkpoint?.state||null,local,remote.state);
+          const choices=resolution?.conflicts?matchingSyncChoices(resolution,initial.conflicts):resolution&&sameSyncValue(resolution.local,local)&&sameSyncValue(resolution.remote,remote.state)?resolution.choices:{};
           merged=mergeSyncSnapshots(checkpoint?.state||null,local,remote.state,choices);
+          if(merged.conflicts.length)merged.reviewConflicts=initial.conflicts;
         }
         if(merged.conflicts.length) {
           await archiveLocal(local);
-          onConflicts({...merged,local,remote:remote.state});
+          onConflicts({...merged,conflicts:merged.reviewConflicts||merged.conflicts,local,remote:remote.state});
           status('conflict');return false;
         }
         if(!sameSyncValue(local,getLocal()))continue;
@@ -45,4 +47,15 @@ export function createSyncEngine({getLocal,getCheckpoint,readRemote,archiveLocal
     } catch(error) {status('error',error.message);return false;}
     finally {running=false;}
   }};
+}
+
+// Reuse a decision only while the exact conflicting values remain unchanged.
+export function matchingSyncChoices(resolution,conflicts){
+  const result={};
+  for(const current of conflicts||[]){
+    const previous=resolution?.conflicts?.find(c=>c.id===current.id),choice=resolution?.choices?.[current.id];
+    if(!previous||!['local','remote'].includes(choice))continue;
+    if(sameSyncValue(previous.local,current.local)&&sameSyncValue(previous.remote,current.remote)&&!!previous.localDeleted===!!current.localDeleted&&!!previous.remoteDeleted===!!current.remoteDeleted)result[current.id]=choice;
+  }
+  return result;
 }

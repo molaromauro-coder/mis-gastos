@@ -1,9 +1,9 @@
-import { requestPasswordRecovery } from './password-recovery.js?v=155';
-import { createSyncEngine } from './sync-engine.js';
+import { requestPasswordRecovery } from './password-recovery.js?v=156';
+import { createSyncEngine, matchingSyncChoices } from './sync-engine.js?v=156';
 import { syncSnapshot, sameSyncValue } from './sync-merge.js';
 import { isValidSnapshot, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
-import { accountClient, installPasswordVisibility, preserveAndSignOut, saveAccountProfile, signInOriginalAccount, SIGNED_OUT_KEY } from './account-access.js?v=155';
-export { installPasswordVisibility } from './account-access.js?v=155';
+import { accountClient, installPasswordVisibility, preserveAndSignOut, saveAccountProfile, signInOriginalAccount, SIGNED_OUT_KEY } from './account-access.js?v=156';
+export { installPasswordVisibility } from './account-access.js?v=156';
 
 function verifiedWrite(key,value) {
   const raw=JSON.stringify(value);localStorage.setItem(key,raw);
@@ -13,6 +13,12 @@ function readJSON(key) {const raw=localStorage.getItem(key);return raw?JSON.pars
 export function installCloudSync({getState,applyState,canApply,localSaved,canSignOut=()=>true}) {
   const prefix='mis-gastos-sync-v1',metaKey=prefix+'-checkpoint',bindingKey=prefix+'-account';
   let client,user,engine,pending,debounce,archived='',stopped=false,lastStatus='signedout';
+  let queuedResolution=null;
+  try{queuedResolution=readJSON(prefix+'-resolution');}catch{ /* Invalid decision drafts never replace financial data. */ }
+  const resolutionKey=prefix+'-resolution';
+  function resolutionMessage(text){
+    const el=document.querySelector('#cloudSyncResolutionStatus');if(el)el.textContent=text;
+  }
   const target=document.querySelector('#cloudSyncStatus'), badge=document.querySelector('#cloudSyncBadge');
   const auth=document.querySelector('#cloudSyncAuth');
   const hidePassword=installPasswordVisibility(document.querySelector('#cloudSyncPassword'),document.querySelector('#cloudSyncPasswordToggle'),document.querySelector('#settingsDialog')); 
@@ -21,6 +27,7 @@ export function installCloudSync({getState,applyState,canApply,localSaved,canSig
   const labels={signedout:'Sin vincular · datos guardados en este dispositivo',working:'Sincronizando…',synced:'Sincronizado · copia remota verificada',pending:'Cambios pendientes de sincronización',offline:'Sin conexión · los cambios se conservan en este dispositivo',conflict:'Hay diferencias para revisar · ambas versiones conservadas',error:'No se pudo completar la sincronización'};
   function status(kind,message='') {
     lastStatus=kind;
+    if(queuedResolution||kind==='error')resolutionMessage((labels[kind]||kind)+(message?' · '+message:''));
     for(const el of [target,badge])if(el){el.textContent=labels[kind]+(message?' · '+message:'');el.dataset.status=kind;}
     renderProfile();
     const account=document.querySelector('#cloudSyncAccount');if(account)account.textContent=user?.email||'Usá el mismo correo en PC y celular.';
@@ -113,6 +120,28 @@ export function installCloudSync({getState,applyState,canApply,localSaved,canSig
   function showConflicts(value) {
     verifiedWrite(prefix+'-conflicts',value);
     pending=value;panel?.classList.remove('hidden');conflictList.replaceChildren();
+    const savedChoices=matchingSyncChoices(queuedResolution,value.conflicts);
+    const groups=new Map();
+    for(const c of value.conflicts){
+      if(c.path[0]!=='resale'||c.path[1]!=='parties'||!c.path[2]?.startsWith('id:'))continue;
+      const id=c.path[2].slice(3),party=value.local.resale?.parties?.find(p=>p.id===id);
+      if(party)groups.set(id,party.name);
+    }
+    for(const [id,name] of groups){
+      const button=document.createElement('button');button.type='button';button.className='sync-party-choice';button.textContent='Conservar '+name+' de este dispositivo';
+      button.addEventListener('click',()=>{
+        let count=0;for(const select of conflictList.querySelectorAll('select')){
+          const c=pending.conflicts.find(c=>c.id===select.dataset.conflictId);
+          if(c?.path[0]==='resale'&&c.path[1]==='parties'&&c.path[2]==='id:'+id){select.value='local';count++;}
+        }
+        saveDecisionDraft();resolutionMessage(count+' diferencias de '+name+' seleccionadas. Revisá el resto y tocá Guardar decisiones y sincronizar.');
+      });conflictList.append(button);
+    }
+    if(!document.querySelector('#cloudSyncResolutionStatus')){
+      const feedback=document.createElement('p');feedback.id='cloudSyncResolutionStatus';feedback.setAttribute('role','status');
+      document.querySelector('#cloudSyncResolve').after(feedback);
+    }
+    resolutionMessage('Elegí una versión para cada diferencia. Tus gastos siguen conservados.');
     for(const conflict of value.conflicts) {
       const row=document.createElement('div');row.className='cloud-conflict';
       const title=document.createElement('strong');title.textContent=conflict.path.join(' / ');row.append(title);
@@ -120,8 +149,15 @@ export function installCloudSync({getState,applyState,canApply,localSaved,canSig
         const p=document.createElement('pre');p.textContent=name+': '+(deleted?'Eliminado':JSON.stringify(choice,null,2));row.append(p);
       }
       const select=document.createElement('select');select.dataset.conflictId=conflict.id;
-      for(const [value,label] of [['','Elegí qué versión usar'],['local','Conservar este dispositivo'],['remote','Usar copia sincronizada']]){const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);}row.append(select);conflictList.append(row);
+      for(const [value,label] of [['','Elegí qué versión usar'],['local','Conservar este dispositivo'],['remote','Usar copia sincronizada']]){const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);}select.value=savedChoices[conflict.id]||'';select.addEventListener('change',saveDecisionDraft);row.append(select);conflictList.append(row);
     }
+  }
+  function saveDecisionDraft(){
+    if(!pending||!user)return;
+    const choices={};for(const select of conflictList.querySelectorAll('select'))if(select.value)choices[select.dataset.conflictId]=select.value;
+    queuedResolution={userId:user.id,local:pending.local,remote:pending.remote,conflicts:pending.conflicts,choices,submitted:false};
+    try{verifiedWrite(resolutionKey,queuedResolution);}
+    catch{resolutionMessage('No se pudieron guardar las selecciones. Mantené esta pantalla abierta e intentá nuevamente.');}
   }
   let deviceId;
   async function setup() {
@@ -140,7 +176,7 @@ export function installCloudSync({getState,applyState,canApply,localSaved,canSig
         const current=getState(),full={...structuredClone(snapshot),security:current.security,settings:{...snapshot.settings,lastSafeSaveAt:current.settings?.lastSafeSaveAt,lastSafeExpenseCount:current.settings?.lastSafeExpenseCount}};
         if(!applyState(full))throw Error('No se pudo verificar la aplicación de la copia remota.');
         if(!sameSyncValue(syncSnapshot(getState()),snapshot))throw Error('La comprobación local no coincide.');
-      },saveCheckpoint:async(meta)=>{verifiedWrite(metaKey,meta);pending=null;panel?.classList.add('hidden');localStorage.removeItem(prefix+'-conflicts');},status,onConflicts:showConflicts});
+      },saveCheckpoint:async(meta)=>{verifiedWrite(metaKey,meta);pending=null;panel?.classList.add('hidden');localStorage.removeItem(prefix+'-conflicts');localStorage.removeItem(resolutionKey);const submitted=!!queuedResolution?.submitted;queuedResolution=null;resolutionMessage('Sincronización completada y comprobada.');if(submitted)target?.scrollIntoView({block:'center'});},status,onConflicts:showConflicts});
     client.auth.onAuthStateChange((event)=>{
       if(event==='SIGNED_OUT'&&user){
         try{localStorage.setItem(SIGNED_OUT_KEY,'1');}finally{setTimeout(()=>location.reload(),0);}
@@ -165,12 +201,14 @@ export function installCloudSync({getState,applyState,canApply,localSaved,canSig
       const result=await client.auth.getUser();
       if(result.error)throw result.error;
       if(!result.data.user){user=null;status('signedout');return;}
+      if(queuedResolution&&queuedResolution.userId!==result.data.user.id){queuedResolution=null;}
       const bound=readJSON(bindingKey);if(bound&&bound!==result.data.user.id)throw Error('Usá la cuenta original de este dispositivo. No se mezclaron cuentas.');
       user=result.data.user;
       verifiedWrite(bindingKey,user.id);
       if(!canApply()){status('pending','Se completará al terminar la edición.');return;}
       if(!localSaved())throw Error('Guardado local pendiente. Tus datos no se reemplazaron.');
-      await engine.run(resolution);
+      const saved=queuedResolution?.userId===user.id&&queuedResolution.submitted?queuedResolution:null;
+      await engine.run(resolution||saved);
     }catch(error){status('error',error.message);}
   }
   async function login(create=false) {
@@ -204,9 +242,17 @@ export function installCloudSync({getState,applyState,canApply,localSaved,canSig
   document.querySelector('#cloudSyncRegister')?.addEventListener('click',()=>void login(true));
   document.querySelector('#cloudSyncNow')?.addEventListener('click',()=>void run());
   document.querySelector('#cloudSyncDisconnect')?.addEventListener('click',()=>{renderProfile();if(!profile.open)profile.showModal();void logout();});
-  document.querySelector('#cloudSyncResolve')?.addEventListener('click',()=>{
-    if(!pending)return;const choices={};for(const select of conflictList.querySelectorAll('select')){if(!select.value){status('conflict','Elegí una versión para cada diferencia.');return;}choices[select.dataset.conflictId]=select.value;}
-    void run({local:pending.local,remote:pending.remote,choices});
+  document.querySelector('#cloudSyncResolve')?.addEventListener('click',async()=>{
+    if(!pending)return;
+    const button=document.querySelector('#cloudSyncResolve');if(button.disabled)return;
+    document.activeElement?.blur();button.focus({preventScroll:true});
+    for(const select of conflictList.querySelectorAll('select'))if(!select.value){
+      status('conflict','Elegí una versión para cada diferencia.');resolutionMessage('Falta elegir una opción. Te mostramos la primera diferencia pendiente.');select.scrollIntoView({block:'center'});return;
+    }
+    saveDecisionDraft();queuedResolution.submitted=true;
+    try{verifiedWrite(resolutionKey,queuedResolution);}catch{resolutionMessage('No se pudo guardar la decisión. No se modificaron tus gastos.');return;}
+    button.disabled=true;resolutionMessage('Decisiones guardadas. Verificando y sincronizando…');
+    try{await run(queuedResolution);}finally{button.disabled=false;}
   });
   document.querySelector('#cloudSyncDownload')?.addEventListener('click',async()=>{
     try {
@@ -218,8 +264,9 @@ export function installCloudSync({getState,applyState,canApply,localSaved,canSig
   });
   window.addEventListener('online',()=>void run());
   window.addEventListener('offline',()=>status('offline'));
+  document.querySelector('#settingsDialog')?.addEventListener('close',()=>void run());
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)void run();});
-  setInterval(()=>{if(!document.hidden&&lastStatus!=='conflict')void run();},10000);
+  setInterval(()=>{if(!document.hidden&&(lastStatus!=='conflict'||queuedResolution?.submitted))void run();},10000);
   status('signedout');void run();
   return {notify(){if(user){status(navigator.onLine?'pending':'offline');deferredRun();}},run};
 }
