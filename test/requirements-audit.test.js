@@ -77,7 +77,7 @@ test('auditoría funcional: recuperos, presupuesto, ahorro, stock, papelera y ex
   assert.match(app,/renderTrash/);
   assert.match(app,/exportConsultExcel/);
   assert.match(app,/function exportConsultPdf/);
-  assert.match(app,/window\.print/);
+  assert.match(app,/w\.print/);
 });
 
 test('auditoría funcional: Reventa es independiente e importa Excel con revisión manual',()=>{

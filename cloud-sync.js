@@ -1,9 +1,9 @@
-import { requestPasswordRecovery } from './password-recovery.js?v=154';
+import { requestPasswordRecovery } from './password-recovery.js?v=155';
 import { createSyncEngine } from './sync-engine.js';
 import { syncSnapshot, sameSyncValue } from './sync-merge.js';
 import { isValidSnapshot, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
-import { accountClient, installPasswordVisibility, preserveAndSignOut, saveAccountProfile, signInOriginalAccount, SIGNED_OUT_KEY } from './account-access.js?v=154';
-export { installPasswordVisibility } from './account-access.js?v=154';
+import { accountClient, installPasswordVisibility, preserveAndSignOut, saveAccountProfile, signInOriginalAccount, SIGNED_OUT_KEY } from './account-access.js?v=155';
+export { installPasswordVisibility } from './account-access.js?v=155';
 
 function verifiedWrite(key,value) {
   const raw=JSON.stringify(value);localStorage.setItem(key,raw);
