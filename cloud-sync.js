@@ -1,3 +1,4 @@
+import { requestPasswordRecovery } from './password-recovery.js?v=152';
 import { createSyncEngine } from './sync-engine.js';
 import { syncSnapshot, sameSyncValue } from './sync-merge.js';
 import { isValidSnapshot, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
@@ -120,6 +121,18 @@ export function installCloudSync({getState,applyState,canApply,localSaved}) {
     }catch(error){status('error',error.message);}
   }
   auth?.addEventListener('submit',event=>{event.preventDefault();void login();});
+  document.querySelector('#cloudSyncForgot')?.addEventListener('click',async()=>{
+    const button=document.querySelector('#cloudSyncForgot'),message=document.querySelector('#cloudSyncRecoveryStatus');
+    if(button.disabled)return;button.disabled=true;
+    message.textContent='Solicitando correo de recuperación…';
+    try{
+      ready ||= setup();await ready;
+      const email=document.querySelector('#cloudSyncEmail').value.trim();
+      await requestPasswordRecovery(client,email,new URL('./',location.href).href);
+      message.textContent='Si ese correo tiene una cuenta, recibirás un enlace para elegir una contraseña nueva. Revisá también Spam. Abrí el enlace más reciente.';
+    }catch(error){message.textContent=error.message?.startsWith('Ingresá')?error.message:'No se pudo solicitar el correo. Revisá la conexión e intentá nuevamente en un minuto.';}
+    finally{button.disabled=false;}
+  });
   document.querySelector('#cloudSyncRegister')?.addEventListener('click',()=>void login(true));
   document.querySelector('#cloudSyncNow')?.addEventListener('click',()=>void run());
   document.querySelector('#cloudSyncDisconnect')?.addEventListener('click',async()=>{
