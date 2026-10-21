@@ -1,38 +1,16 @@
-import { requestPasswordRecovery } from './password-recovery.js?v=153';
+import { requestPasswordRecovery } from './password-recovery.js?v=154';
 import { createSyncEngine } from './sync-engine.js';
 import { syncSnapshot, sameSyncValue } from './sync-merge.js';
 import { isValidSnapshot, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
-import { SYNC_URL, SYNC_PUBLIC_KEY } from './sync-config.js';
+import { accountClient, installPasswordVisibility, preserveAndSignOut, saveAccountProfile, signInOriginalAccount, SIGNED_OUT_KEY } from './account-access.js?v=154';
+export { installPasswordVisibility } from './account-access.js?v=154';
 
 function verifiedWrite(key,value) {
   const raw=JSON.stringify(value);localStorage.setItem(key,raw);
   if(localStorage.getItem(key)!==raw)throw Error('No se pudo verificar el respaldo local. No se reemplazaron tus datos.');
 }
 function readJSON(key) {const raw=localStorage.getItem(key);return raw?JSON.parse(raw):null;}
-async function loadSdk() {
-  if(window.supabase?.createClient)return;
-  await new Promise((resolve,reject)=>{
-    const script=document.createElement('script');script.src=new URL('./vendor/supabase-2.57.4.js',import.meta.url).href;
-    script.onload=resolve;script.onerror=()=>reject(Error('No se pudo cargar la conexión. Tus datos locales se conservan.'));document.head.append(script);
-  });
-}
-export function installPasswordVisibility(input,button,dialog,doc=document) {
-  if(!input||!button)return ()=>{};
-  function hide(){setVisible(false);}
-  function setVisible(visible){
-    input.type=visible?'text':'password';
-    button.setAttribute('aria-pressed',String(visible));
-    button.setAttribute('aria-label',visible?'Ocultar contraseña':'Mostrar contraseña');
-    button.querySelector('span').textContent=visible?'Ocultar':'Mostrar';
-  }
-  hide();
-  button.addEventListener('click',()=>setVisible(input.type==='password'));
-  dialog?.addEventListener('close',hide);
-  doc.addEventListener('visibilitychange',()=>{if(doc.hidden)hide();});
-  return hide;
-}
-
-export function installCloudSync({getState,applyState,canApply,localSaved}) {
+export function installCloudSync({getState,applyState,canApply,localSaved,canSignOut=()=>true}) {
   const prefix='mis-gastos-sync-v1',metaKey=prefix+'-checkpoint',bindingKey=prefix+'-account';
   let client,user,engine,pending,debounce,archived='',stopped=false,lastStatus='signedout';
   const target=document.querySelector('#cloudSyncStatus'), badge=document.querySelector('#cloudSyncBadge');
@@ -44,10 +22,78 @@ export function installCloudSync({getState,applyState,canApply,localSaved}) {
   function status(kind,message='') {
     lastStatus=kind;
     for(const el of [target,badge])if(el){el.textContent=labels[kind]+(message?' · '+message:'');el.dataset.status=kind;}
+    renderProfile();
     const account=document.querySelector('#cloudSyncAccount');if(account)account.textContent=user?.email||'Usá el mismo correo en PC y celular.';
     auth?.classList.toggle('hidden',!!user);
     document.querySelector('#cloudSyncActions')?.classList.toggle('hidden',!user);
   }
+  const profile=document.querySelector('#userProfileDialog');
+  let profileBusy=false;
+  function renderProfile(force=false){
+    const email=document.querySelector('#profileEmail'),name=document.querySelector('#profileName');
+    if(email)email.textContent=user?.email||'Todavía no iniciaste sesión en este dispositivo.';
+    const meta=user?.user_metadata||{};
+    if(name)name.textContent=[meta.first_name,meta.last_name].filter(Boolean).join(' ')||meta.full_name||meta.name||'Nombre aún no registrado';
+    const form=document.querySelector('#profileDetailsForm');
+    form?.classList.toggle('hidden',!user);
+    if(user&&form&&(force||!profile.open||profile.dataset.userId!==user.id)){
+      for(const key of ['first_name','last_name','display_name','contact_phone'])form.elements[key].value=meta[key]||'';
+      profile.dataset.userId=user.id;
+    }
+    const verified=document.querySelector('#profileEmailStatus');
+    if(verified)verified.textContent=user?(user.email_confirmed_at?'Correo verificado':'Correo pendiente de verificación'):'';
+    const joined=document.querySelector('#profileJoined');
+    if(joined)joined.textContent=user?.created_at?new Date(user.created_at).toLocaleDateString('es-AR'):'—';
+    document.querySelector('#profileChangePassword')?.classList.toggle('hidden',!user);
+    document.querySelector('#profileLogout')?.classList.toggle('hidden',!user);
+    document.querySelector('#profileSignIn')?.classList.toggle('hidden',!!user);
+    const message=document.querySelector('#profileSessionStatus');
+    if(message)message.textContent=user?'Sesión iniciada en este dispositivo.':'Tus datos locales se conservan. Iniciá sesión para vincular tu cuenta.';
+  }
+  document.querySelector('#userProfileBtn')?.addEventListener('click',()=>{renderProfile(true);profile.showModal();});
+  document.querySelector('#closeUserProfile')?.addEventListener('click',()=>profile.close());
+  document.querySelector('#profileSignIn')?.addEventListener('click',()=>{
+    profile.close();document.querySelector('#settingsBtn').click();
+    document.querySelector('#cloudSyncSettings').scrollIntoView({block:'start'});document.querySelector('#cloudSyncEmail').focus();
+  });
+  document.querySelector('#profileDetailsForm')?.addEventListener('submit',async event=>{
+    event.preventDefault();if(!user||profileBusy||stopped)return;
+    profileBusy=true;const form=event.currentTarget,button=form.querySelector('button'),message=document.querySelector('#profileSessionStatus');button.disabled=true;
+    const values=Object.fromEntries(['first_name','last_name','display_name','contact_phone'].map(k=>[k,form.elements[k].value]));
+    try{user=await saveAccountProfile(client,values,user.id);renderProfile(true);message.textContent='Perfil guardado y verificado.';}
+    catch(error){message.textContent=error.message;}
+    finally{profileBusy=false;button.disabled=false;}
+  });
+  document.querySelector('#profileChangePassword')?.addEventListener('click',async()=>{
+    if(!user||profileBusy||stopped)return;profileBusy=true;
+    const button=document.querySelector('#profileChangePassword'),message=document.querySelector('#profileSessionStatus');button.disabled=true;
+    try{await requestPasswordRecovery(client,user.email,new URL('./',location.href).href);message.textContent='Revisá tu correo: solicitamos un enlace para cambiar la contraseña.';}
+    catch{message.textContent='No se pudo solicitar el correo. Intentá nuevamente en un minuto.';}
+    finally{profileBusy=false;button.disabled=false;}
+  });
+  async function logout(){
+    if(!user||stopped||profileBusy)return;
+    if(!confirm('¿Querés cerrar sesión en este dispositivo? Tus gastos se conservarán y podrás continuar cuando vuelvas a ingresar con tu cuenta.'))return;
+    const button=document.querySelector('#profileLogout'),message=document.querySelector('#profileSessionStatus');
+    stopped=true;clearTimeout(debounce);button.disabled=true;
+    const preventClose=event=>event.preventDefault();profile.addEventListener('cancel',preventClose);
+    document.querySelector('#closeUserProfile').disabled=true;
+    message.textContent='Protegiendo tus datos y cerrando sesión…';
+    try{
+      await Promise.allSettled([...runningJobs]);
+      if(!canSignOut()||!localSaved())throw Error('Terminá de guardar o cancelar la edición pendiente antes de cerrar sesión.');
+      await preserveAndSignOut({client,snapshot:getState()});
+      location.reload();
+    }catch(error){
+      if(localStorage.getItem(SIGNED_OUT_KEY)==='1'){location.reload();return;}
+      message.textContent=error.message;stopped=false;button.disabled=false;
+      document.querySelector('#closeUserProfile').disabled=false;profile.removeEventListener('cancel',preventClose);
+    }
+  }
+  document.querySelector('#profileLogout')?.addEventListener('click',()=>void logout());
+  function freezeOtherTab(){if(localStorage.getItem(SIGNED_OUT_KEY)==='1'){document.querySelector('.app').hidden=true;location.reload();}}
+  window.addEventListener('storage',event=>{if(event.key===SIGNED_OUT_KEY&&event.newValue==='1')freezeOtherTab();});
+  window.addEventListener('pageshow',freezeOtherTab);
   function deferredRun() {clearTimeout(debounce);debounce=setTimeout(()=>void run(),1200);}
   function getLocal(){return syncSnapshot(getState());}
   async function archiveLocal(snapshot) {
@@ -79,14 +125,7 @@ export function installCloudSync({getState,applyState,canApply,localSaved}) {
   }
   let deviceId;
   async function setup() {
-    await loadSdk();
-    client=window.supabase.createClient(SYNC_URL,SYNC_PUBLIC_KEY,{
-      auth:{storageKey:prefix+'-session',persistSession:true,autoRefreshToken:true,detectSessionInUrl:false},
-      global:{fetch:async(input,options={})=>{
-        const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
-        try{return await fetch(input,{...options,signal:controller.signal});}finally{clearTimeout(timer);}
-      }}
-    });
+    client=await accountClient();
     deviceId=readJSON(prefix+'-device');if(!deviceId){deviceId=crypto.randomUUID();verifiedWrite(prefix+'-device',deviceId);}
     engine=createSyncEngine({getLocal,getCheckpoint:()=>readJSON(metaKey),
       readRemote:async(revision)=>{
@@ -102,10 +141,20 @@ export function installCloudSync({getState,applyState,canApply,localSaved}) {
         if(!applyState(full))throw Error('No se pudo verificar la aplicación de la copia remota.');
         if(!sameSyncValue(syncSnapshot(getState()),snapshot))throw Error('La comprobación local no coincide.');
       },saveCheckpoint:async(meta)=>{verifiedWrite(metaKey,meta);pending=null;panel?.classList.add('hidden');localStorage.removeItem(prefix+'-conflicts');},status,onConflicts:showConflicts});
-    client.auth.onAuthStateChange(()=>{setTimeout(()=>void run(),0);});
+    client.auth.onAuthStateChange((event)=>{
+      if(event==='SIGNED_OUT'&&user){
+        try{localStorage.setItem(SIGNED_OUT_KEY,'1');}finally{setTimeout(()=>location.reload(),0);}
+      }else setTimeout(()=>void run(),0);
+    });
   }
   let ready;
-  async function run(resolution) {
+  const runningJobs=new Set();
+  function run(resolution){
+    if(stopped)return Promise.resolve(false);
+    const job=performRun(resolution);runningJobs.add(job);
+    job.finally(()=>runningJobs.delete(job));return job;
+  }
+  async function performRun(resolution) {
     if(stopped)return;
     if(!navigator.onLine){status('offline');return;}
     try {
@@ -131,7 +180,8 @@ export function installCloudSync({getState,applyState,canApply,localSaved}) {
       const email=document.querySelector('#cloudSyncEmail').value.trim(),password=document.querySelector('#cloudSyncPassword').value;
       if(!email||password.length<8)throw Error('Ingresá tu correo y una contraseña de al menos 8 caracteres.');
       status('working');
-      const {data,error}=create?await client.auth.signUp({email,password}):await client.auth.signInWithPassword({email,password});
+      const result=create?await client.auth.signUp({email,password}):{data:{session:true,user:await signInOriginalAccount(client,email,password)},error:null};
+      const {data,error}=result;
       document.querySelector('#cloudSyncPassword').value='';
       if(error)throw error;
       if(!data.session){status('signedout','Confirmá el correo recibido y luego tocá Vincular. Si no llega, falta habilitar el envío de correo del servicio.');return;}
@@ -153,11 +203,7 @@ export function installCloudSync({getState,applyState,canApply,localSaved}) {
   });
   document.querySelector('#cloudSyncRegister')?.addEventListener('click',()=>void login(true));
   document.querySelector('#cloudSyncNow')?.addEventListener('click',()=>void run());
-  document.querySelector('#cloudSyncDisconnect')?.addEventListener('click',async()=>{
-    if(!client)return;
-    if(!confirm('¿Pausar la sincronización en este dispositivo? Tus datos y respaldos se conservan.'))return;
-    stopped=true;await client.auth.signOut({scope:'local'});user=null;status('signedout');stopped=false;
-  });
+  document.querySelector('#cloudSyncDisconnect')?.addEventListener('click',()=>{renderProfile();if(!profile.open)profile.showModal();void logout();});
   document.querySelector('#cloudSyncResolve')?.addEventListener('click',()=>{
     if(!pending)return;const choices={};for(const select of conflictList.querySelectorAll('select')){if(!select.value){status('conflict','Elegí una versión para cada diferencia.');return;}choices[select.dataset.conflictId]=select.value;}
     void run({local:pending.local,remote:pending.remote,choices});

@@ -30,7 +30,9 @@ test('actualiza solo la contraseña tras verificar usuario y propaga fallo de se
 });
 test('el enlace de recuperación aísla la sesión y evita arranque de sincronización y datos',()=>{
  const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
- assert.match(app,/if\(isRecoveryLink\(location.hash\)\)\{\s*await startPasswordRecovery\(\);\s*\}else\{/);
+ assert.ok(app.indexOf('await startPasswordRecovery();')<app.indexOf('await showAccountSignIn();'));
+ assert.ok(app.indexOf('await showAccountSignIn();')<app.indexOf('const sharedMode'));
+ assert.match(app,/else if\(localStorage.getItem\(SIGNED_OUT_KEY\)==='1'\)/);
  const module=readFileSync(new URL('../password-recovery.js',import.meta.url),'utf8');
  assert.match(module,/persistSession:false,autoRefreshToken:false,detectSessionInUrl:false/);
  assert.doesNotMatch(module,/localStorage|applyState|sync_heads|sync_backups|commit_sync/);

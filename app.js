@@ -1,12 +1,12 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=153';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=153';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=153';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=154';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=154';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=154';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=153';
-import { createAccessLock } from './access-lock.js?v=153';
+import { installCloudSync } from './cloud-sync.js?v=154';
+import { createAccessLock } from './access-lock.js?v=154';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -14,13 +14,16 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=153';
-import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=153';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=154';
+import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=154';
+import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=154';
 if(isRecoveryLink(location.hash)){
   await startPasswordRecovery();
+}else if(localStorage.getItem(SIGNED_OUT_KEY)==='1'){
+  await showAccountSignIn();
 }else{
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=153');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=154');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -3919,6 +3922,7 @@ installMissingResaleExcelPurchases();
 
 if(!sharedMode)cloudSyncController=installCloudSync({
   getState:()=>structuredClone(state),
+  canSignOut:()=>!pending.length&&!settingsHasChanges(),
   localSaved:()=>!window.__misGastosPrimaryWriteError&&safeStoredValue(STORAGE_KEY)===JSON.stringify(state),
   canApply:()=>!pending.length&&!settingsHasChanges()&&
     !document.querySelector('dialog[open]:not(#settingsDialog)')&&
