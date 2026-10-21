@@ -1,4 +1,4 @@
-import { requestPasswordRecovery } from './password-recovery.js?v=152';
+import { requestPasswordRecovery } from './password-recovery.js?v=153';
 import { createSyncEngine } from './sync-engine.js';
 import { syncSnapshot, sameSyncValue } from './sync-merge.js';
 import { isValidSnapshot, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
@@ -16,11 +16,28 @@ async function loadSdk() {
     script.onload=resolve;script.onerror=()=>reject(Error('No se pudo cargar la conexión. Tus datos locales se conservan.'));document.head.append(script);
   });
 }
+export function installPasswordVisibility(input,button,dialog,doc=document) {
+  if(!input||!button)return ()=>{};
+  function hide(){setVisible(false);}
+  function setVisible(visible){
+    input.type=visible?'text':'password';
+    button.setAttribute('aria-pressed',String(visible));
+    button.setAttribute('aria-label',visible?'Ocultar contraseña':'Mostrar contraseña');
+    button.querySelector('span').textContent=visible?'Ocultar':'Mostrar';
+  }
+  hide();
+  button.addEventListener('click',()=>setVisible(input.type==='password'));
+  dialog?.addEventListener('close',hide);
+  doc.addEventListener('visibilitychange',()=>{if(doc.hidden)hide();});
+  return hide;
+}
+
 export function installCloudSync({getState,applyState,canApply,localSaved}) {
   const prefix='mis-gastos-sync-v1',metaKey=prefix+'-checkpoint',bindingKey=prefix+'-account';
   let client,user,engine,pending,debounce,archived='',stopped=false,lastStatus='signedout';
   const target=document.querySelector('#cloudSyncStatus'), badge=document.querySelector('#cloudSyncBadge');
   const auth=document.querySelector('#cloudSyncAuth');
+  const hidePassword=installPasswordVisibility(document.querySelector('#cloudSyncPassword'),document.querySelector('#cloudSyncPasswordToggle'),document.querySelector('#settingsDialog')); 
   const conflictList=document.querySelector('#cloudSyncConflicts');
   const panel=document.querySelector('#cloudSyncConflictPanel');
   const labels={signedout:'Sin vincular · datos guardados en este dispositivo',working:'Sincronizando…',synced:'Sincronizado · copia remota verificada',pending:'Cambios pendientes de sincronización',offline:'Sin conexión · los cambios se conservan en este dispositivo',conflict:'Hay diferencias para revisar · ambas versiones conservadas',error:'No se pudo completar la sincronización'};
@@ -108,6 +125,7 @@ export function installCloudSync({getState,applyState,canApply,localSaved}) {
     }catch(error){status('error',error.message);}
   }
   async function login(create=false) {
+    hidePassword();
     try {
       ready ||= setup();await ready;
       const email=document.querySelector('#cloudSyncEmail').value.trim(),password=document.querySelector('#cloudSyncPassword').value;

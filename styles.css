@@ -851,3 +851,8 @@ img,svg,canvas,video{
 
 .recovery-screen{max-width:430px;margin:30px auto;padding:24px;background:#fff;border-radius:20px}.recovery-screen input{display:block;width:100%;margin:8px 0 16px}.recovery-screen button{margin:8px 0;padding:12px;width:100%}.recovery-screen label{display:block}.recovery-screen [hidden]{display:none!important}
 .app[hidden]{display:none!important}
+
+.password-visibility-field{display:flex;align-items:center;gap:8px;min-width:0}
+.password-visibility-field input{flex:1;min-width:0;width:0!important}
+.password-visibility-toggle{display:flex;align-items:center;justify-content:center;gap:5px;min-height:44px;flex-shrink:0;padding:8px;border:1px solid #b4d5ca;border-radius:12px;background:#fff;color:#245b4d;font:inherit;font-size:12px;cursor:pointer}
+.password-visibility-toggle:focus-visible{outline:2px solid #245b4d;outline-offset:2px}
