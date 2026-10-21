@@ -843,3 +843,8 @@ img,svg,canvas,video{
 #settingsDialog:not(.categories-only) > #categoryManagementSection{display:none}
 #settingsDialog.categories-only > :not(.settings-dialog-head):not(#categoryManagementSection){display:none}
 #settingsDialog.categories-only > #categoryManagementSection{border-top:0;margin-top:0;padding-top:0}
+
+/* Both home privacy buttons share the existing saved visibility preference. */
+.monthly-total-controls{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0}
+.monthly-total-controls .eye-btn{flex-shrink:0}
+.hide-amounts #homeMonthlyNet,.hide-amounts #homeMonthlyGross,.hide-amounts #homeMonthlyRecovered{filter:blur(7px);user-select:none}
