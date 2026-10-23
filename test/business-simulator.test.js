@@ -1,0 +1,9 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {simulateSale} from '../negocio/simulator.js';
+const tickets=[{id:'a',cost:100,status:'Disponible'},{id:'b',cost:100,status:'Disponible'},{id:'c',cost:100,status:'Vendida'},{id:'d',cost:100,status:'Uso personal'}];
+test('markup differs from margin and projections never mutate tickets',()=>{const before=structuredClone(tickets);assert.equal(simulateSale({tickets,quantity:2,mode:'markup',value:25}).unitPrice,125);assert.equal(simulateSale({tickets,quantity:2,mode:'margin',value:25}).unitPrice,133.34);assert.deepEqual(tickets,before);});
+test('commissions and owner distribution reconcile',()=>{const r=simulateSale({tickets,quantity:2,mode:'price',value:200,feePercent:10});assert.equal(r.gross,400);assert.equal(r.commission,40);assert.equal(r.profit,160);assert.equal(r.ownerGain,112);assert.equal(r.sellerGain,48);assert.equal(r.totalOwner,312);});
+test('sold and personal entries cannot increase simulation stock',()=>{assert.throws(()=>simulateSale({tickets,quantity:3,value:200}));assert.throws(()=>simulateSale({tickets,quantity:1.5,value:200}));});
+test('unachievable margins and malformed inputs fail',()=>{for(const args of [{mode:'margin',value:95,feePercent:5},{value:NaN},{feePercent:100},{ownerPercent:101},{mode:'unknown'}])assert.throws(()=>simulateSale({tickets,quantity:1,value:200,...args}));});
+test('negative profit and break-even are visible',()=>{const r=simulateSale({tickets,quantity:1,value:50,feePercent:10});assert.equal(r.profit,-55);assert.equal(r.breakEvenUnit,111.12);assert.equal(r.marginPercent,-110.00000000000001);});
+test('zero-cost tickets have undefined markup, valid margin and no division by zero',()=>{const r=simulateSale({tickets:[{id:'x',status:'Disponible',cost:0}],quantity:1,value:100});assert.equal(r.markupPercent,null);assert.equal(r.marginPercent,100);});

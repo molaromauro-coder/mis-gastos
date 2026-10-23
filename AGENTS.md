@@ -49,10 +49,42 @@ Intentar Face ID al abrir y al regresar a la app si la protección está activad
 ## Requisito permanente — edición personal y distribución autorizada (21/10/2026)
 - Reventa de Entradas es exclusiva de la cuenta propietaria de Mauro. Ninguna cuenta compartida puede acceder a la función ni a sus datos. Identificar la cuenta por su UID verificado y permisos administrados en servidor; nunca por parámetros de URL, correo escrito por el cliente, botones ocultos o user_metadata editable.
 - La edición para compartir debe excluir Reventa y la administración de usuarios. Aislar sus datos también en consultas, respuestas, sincronización, exportaciones y respaldos descargables; revisar y separar el estado remoto antes de habilitar cuentas compartidas.
-- Cada persona necesita autorización de Mauro para usar la app. Conservar el requisito de aprobación mediante código SMS y el listado de usuarios activos en la tarjeta “Usuarios de Mis Gastos”, disponible exclusivamente para Mauro.
+- Cada persona necesita autorización de Mauro para usar la app. La decisión posterior del usuario es aprobar dentro de la app, sin SMS. Conservar el listado de usuarios activos en la tarjeta “Usuarios de Mis Gastos”, disponible exclusivamente para Mauro.
 - Cada usuario nuevo comienza sin gastos, pagos, tarjetas personales ni datos del propietario; se pueden ofrecer categorías/subcategorías base editables. No distribuir gastos de recuperación, Reventa ni respaldos de Mauro como datos iniciales.
 - La app debe poder instalarse/descargarse y mantenerse actualizable por sus usuarios. Las mejoras de Mauro actualizan el programa conservando todas las cargas de gastos y demás datos de cada cuenta, sin reinstalar ni borrar almacenamiento.
 - Actualizar versión, caché o interfaz nunca equivale a reiniciar datos. Antes de migraciones, crear y releer respaldos íntegros; migrar sobre una copia, preservar campos desconocidos y detenerse ante fallos. Probar actualización de una versión anterior con datos reales anonimizados, recuperación, trabajo sin conexión, cambios pendientes y ausencia de duplicados o pérdidas.
 - Cerrar sesión conserva los datos de la misma cuenta y bloquea su acceso por la app hasta volver a autenticarse. No mezclar identidades al reingresar.
 - Los usuarios compartidos pueden administrar sus propios gastos y categorías según las funciones previstas. No tienen permisos administrativos para modificar código publicado, permisos, funcionamiento global u otras cuentas.
 - No entregar la edición para amigos como lista hasta comprobar estas restricciones del lado del servidor y el flujo completo de alta, autorización, ingreso, cierre, recuperación y actualización sin pérdidas. No prometer inmunidad absoluta a ataques o pérdida cero.
+
+
+## Separación del negocio — trabajo en curso 22/10/2026
+- Reventa se traslada a una app independiente en `negocio/`; no retirar la original ni sus datos hasta verificar la migración y el acceso real del propietario.
+- La app independiente no debe importar `resale.js`: su arranque heredado introduce datos en el almacenamiento de Mis Gastos. Utilizar métricas puras.
+- `scripts/build-business.py` genera index.html, app.js y metrics.js del negocio. Modificar el generador para no perder correcciones al regenerar.
+- Vendedores con porcentajes individuales sobre ganancia neta; cada entrada asignada conserva el porcentaje histórico. Cambiar el catálogo no recalcula ventas anteriores.
+- Requisito corregido por Mauro: la exportación debe partir del Excel importado y conservar sus hojas, formato, funcionamiento y fórmulas. No sustituirlo por un libro reconstruido de valores ni agregar hojas por decisión propia. La exportación tabular anterior NO satisface este requisito y no debe publicarse como definitiva. Conservar el original íntegro por cuenta; actualizar entradas sobre una copia, extender fórmulas y referencias cuando corresponda y verificar formato, resultados y recálculo. Si una estructura no está soportada, explicar el límite y bloquear la exportación antes de entregar un archivo degradado. El respaldo JSON completo sigue siendo independiente.
+- Las diferencias se resuelven individualmente; seleccionar todo sólo agrega entradas nuevas. Nunca interpretar ausencias como eliminaciones automáticas.
+- Prueba de regresión: escritura y lectura XLSX real, importación repetida, parcial, conflictiva, comisiones históricas y fallos de almacenamiento. Ejecutar la suite con TZ=America/Argentina/Buenos_Aires (las pruebas existentes del mes dependen de esa zona).
+- Pendientes antes de publicar negocio: prueba integral de navegador, preparar y verificar copia remota del negocio, verificación PC/iPhone. La aprobación de usuarios y la retirada del módulo personal siguen pendientes. No declarar distribución lista.
+
+## Estados y porcentajes — 22/10/2026
+- Uso personal conserva datos originales pero no aporta costo de negocio, inversión activa, venta, recupero, ganancias, comisiones ni stock vendible. Al cambiar el estado se recalcula sin borrar los valores originales.
+- Leer los porcentajes explícitos de fórmulas de cada fila del Excel antes de importar. No calcular porcentajes a partir de ganancias cacheadas ni asumir que el encabezado general prevalece sobre la fórmula. Fórmulas no interpretables bloquean el reparto en lugar de inventarlo.
+- El simulador respeta las comisiones guardadas por entrada. Cambiar reparto predeterminado congela el reparto previo en las entradas existentes; las nuevas compras guardan su porcentaje al crearse.
+- Verificación local de esta revisión: 378 pruebas aprobadas. No equivale a publicación ni a prueba de dispositivos reales. Exportación que preserve el libro original continúa pendiente.
+
+
+## Exportación con plantilla original — avance 22/10/2026
+- Nombre de la aplicación independiente: Reventa de Entradas.
+- La importación XLSX revisada conserva el archivo íntegro en `resale.excelTemplate`, dentro del estado autenticado y sus respaldos. Límite actual 2 MB. No incluir archivos financieros privados como recursos públicos del repositorio.
+- `negocio/template-export.js` actualiza sólo precio de venta y estado en el paquete OOXML original compatible. Conserva fórmulas, estilos y demás componentes; invalida resultados cacheados y pide recálculo a Excel.
+- Aún NO soporta añadir compras/fiestas, cambiar costos/fechas o porcentajes en el Excel de salida. Bloquea esos casos explícitamente. No afirmar exportación completa ni publicar la app como terminada. Tampoco está verificado el recálculo real en Excel.
+- Verificación privada sobre el archivo recibido: fórmulas y componentes no modificados comparados íntegramente; cambios de venta/estado comprobados. Suite del proyecto: 381 pruebas. El archivo de prueba real permanece fuera del repositorio.
+
+## App independiente — revisión 23/10/2026
+- Los avances posteriores sustituyen los límites de exportación descritos arriba: `template-layout.js` adapta Compras, Ventas y Balance a nuevas fiestas, lotes y porcentajes individuales, preservando estilos y componentes del paquete original. Tipos soportados: EARLY, GRAL 1/2/3 y VIP; otros tipos bloquean la exportación con explicación.
+- Copia inicial remota verificada: business_heads revisión 1, 13 fiestas y 193 entradas, sin gastos personales. Respaldo idéntico comprobado; sync_heads original permanece en revisión 10. Tres fiestas duplicadas exactas archivadas en la copia nueva; se conservaron 34 diferencias de fecha de compra de la app y se completaron 105 fechas ausentes. No hubo diferencias de importes/ventas/estados.
+- Exportación/importación privada comprobada dos veces: inventario original 193 entradas y escenario ampliado de 194 entradas con fiesta vacía, fiesta nueva y vendedor con porcentaje distinto; cero diferencias al volver a leer.
+- Navegador local utiliza API simulada para probar sin alterar datos productivos. No equivale a verificar ingreso y sincronización real PC/iPhone. Mantener el módulo original hasta esa verificación.
+- Sigue pendiente comprobar recálculo en Excel nativo y acceso desde los dispositivos del propietario. No afirmar funcionamiento perfecto ni que la distribución para amigos está lista.
