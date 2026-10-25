@@ -20,3 +20,17 @@ export function deduplicateFixedExpenses(snapshot){
  }
  return true;
 }
+
+export function removeFixedExpenseDefinitions(snapshot,ids){
+ const removed=(snapshot.fixedExpenses||[]).filter(x=>ids.includes(x.id));
+ snapshot.fixedExpenses=(snapshot.fixedExpenses||[]).filter(x=>!ids.includes(x.id));
+ for(const item of removed){
+  const category=categoryBaseName(item.category),name=categoryBaseName(item.subcategory||item.concept);
+  const remains=snapshot.fixedExpenses.some(x=>categoryBaseName(x.category)===category&&categoryBaseName(x.subcategory||x.concept)===name);
+  if(remains)continue;
+  for(const key of Object.keys(snapshot.subcategories||{}))if(categoryBaseName(key)===category){
+   snapshot.subcategories[key]=snapshot.subcategories[key].filter(x=>categoryBaseName(x)!==name);
+  }
+ }
+ return removed.length;
+}

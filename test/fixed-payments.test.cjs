@@ -61,7 +61,7 @@ test('existing decorated or inactive card is preserved instead of duplicated',()
 });
 function repairSetup(failure){
  const s=setup(),{ctx,state}=s;state.fixedExpenses=[];state.subcategories={'GASTOS FIJOS 😩':['Cable e internet']};
- vm.runInContext(fs.readFileSync(__dirname+'/../fixed-dedup.js','utf8').replace(/^import .*;$/m,'').replace('export function','function'),ctx);ctx.structuredClone=structuredClone;ctx.restoreState=previous=>{Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,previous);};
+ vm.runInContext(fs.readFileSync(__dirname+'/../fixed-dedup.js','utf8').replace(/^import .*;$/m,'').replaceAll('export function','function'),ctx);ctx.structuredClone=structuredClone;ctx.restoreState=previous=>{Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,previous);};
  const records=new Map();ctx.sharedMode=false;ctx.STORAGE_KEY='test';ctx.cloneState=()=>JSON.parse(JSON.stringify(state));ctx.showToast=()=>{};
  ctx.localStorage={setItem:(k,v)=>{if(failure==='backup-write')throw Error('full');records.set(k,v);},getItem:k=>failure==='backup-read'?'bad':records.get(k)};
  ctx.save=()=>{if(failure==='save')return false;records.set('test',JSON.stringify(state));return true;};

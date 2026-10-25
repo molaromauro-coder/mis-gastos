@@ -865,3 +865,5 @@ img,svg,canvas,video{
 #profileDetailsForm label{display:block;margin:12px 0;font-size:13px}#profileDetailsForm input{display:block;width:100%;margin-top:6px}#profileDetailsForm button{min-height:44px;padding:12px;border:1px solid #b4d5ca;border-radius:12px;background:#fff;color:#245b4d;font:inherit;font-weight:700}#profileChangePassword{margin-bottom:12px}#userProfileDialog [hidden]{display:none!important}
 .sync-party-choice{width:100%;min-height:44px;padding:12px;margin:8px 0;border:1px solid #b4d5ca;border-radius:12px;background:#fff;color:#245b4d;font:inherit;font-weight:700}
 #cloudSyncResolutionStatus{margin:10px 0;font-size:14px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}
+
+.fixed-expense-actions .fixed-delete{grid-column:1/-1;background:#fbe8e6;color:#922b21}
