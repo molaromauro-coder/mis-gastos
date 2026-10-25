@@ -1,12 +1,13 @@
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=157';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=157';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=157';
+import {deduplicateFixedExpenses} from './fixed-dedup.js';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=158';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=158';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=158';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=157';
-import { createAccessLock } from './access-lock.js?v=157';
+import { installCloudSync } from './cloud-sync.js?v=158';
+import { createAccessLock } from './access-lock.js?v=158';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -14,16 +15,16 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=157';
-import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=157';
-import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=157';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=158';
+import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=158';
+import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=158';
 if(isRecoveryLink(location.hash)){
   await startPasswordRecovery();
 }else if(localStorage.getItem(SIGNED_OUT_KEY)==='1'){
   await showAccountSignIn();
 }else{
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=157');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=158');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -162,7 +163,7 @@ function seedUserFixedExpensesOnce(){
   const category=state.categories.find((value)=>normalizedCategoryName(value)===normalizedCategoryName('GASTOS FIJOS'))||'GASTOS FIJOS';
   const subcategories=Array.isArray(state.subcategories?.[category])?state.subcategories[category]:[];
   const existing=(concept,subcategory)=>state.fixedExpenses.some((item)=>
-    normalizedCategoryName(item.concept)===normalizedCategoryName(concept) ||
+    categoryBaseName(item.concept)===categoryBaseName(concept) ||
     (normalizedCategoryName(item.category)===normalizedCategoryName(category)&&normalizedCategoryName(item.subcategory)===normalizedCategoryName(subcategory))
   );
   subcategories.forEach((subcategory,index)=>{
@@ -3115,18 +3116,22 @@ function syncFixedExpenseDefinitionsFromCategories(snapshot=state){
 function repairMissingFixedExpenseDefinitions(){
   if(sharedMode)return;
   const next=cloneState();
-  if(!syncFixedExpenseDefinitionsFromCategories(next))return;
+  const added=syncFixedExpenseDefinitionsFromCategories(next);
+  const unified=deduplicateFixedExpenses(next);
+  if(!added&&!unified)return;
   const previous=cloneState(),serialized=JSON.stringify(previous);
   const backupKey=STORAGE_KEY+'-before-fixed-definitions-'+uid();
   try{
     localStorage.setItem(backupKey,serialized);
     if(localStorage.getItem(backupKey)!==serialized)throw new Error('Respaldo no verificado');
     state.fixedExpenses=next.fixedExpenses;
+    state.expenses=next.expenses;
+    state.trash=next.trash;
     if(save()===false)throw new Error('Guardado no verificado');
     const stored=JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if(JSON.stringify(stored.fixedExpenses)!==JSON.stringify(next.fixedExpenses))throw new Error('Lectura no verificada');
+    if(['fixedExpenses','expenses','trash'].some(key=>JSON.stringify(stored[key])!==JSON.stringify(next[key])))throw new Error('Lectura no verificada');
   }catch(error){
-    state.fixedExpenses=previous.fixedExpenses;
+    restoreState(previous);
     showToast('No pude vincular los gastos fijos: '+error.message+'. Los gastos originales se conservan.');
   }
 }
