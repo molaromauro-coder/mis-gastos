@@ -34,3 +34,34 @@ export function removeFixedExpenseDefinitions(snapshot,ids){
  }
  return removed.length;
 }
+
+export function syncFixedCategories(snapshot){
+ let changed=false;snapshot.categories ||= [];snapshot.subcategories ||= {};
+ for(const item of snapshot.fixedExpenses||[]){
+  if(!item.category)continue;
+  const category=snapshot.categories.find(c=>categoryBaseName(c)===categoryBaseName(item.category))||item.category;
+  if(!snapshot.categories.includes(category)){snapshot.categories.push(category);changed=true;}
+  const name=item.subcategory||item.concept;if(!name)continue;
+  const list=snapshot.subcategories[category] ||= [];
+  const canonical=list.find(s=>categoryBaseName(s)===categoryBaseName(name))||name;
+  if(!list.includes(canonical)){list.push(canonical);changed=true;}
+  if(item.category!==category||item.subcategory!==canonical){item.category=category;item.subcategory=canonical;changed=true;}
+ }
+ return changed;
+}
+
+export function renameFixedDefinition(snapshot,item,data){
+ if(!item)return;
+ const old=item.subcategory||item.concept;
+ // Editing the card title renames its linked subcategory when no different one was selected.
+ if(data.concept!==item.concept&&data.subcategory===item.subcategory)data.subcategory=data.concept;
+ if(data.category===item.category&&data.subcategory&&data.subcategory!==old){
+  for(const category of Object.keys(snapshot.subcategories||{}))if(categoryBaseName(category)===categoryBaseName(item.category)){
+   snapshot.subcategories[category]=[...new Set(snapshot.subcategories[category].map(s=>categoryBaseName(s)===categoryBaseName(old)?data.subcategory:s))];
+  }
+  const update=e=>{if(categoryBaseName(e.category)===categoryBaseName(item.category)&&categoryBaseName(e.subcategory)===categoryBaseName(old)){e.subcategory=data.subcategory;if(e.fixedExpenseId===item.id)e.concept=data.concept;}};
+  for(const key of ['expenses','stock','recurring','categoryRules'])for(const e of snapshot[key]||[])update(e);
+  for(const entry of snapshot.trash||[])for(const e of entry.items||[])update(e);
+  for(const e of snapshot.fixedExpenses||[])if(e.id!==item.id&&categoryBaseName(e.category)===categoryBaseName(item.category)&&categoryBaseName(e.subcategory||e.concept)===categoryBaseName(old)){e.subcategory=data.subcategory;e.concept=data.concept;}
+ }
+}

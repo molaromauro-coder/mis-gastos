@@ -1,13 +1,13 @@
-import {deduplicateFixedExpenses,removeFixedExpenseDefinitions} from './fixed-dedup.js';
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=159';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=159';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=159';
+import {deduplicateFixedExpenses,removeFixedExpenseDefinitions,syncFixedCategories,renameFixedDefinition} from './fixed-dedup.js';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=160';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=160';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=160';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=159';
-import { createAccessLock } from './access-lock.js?v=159';
+import { installCloudSync } from './cloud-sync.js?v=160';
+import { createAccessLock } from './access-lock.js?v=160';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -15,16 +15,16 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=159';
-import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=159';
-import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=159';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=160';
+import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=160';
+import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=160';
 if(isRecoveryLink(location.hash)){
   await startPasswordRecovery();
 }else if(localStorage.getItem(SIGNED_OUT_KEY)==='1'){
   await showAccountSignIn();
 }else{
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=159');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=160');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -756,9 +756,9 @@ function renameSubcategoryEverywhere(category,oldName,newName){
   state.stock.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.recurring.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
   state.fixedExpenses.forEach((e)=>{
-    if(e.category===category&&e.subcategory===oldName){
+    if(categoryBaseName(e.category)===categoryBaseName(category)&&categoryBaseName(e.subcategory)===categoryBaseName(oldName)){
       e.subcategory=clean;
-      if(isFixedExpenseMasterCategory(category)&&normalizedCategoryName(e.concept)===normalizedCategoryName(oldName))e.concept=clean;
+      e.concept=clean;
     }
   });
   pending.forEach((e)=>{if(e.category===category&&e.subcategory===oldName)e.subcategory=clean;});
@@ -989,6 +989,7 @@ function installOptionMenuReorder(){
 installOptionMenuReorder();
 
 function fillCategories() {
+  repairMissingFixedExpenseDefinitions();
   const selected=$('#category')?.value||'';
   $('#category').innerHTML='<option value="">Sin categoría</option>'+state.categories.map((c)=>`<option value="${escape(c)}">${escape(displayCategory(c))}</option>`).join('');
   if(selected&&state.categories.includes(selected))$('#category').value=selected;
@@ -3136,20 +3137,22 @@ function syncFixedExpenseDefinitionsFromCategories(snapshot=state){
 function repairMissingFixedExpenseDefinitions(){
   if(sharedMode)return;
   const next=cloneState();
+  const categoriesChanged=syncFixedCategories(next);
   const added=syncFixedExpenseDefinitionsFromCategories(next);
   const unified=deduplicateFixedExpenses(next);
-  if(!added&&!unified)return;
+  if(!added&&!unified&&!categoriesChanged)return;
   const previous=cloneState(),serialized=JSON.stringify(previous);
   const backupKey=STORAGE_KEY+'-before-fixed-definitions-'+uid();
   try{
     localStorage.setItem(backupKey,serialized);
     if(localStorage.getItem(backupKey)!==serialized)throw new Error('Respaldo no verificado');
+    state.categories=next.categories;state.subcategories=next.subcategories;
     state.fixedExpenses=next.fixedExpenses;
     state.expenses=next.expenses;
     state.trash=next.trash;
     if(save()===false)throw new Error('Guardado no verificado');
     const stored=JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if(['fixedExpenses','expenses','trash'].some(key=>JSON.stringify(stored[key])!==JSON.stringify(next[key])))throw new Error('Lectura no verificada');
+    if(['categories','subcategories','fixedExpenses','expenses','trash'].some(key=>JSON.stringify(stored[key])!==JSON.stringify(next[key])))throw new Error('Lectura no verificada');
   }catch(error){
     restoreState(previous);
     showToast('No pude vincular los gastos fijos: '+error.message+'. Los gastos originales se conservan.');
@@ -3699,8 +3702,9 @@ $('#fixedExpenseForm').onsubmit=(event)=>{
     }
   if(editingFixedExpenseId){
     const item=state.fixedExpenses.find((x)=>x.id===editingFixedExpenseId);
-    if(item)Object.assign(item,data,{active:item.active!==false});
+    if(item){renameFixedDefinition(state,item,data);Object.assign(item,data,{active:item.active!==false});}
   }else state.fixedExpenses.push({id:uid(),...data});
+    syncFixedCategories(state);
     if(save()===false)throw new Error('No pude guardar. Se conserva el estado anterior.');
   }catch(error){restoreState(previous);showToast(error.message);return;}
   editingFixedExpenseId=null;$('#fixedExpenseDialog').close();render();refreshExpenseDetailViews();showToast('✓ Gasto fijo y monto guardados');

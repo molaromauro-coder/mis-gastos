@@ -2,13 +2,14 @@ const {test}=require('node:test');const assert=require('node:assert/strict');con
 const source=fs.readFileSync(__dirname+'/../app.js','utf8');
 async function setup(paid=false){
  const {buildExpenseEdit,expenseEditModel}=await import('../expense-edit.js');
+ const {syncFixedCategories,renameFixedDefinition}=await import('../fixed-dedup.js');
  const item={id:'f',concept:'Seguro',category:'GASTOS FIJOS',subcategory:'Seguro',currency:'ARS',method:'Efectivo',day:10,active:true,unknown:'preserved',plannedAmounts:{'2026-09':500}};
  const expense={id:'e',amount:1000,concept:'Seguro',category:'GASTOS FIJOS',subcategory:'Seguro',currency:'ARS',method:'Efectivo',date:'2026-10-19T12:00:00',installments:1,unknown:'preserved'};
  const state={fixedExpenses:[item],expenses:paid?[expense]:[],cards:[],resale:{untouched:true}};
  const elements={};for(const [id,value] of Object.entries({fixedExpenseConcept:'Seguro',fixedExpenseCurrency:'ARS',fixedExpenseCategory:'GASTOS FIJOS',fixedExpenseSubcategory:'Seguro',fixedExpenseMethod:'Efectivo',fixedExpenseCard:'',fixedExpenseDay:'10',fixedExpenseAmount:'1500'}))elements['#'+id]={value};
  elements['#fixedExpenseForm']={dataset:{amountMonth:'2026-10',paymentId:paid?'e':'',paymentSnapshot:paid?JSON.stringify([expense]):''}};
  let closed=false,notice='';elements['#fixedExpenseDialog']={close:()=>{closed=true;}};
- const ctx=vm.createContext({state,$:id=>elements[id],editingFixedExpenseId:'f',localizedInputNumber:id=>Number(elements[id].value),cloneState:()=>structuredClone(state),restoreState:previous=>{Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,previous);},fixedExpensePayments:()=>state.expenses,expenseEditModel,buildExpenseEdit,uid:()=> 'new',save:()=>true,showToast:s=>{notice=s;},render:()=>{},refreshExpenseDetailViews:()=>{}});
+ const ctx=vm.createContext({syncFixedCategories,renameFixedDefinition,state,$:id=>elements[id],editingFixedExpenseId:'f',localizedInputNumber:id=>Number(elements[id].value),cloneState:()=>structuredClone(state),restoreState:previous=>{Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,previous);},fixedExpensePayments:()=>state.expenses,expenseEditModel,buildExpenseEdit,uid:()=> 'new',save:()=>true,showToast:s=>{notice=s;},render:()=>{},refreshExpenseDetailViews:()=>{}});
  const start=source.indexOf("$('#fixedExpenseForm').onsubmit="),end=source.indexOf("$('#fixedExpensePaymentForm').onsubmit=",start);vm.runInContext(source.slice(start,end),ctx);
  return {ctx,state,item,expense,elements,submit:()=>elements['#fixedExpenseForm'].onsubmit({preventDefault(){}}),closed:()=>closed,notice:()=>notice};
 }
