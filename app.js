@@ -1,13 +1,13 @@
 import {deduplicateFixedExpenses,removeFixedExpenseDefinitions,syncFixedCategories,renameFixedDefinition} from './fixed-dedup.js';
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=161';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=161';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=161';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=162';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=162';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=162';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=161';
-import { createAccessLock } from './access-lock.js?v=161';
+import { installCloudSync } from './cloud-sync.js?v=162';
+import { createAccessLock } from './access-lock.js?v=162';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -15,16 +15,16 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=161';
-import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=161';
-import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=161';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=162';
+import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=162';
+import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=162';
 if(isRecoveryLink(location.hash)){
   await startPasswordRecovery();
 }else if(localStorage.getItem(SIGNED_OUT_KEY)==='1'){
   await showAccountSignIn();
 }else{
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=161');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=162');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -2391,10 +2391,46 @@ function openFixedExpensePayment(item,key){
   updateFixedPaymentFields(item.card||'');
   $('#fixedExpensePaymentDialog').showModal();
 }
+let fixedPaymentCancellation=null;
+function bindFixedPaymentTap(button,action){
+  let start=null,lastTouch=0;
+  button.addEventListener('touchstart',event=>{
+    const touch=event.touches.length===1?event.touches[0]:null;
+    start=touch?{x:touch.clientX,y:touch.clientY}:null;
+  },{passive:true});
+  button.addEventListener('touchmove',event=>{
+    const touch=event.touches[0];
+    if(!touch||event.touches.length!==1||start&&Math.hypot(touch.clientX-start.x,touch.clientY-start.y)>10)start=null;
+  },{passive:true});
+  button.addEventListener('touchcancel',()=>{start=null;});
+  button.addEventListener('touchend',event=>{
+    const touch=event.changedTouches[0],origin=start;start=null;
+    if(!origin||!touch||event.touches.length||Math.hypot(touch.clientX-origin.x,touch.clientY-origin.y)>10||button.disabled)return;
+    event.preventDefault();event.stopPropagation();lastTouch=Date.now();action();
+  },{passive:false});
+  button.onclick=event=>{
+    if(Date.now()-lastTouch<750){event.preventDefault();return;}
+    if(!button.disabled)action();
+  };
+}
 function cancelFixedExpensePayment(item,key){
   const payments=fixedExpensePayments(item,key);
-  if(!payments.length)return;
-  if(!confirm(`¿Cancelar el pago de ${item.concept||item.subcategory} de ${key}? Se quitarán sus movimientos y cuotas vinculadas de los totales. Podés recuperarlos desde Papelera.`))return;
+  if(!payments.length){showToast('Este gasto ya figura impago.');return;}
+  fixedPaymentCancellation={id:item.id,key,payments:JSON.stringify(payments)};
+  $('#cancelFixedPaymentMessage').textContent=`¿Querés cancelar el pago de ${money(fixedExpenseAmountForMonth(item,key),item.currency||'ARS')} de ${item.concept||item.subcategory} del mes ${key}?`;
+  $('#confirmCancelFixedPayment').disabled=false;
+  const dialog=$('#cancelFixedPaymentDialog');
+  if(!dialog.open)dialog.showModal();
+}
+function commitFixedExpenseCancellation(){
+  const context=fixedPaymentCancellation;
+  if(!context)return;
+  const item=state.fixedExpenses.find(row=>row.id===context.id),key=context.key;
+  const payments=item?fixedExpensePayments(item,key):[];
+  if(!payments.length||JSON.stringify(payments)!==context.payments){
+    $('#cancelFixedPaymentDialog').close();
+    showToast('El pago cambió. Revisalo antes de volver a cancelar.');return;
+  }
   const groups=new Set(payments.map(e=>e.parentId||e.id));
   const previous=cloneState();
   const backupKey=STORAGE_KEY+'-before-cancel-payment-'+uid(),serialized=JSON.stringify(previous);
@@ -2410,8 +2446,11 @@ function cancelFixedExpensePayment(item,key){
     restoreState(previous);void persistIndexedSnapshot(structuredClone(state));
     showToast('No pude guardar la cancelación. El pago se conserva.');return;
   }
+  fixedPaymentCancellation=null;
+  $('#cancelFixedPaymentDialog').close();
   mirrorResetIntoSnapshot(settingsSnapshot,state);
   render();refreshExpenseDetailViews();
+  feedback(true);
   showToast('✓ Pago cancelado · movimientos y totales actualizados · recuperable en Papelera');
 }
 function fixedExpenseDisplayLabel(concept){return displaySubcategory(concept);}
@@ -2454,7 +2493,7 @@ function renderFixedExpenses(){
   document.querySelectorAll('[data-fixed-expense-id]').forEach((row)=>{
     const item=state.fixedExpenses.find((x)=>x.id===row.dataset.fixedExpenseId);if(!item)return;
     const cancel=row.querySelector('.fixed-cancel-payment');
-    if(cancel)cancel.onclick=()=>cancelFixedExpensePayment(item,key);
+    if(cancel)bindFixedPaymentTap(cancel,()=>cancelFixedExpensePayment(item,key));
     row.querySelector('.fixed-pay').onclick=()=>{const current=fixedExpensePayments(item,key)[0];if(current)openExpenseEditor(current.id);else openFixedExpensePayment(item,key);};
     row.querySelector('.fixed-delete').onclick=()=>deleteFixedExpenseCards([item.id],item.concept);
     row.querySelector('.fixed-edit').onclick=()=>openFixedExpenseDialog(item);
@@ -3661,6 +3700,16 @@ $('#homeNotificationsBtn').onclick=()=>{
   $('#notificationsDialog').showModal();
 };
 $('#addFixedExpense').onclick=()=>openFixedExpenseDialog();
+bindFixedPaymentTap($('#cancelFixedPaymentBack'),()=>$('#cancelFixedPaymentDialog').close());
+$('#cancelFixedPaymentDialog').addEventListener('close',()=>{fixedPaymentCancellation=null;});
+bindFixedPaymentTap($('#confirmCancelFixedPayment'),()=>{
+  const button=$('#confirmCancelFixedPayment');
+  if(button.disabled)return;
+  button.disabled=true;
+  try{commitFixedExpenseCancellation();}
+  catch(error){showToast('No pude cancelar el pago. Revisá su estado antes de reintentar.');}
+  finally{button.disabled=false;}
+});
 $('#fixedExpenseMonth').onchange=renderFixedExpenses;
 $('#fixedExpenseMethod').onchange=()=>updateFixedExpenseCardField();
 $('#fixedExpenseCategory').onchange=()=>fillScopedSubcategories('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');

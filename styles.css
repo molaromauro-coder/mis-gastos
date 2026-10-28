@@ -885,3 +885,10 @@ img,svg,canvas,video{
 
 .fixed-expense-actions:has(.fixed-cancel-payment){grid-template-columns:1fr 1fr}
 @media(max-width:360px){.fixed-expense-actions:has(.fixed-cancel-payment){grid-template-columns:1fr}}
+
+#cancelFixedPaymentDialog{width:min(92vw,420px);box-sizing:border-box}
+#cancelFixedPaymentMessage{font-size:17px;line-height:1.5;font-weight:700;overflow-wrap:anywhere}
+.cancel-payment-actions{display:grid;gap:10px;margin-top:20px}
+.cancel-payment-actions button{min-height:48px;border:0;border-radius:12px;padding:12px;font-weight:800;background:#deeee7;color:#183e34}
+#confirmCancelFixedPayment{background:#b71924;color:white}
+#confirmCancelFixedPayment:disabled{opacity:.55}
