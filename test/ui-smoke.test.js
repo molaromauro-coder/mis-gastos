@@ -94,12 +94,11 @@ test('Gastos fijos se cargan desde las subcategorías de GASTOS FIJOS una sola v
   }
 });
 
-test('Gastos fijos permiten seleccionar un elemento y moverlo arriba o abajo',()=>{
-  assert.ok(html.includes('id="fixedExpenseOrderTools"'));
-  assert.ok(html.includes('id="fixedMoveUp"'));
-  assert.ok(html.includes('id="fixedMoveDown"'));
-  assert.match(app,/moveFixedExpenseInList/);
-  assert.match(app,/fixed-order-picker/);
+test('Gastos fijos se ordenan manteniendo presionada la tarjeta sin selector',()=>{
+  assert.ok(!html.includes('id="fixedExpenseOrderTools"'));
+  assert.ok(!html.includes('id="fixedMoveUp"'));
+  assert.ok(!app.includes('fixed-order-picker'));
+  assert.ok(app.includes("installPointerReorder($('#fixedExpenseList')"));
 });
 
 test('el primer acceso del menú principal se llama Gastos fijos y abre directamente su vista',()=>{

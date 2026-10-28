@@ -52,8 +52,8 @@ test('lanzamiento: carga manual tiene todas las decisiones antes de guardar',()=
 });
 
 test('lanzamiento: categorías, subcategorías y gastos fijos se administran y reordenan',()=>{
-  for(const marker of ['renameCategoryEverywhere','renameSubcategoryEverywhere','deleteCategoryEverywhere','addSubcategory','syncCategoryConsumers','syncFixedExpenseDefinitionsFromCategories','moveFixedExpenseInList'])assert.ok(app.includes(marker),marker);
-  for(const id of ['categoryList','fixedExpenseList','fixedMoveUp','fixedMoveDown'])assert.ok(html.includes(`id="${id}"`),id);
+  for(const marker of ['renameCategoryEverywhere','renameSubcategoryEverywhere','deleteCategoryEverywhere','addSubcategory','syncCategoryConsumers','syncFixedExpenseDefinitionsFromCategories','installPointerReorder'])assert.ok(app.includes(marker),marker);
+  for(const id of ['categoryList','fixedExpenseList'])assert.ok(html.includes(`id="${id}"`),id);
 });
 
 test('lanzamiento: informes, búsqueda, exportación y USD están conectados',()=>{

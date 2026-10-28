@@ -867,3 +867,21 @@ img,svg,canvas,video{
 #cloudSyncResolutionStatus{margin:10px 0;font-size:14px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}
 
 .fixed-expense-actions .fixed-delete{grid-column:1/-1;background:#fbe8e6;color:#922b21}
+
+/* Fixed payment states and three recent purchases. */
+.fixed-expense-head>span.paid{background:#087a36;color:#fff;font-weight:900;border:2px solid #05622a;box-shadow:0 2px 6px #087a3626}
+.fixed-expense-head>span.pending{background:#c91d28;color:#fff;font-weight:900;border:2px solid #a8111b;box-shadow:0 2px 6px #c91d2826}
+.fixed-expense-head>span.inactive{background:#e5e7eb;color:#4b5563}
+.fixed-expense-actions .fixed-cancel-payment{background:#fff0f0;color:#a8111b;border:1px solid #e8a0a5}
+.fixed-expense-card.reorder-ghost{outline:3px solid #087a50;background:#e7fff3;box-shadow:0 14px 36px #173f3760!important}
+.fixed-expense-card.drag-target{outline:3px dashed #087a50}
+#home.active .recent-card{min-height:142px;padding:8px 10px;border-radius:15px}
+#home.active .recent-head>strong{font-size:13px}
+#home.active .recent-list{max-height:calc(3 * 54px)}
+#home.active .recent-movement{padding:5px 0}
+#home.active .recent-movement>div strong,#home.active .recent-amount{font-size:12px}
+#home.active .recent-movement>div small{font-size:9px}
+#home.active.recent-expanded .recent-list{max-height:none}
+
+.fixed-expense-actions:has(.fixed-cancel-payment){grid-template-columns:1fr 1fr}
+@media(max-width:360px){.fixed-expense-actions:has(.fixed-cancel-payment){grid-template-columns:1fr}}

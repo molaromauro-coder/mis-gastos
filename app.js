@@ -1,13 +1,13 @@
 import {deduplicateFixedExpenses,removeFixedExpenseDefinitions,syncFixedCategories,renameFixedDefinition} from './fixed-dedup.js';
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=160';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=160';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=160';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=161';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=161';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=161';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=160';
-import { createAccessLock } from './access-lock.js?v=160';
+import { installCloudSync } from './cloud-sync.js?v=161';
+import { createAccessLock } from './access-lock.js?v=161';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -15,16 +15,16 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=160';
-import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=160';
-import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=160';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=161';
+import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=161';
+import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=161';
 if(isRecoveryLink(location.hash)){
   await startPasswordRecovery();
 }else if(localStorage.getItem(SIGNED_OUT_KEY)==='1'){
   await showAccountSignIn();
 }else{
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=160');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=161');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -219,7 +219,7 @@ function importJohnDigweedPurchasesOnce(){
 importJohnDigweedPurchasesOnce();
 
 function purgeExpiredTrash(){const cutoff=Date.now()-30*24*60*60*1000;state.trash=(state.trash||[]).filter((r)=>new Date(r.deletedAt).getTime()>=cutoff);} purgeExpiredTrash();
-let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, selectedFixedExpenseOrderId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 2;
+let selectedDate = new Date(), reportRange = 'month', usdRange = 'month', historyRange = 'today', pending = [], discarded = null, manualStep = 1, editingCardId = null, editingRecurringId = null, editingFixedExpenseId = null, editingFixedPaymentExpenseId = null, activeCardType = '', activeSettingsCategory = '', settingsSnapshot = null, recentHomeLimit = 3;
 const $ = (s) => document.querySelector(s);
 let displayFeatures=null;
 const money = (n, c) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n || 0);
@@ -651,11 +651,11 @@ function renderHomeRecent(){
   }).join(''):'<div class="recent-empty">Todavía no registraste movimientos.</div>';
   const more=$('#recentMore');
   if(more){
-    const expanded=recentHomeLimit>2;
-    more.classList.toggle('hidden',all.length<=2);
-    more.textContent=all.length>2?(expanded?'⌃ Ver menos':'⌄ Ver más'):'';
+    const expanded=recentHomeLimit>3;
+    more.classList.toggle('hidden',all.length<=3);
+    more.textContent=all.length>3?(expanded?'⌃ Ver menos':'⌄ Ver más'):'';
   }
-  $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>2);
+  $('#home')?.classList.toggle('recent-expanded',recentHomeLimit>3);
   displayFeatures?.home?.refresh();
 }
 function render() { displayFeatures?.setTextScale(state.settings.textScale); if(reclassifyUncategorizedExpenses())save(); renderHomeClock();renderMonthlyNetSummary(); const rows = purchaseRows(selectedDate); const dayTotals = ['ARS', 'USD'].map((c) => rows.filter((e) => e.currency === c).reduce((s, e) => s + purchaseAmount(e), 0)); $('#arsTotal').textContent = money(dayTotals[0], 'ARS'); $('#usdTotal').textContent = money(dayTotals[1], 'USD'); $('#expenseList').innerHTML = rows.length ? rows.sort((a, b) => b.date.localeCompare(a.date)).map((e) => expenseHTML(e)).join('') : '<div class="empty">Todavía no registraste gastos este día.</div>'; renderHomeRecent(); renderUnclassified(); renderUnclassifiedReminder(); renderPaymentReminders(); renderCards(); renderReport(); renderUsd(); renderHistory(); renderResale(); renderStock(); renderRecoveries(); renderBudget(); renderSavings(); renderRecurringSettings(); renderHiddenFeatures(); renderTrash(); renderFixedExpenses(); renderConsultationFilters(); fillCardSelect(); fillCategories(); fillRecurringCategoryOptions(); fillStockCategoryOptions(); fillFixedExpenseCategoryOptions(); }
@@ -2391,24 +2391,28 @@ function openFixedExpensePayment(item,key){
   updateFixedPaymentFields(item.card||'');
   $('#fixedExpensePaymentDialog').showModal();
 }
-function moveFixedExpenseInList(direction){
-  if(!selectedFixedExpenseOrderId)return;
-  const index=state.fixedExpenses.findIndex((item)=>item.id===selectedFixedExpenseOrderId);
-  if(index<0)return;
-  const target=index+direction;
-  if(target<0||target>=state.fixedExpenses.length)return;
-  [state.fixedExpenses[index],state.fixedExpenses[target]]=[state.fixedExpenses[target],state.fixedExpenses[index]];
-  save();renderFixedExpenses();
-}
-function updateFixedExpenseOrderTools(){
-  const tools=$('#fixedExpenseOrderTools'),up=$('#fixedMoveUp'),down=$('#fixedMoveDown');
-  if(!tools||!up||!down)return;
-  tools.classList.toggle('hidden',state.fixedExpenses.length<2);
-  const index=state.fixedExpenses.findIndex((item)=>item.id===selectedFixedExpenseOrderId);
-  up.disabled=index<=0;
-  down.disabled=index<0||index>=state.fixedExpenses.length-1;
-  const label=$('#fixedExpenseOrderSelected');
-  if(label)label.textContent=index>=0?`Seleccionado: ${displaySubcategory(state.fixedExpenses[index].concept)}`:'Seleccioná un gasto para moverlo';
+function cancelFixedExpensePayment(item,key){
+  const payments=fixedExpensePayments(item,key);
+  if(!payments.length)return;
+  if(!confirm(`¿Cancelar el pago de ${item.concept||item.subcategory} de ${key}? Se quitarán sus movimientos y cuotas vinculadas de los totales. Podés recuperarlos desde Papelera.`))return;
+  const groups=new Set(payments.map(e=>e.parentId||e.id));
+  const previous=cloneState();
+  const backupKey=STORAGE_KEY+'-before-cancel-payment-'+uid(),serialized=JSON.stringify(previous);
+  try{
+    localStorage.setItem(backupKey,serialized);
+    if(localStorage.getItem(backupKey)!==serialized)throw new Error('Respaldo no verificado');
+  }catch{showToast('No pude respaldar el pago. La cancelación no se realizó.');return;}
+  const items=state.expenses.filter(e=>groups.has(e.parentId||e.id));
+  const positions=expenseTrashPositions(state.expenses,items);
+  state.expenses=state.expenses.filter(e=>!groups.has(e.parentId||e.id));
+  state.trash=[...(state.trash||[]),{id:uid(),deletedAt:new Date().toISOString(),items,positions,reason:'cancel-fixed-payment',fixedExpenseId:item.id,fixedExpenseMonth:key}];
+  if(!save()){
+    restoreState(previous);void persistIndexedSnapshot(structuredClone(state));
+    showToast('No pude guardar la cancelación. El pago se conserva.');return;
+  }
+  mirrorResetIntoSnapshot(settingsSnapshot,state);
+  render();refreshExpenseDetailViews();
+  showToast('✓ Pago cancelado · movimientos y totales actualizados · recuperable en Papelera');
 }
 function fixedExpenseDisplayLabel(concept){return displaySubcategory(concept);}
 function deleteFixedExpenseCards(ids,label){
@@ -2424,7 +2428,7 @@ function deleteFixedExpenseCards(ids,label){
     const stored=JSON.parse(localStorage.getItem(STORAGE_KEY));
     if(['fixedExpenses','subcategories'].some(k=>JSON.stringify(stored[k])!==JSON.stringify(next[k])))throw new Error('No se pudo verificar la eliminación');
   }catch(error){restoreState(previous);showToast(error.message);return;}
-  selectedFixedExpenseOrderId=null;syncCategoryConsumers();render();showToast('✓ Gasto fijo eliminado. Pagos conservados.');
+  syncCategoryConsumers();render();showToast('✓ Gasto fijo eliminado. Pagos conservados.');
 }
 function renderFixedExpenses(){
   if(!$('#fixedExpenseList'))return;
@@ -2441,32 +2445,29 @@ function renderFixedExpenses(){
     const current=fixedExpenseAmountForMonth(item,key);
     const previous=fixedExpensePreviousAmount(item,key);
     const category=displayCategoryPath(item.category,item.subcategory)||'Sin categoría';
-    const selected=item.id===selectedFixedExpenseOrderId;
-    return `<article class="fixed-expense-card reorderable ${item.active===false?'disabled':''} ${selected?'order-selected':''}" data-fixed-expense-id="${escape(item.id)}" data-reorder-index="${index}">
-      <div class="fixed-expense-order-row">
-        <label class="fixed-order-picker"><input type="radio" name="fixedExpenseOrder" value="${escape(item.id)}" ${selected?'checked':''}><span>Seleccionar</span></label>
-        <small>Posición ${integerText(index+1)} de ${integerText(state.fixedExpenses.length)}</small>
-      </div>
-      <div class="fixed-expense-head"><div><strong>${escape(fixedExpenseDisplayLabel(item.concept))}</strong><small>${escape(category)} · día ${integerText(item.day||1)} · ${escape(item.method||'Efectivo')}${item.card?' · '+escape(item.card):''}</small></div><span class="${paid?'paid':'pending'}">${item.active===false?'Inactivo':paid?'Pagado':'Impago'}</span></div>
+    return `<article class="fixed-expense-card reorderable ${item.active===false?'disabled':''}" data-fixed-expense-id="${escape(item.id)}" data-reorder-index="${index}">
+      <div class="fixed-expense-head"><div><strong>${escape(fixedExpenseDisplayLabel(item.concept))}</strong><small>${escape(category)} · día ${integerText(item.day||1)} · ${escape(item.method||'Efectivo')}${item.card?' · '+escape(item.card):''}</small></div><span class="${item.active===false?'inactive':paid?'paid':'pending'}">${item.active===false?'Inactivo':paid?'Pagado':'Impago'}</span></div>
       <div class="fixed-expense-values"><span>${paid?'Este mes':'Monto a pagar'} <strong>${paid?money(current,item.currency):item.plannedAmounts?.[key]!=null?money(item.plannedAmounts[key],item.currency):'—'}</strong></span><span>Mes anterior <strong>${previous?money(previous,item.currency):'Sin dato'}</strong></span></div>
-      ${paid?`<details class="fixed-loaded-payments"><summary>Ver pagos del mes</summary>${fixedExpensePayments(item,key).map((expense)=>expenseHTML(expense,true)).join('')}</details>`:''}<div class="fixed-expense-actions"><button type="button" class="fixed-pay">${paid?'Editar pago':'Cargar pago'}</button><button type="button" class="fixed-edit">Editar</button><button type="button" class="fixed-toggle">${item.active===false?'Activar':'Desactivar'}</button><button type="button" class="fixed-delete">Eliminar</button></div>
+      ${paid?`<details class="fixed-loaded-payments"><summary>Ver pagos del mes</summary>${fixedExpensePayments(item,key).map((expense)=>expenseHTML(expense,true)).join('')}</details>`:''}<div class="fixed-expense-actions"><button type="button" class="fixed-pay">${paid?'Editar pago':'Cargar pago'}</button>${paid?'<button type="button" class="fixed-cancel-payment">Cancelar pago</button>':''}<button type="button" class="fixed-edit">Editar</button><button type="button" class="fixed-toggle">${item.active===false?'Activar':'Desactivar'}</button><button type="button" class="fixed-delete">Eliminar</button></div>
     </article>`;
   }).join(''):'<div class="empty">Agregá tus gastos fijos para controlar cada mes cuánto pagaste.</div>';
   document.querySelectorAll('[data-fixed-expense-id]').forEach((row)=>{
     const item=state.fixedExpenses.find((x)=>x.id===row.dataset.fixedExpenseId);if(!item)return;
-    row.querySelector('.fixed-order-picker input').onchange=()=>{selectedFixedExpenseOrderId=item.id;renderFixedExpenses();};
+    const cancel=row.querySelector('.fixed-cancel-payment');
+    if(cancel)cancel.onclick=()=>cancelFixedExpensePayment(item,key);
     row.querySelector('.fixed-pay').onclick=()=>{const current=fixedExpensePayments(item,key)[0];if(current)openExpenseEditor(current.id);else openFixedExpensePayment(item,key);};
     row.querySelector('.fixed-delete').onclick=()=>deleteFixedExpenseCards([item.id],item.concept);
     row.querySelector('.fixed-edit').onclick=()=>openFixedExpenseDialog(item);
     row.querySelector('.fixed-toggle').onclick=()=>{item.active=item.active===false?true:false;save();renderFixedExpenses();};
   });
   installPointerReorder($('#fixedExpenseList'),'.fixed-expense-card',(from,to)=>{
+    const previous=state.fixedExpenses.slice();
     const [item]=state.fixedExpenses.splice(from,1);
     state.fixedExpenses.splice(to,0,item);
-    selectedFixedExpenseOrderId=item?.id||selectedFixedExpenseOrderId;
-    save();renderFixedExpenses();showToast('✓ Orden de gastos fijos guardado');
-  },'button,input,label,select,a');
-  updateFixedExpenseOrderTools();
+    if(!save()){state.fixedExpenses=previous;void persistIndexedSnapshot(structuredClone(state));renderFixedExpenses();showToast('No pude guardar el orden. Se conserva el anterior.');return;}
+    mirrorResetIntoSnapshot(settingsSnapshot,state);
+    renderFixedExpenses();showToast('✓ Orden de gastos fijos guardado');
+  },'button,input,label,select,a,summary,details');
 }
 
 function exportRowsForConsultation(){return consultationRows().map((row)=>({Tipo:row.type,Fecha:row.date.toLocaleString('es-AR'),Concepto:row.concept||'',Categoría:displayCategory(row.category),Subcategoría:displaySubcategory(row.subcategory),Medio:row.method||'',Tarjeta:row.card||'',Moneda:row.currency,Importe:Number(row.amount||0),EquivalenteARS:Number(row.arsEquivalent||0)}));}
@@ -3033,7 +3034,7 @@ async function confirmPending(index, card) {
 }
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
-$('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit=recentHomeLimit>2?2:Number.MAX_SAFE_INTEGER;renderHomeRecent();}; $('#recentOpenHistory').onclick=()=>goView('history'); $('#homeMenuBtn').onclick = () => { installMainMenuReorder(); $('#menuDialog').showModal(); };
+$('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit=recentHomeLimit>3?3:Number.MAX_SAFE_INTEGER;renderHomeRecent();}; $('#recentOpenHistory').onclick=()=>goView('history'); $('#homeMenuBtn').onclick = () => { installMainMenuReorder(); $('#menuDialog').showModal(); };
 function clearExpenseValidation(){
   const box=$('#expenseValidation');
   if(box){box.textContent='';box.classList.add('hidden');}
@@ -3251,7 +3252,7 @@ $('#settingsBtn').onclick = () => {
 };
 function closeDialogById(id){const dialog=$(id);if(dialog?.open)dialog.close();}
 function refreshAfterExpenseReset(){
-  recentHomeLimit=2;
+  recentHomeLimit=3;
   if($('#confirmDialog')?.open)$('#confirmDialog').close();
   save();
   renderTrash();
@@ -3660,8 +3661,6 @@ $('#homeNotificationsBtn').onclick=()=>{
   $('#notificationsDialog').showModal();
 };
 $('#addFixedExpense').onclick=()=>openFixedExpenseDialog();
-$('#fixedMoveUp').onclick=()=>moveFixedExpenseInList(-1);
-$('#fixedMoveDown').onclick=()=>moveFixedExpenseInList(1);
 $('#fixedExpenseMonth').onchange=renderFixedExpenses;
 $('#fixedExpenseMethod').onchange=()=>updateFixedExpenseCardField();
 $('#fixedExpenseCategory').onchange=()=>fillScopedSubcategories('#fixedExpenseCategory','#fixedExpenseSubcategory','#fixedExpenseSubcategoryWrap');
