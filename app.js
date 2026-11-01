@@ -1,13 +1,14 @@
+import { buildCarryover } from './carryover.js';
 import {deduplicateFixedExpenses,removeFixedExpenseDefinitions,syncFixedCategories,renameFixedDefinition} from './fixed-dedup.js';
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=163';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=163';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=163';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=164';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=164';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=164';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=163';
-import { createAccessLock } from './access-lock.js?v=163';
+import { installCloudSync } from './cloud-sync.js?v=164';
+import { createAccessLock } from './access-lock.js?v=164';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -15,16 +16,16 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=163';
-import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=163';
-import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=163';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=164';
+import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=164';
+import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=164';
 if(isRecoveryLink(location.hash)){
   await startPasswordRecovery();
 }else if(localStorage.getItem(SIGNED_OUT_KEY)==='1'){
   await showAccountSignIn();
 }else{
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=163');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=164');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -544,9 +545,10 @@ function renderHomeClock() {
 function installmentExpenses(expense) { if (expense.method !== 'Crédito') return [expense]; const card = state.cards.find((c) => c.name === expense.card && c.type === 'Crédito'); if (!card) return [expense]; const count = Math.max(1, Number(expense.installments || 1)); const dueDates=installmentDueDates(card,new Date(expense.purchaseDate || expense.date),count); if (count === 1) return [{ ...expense, dueDate: dueDates[0].toISOString(), installment: 1, installments: 1 }]; return dueDates.map((dueDate, i) => ({ ...expense, id: crypto.randomUUID(), parentId: expense.id, dueDate: dueDate.toISOString(), amount: expense.amount / count, installment: i + 1, installments: count })); }
 function totals(items) { return ['ARS', 'USD'].map((currency) => items.filter((e) => e.currency === currency).reduce((sum, e) => sum + Number(e.amount), 0)); }
 function totalsHTML(items) { const [ars, usd] = totals(items); return `${money(ars, 'ARS')}${usd ? ` · ${money(usd, 'USD')}` : ''}`; }
-function purchaseRows(date) { const day = state.expenses.filter((e) => sameDay(e.purchaseDate || e.date, date)); return day.filter((e) => !e.parentId || e.installment === 1); }
+function purchaseRows(date) { const day = state.expenses.filter((e) => !e.carryover && sameDay(e.purchaseDate || e.date, date)); return day.filter((e) => !e.parentId || e.installment === 1); }
 function purchaseAmount(e) { return e.parentId ? e.amount * e.installments : e.amount; }
 function expenseActionsHTML(e,recent=false){
+  if(e.carryover)return `<button type="button" data-carryover-edit="${escape(e.carryoverPlanId)}">Editar plan</button>`;
   return `<div class="expense-actions"><button class="expense-edit" type="button" data-edit-expense="${escape(e.id)}" aria-label="Editar gasto" title="Editar gasto">✏️</button><button class="${recent?'recent-delete':'expense-delete'}" type="button" data-delete-expense="${escape(e.id)}" aria-label="Enviar gasto a Papelera" title="Enviar a Papelera">×</button></div>`;
 }
 function expenseHTML(e, showDate = false) {
@@ -555,7 +557,7 @@ function expenseHTML(e, showDate = false) {
   return `<article class="expense" data-expense-id="${escape(e.id)}"><div class="expense-icon">${e.method==='Efectivo'?'◆':'▰'}</div><div class="expense-info"><strong>${escape(e.concept||'Sin detalle')}</strong><span class="meta">${escape(detail)}${showDate?` · ${when.toLocaleDateString('es-AR')} ${when.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`:` · ${when.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`}</span></div><div class="amount">${money(showDate?e.amount:purchaseAmount(e),e.currency)}<small>${escape(e.currency)}</small></div>${expenseActionsHTML(e)}</article>`;
 }
 function chronologicalPurchases(){
-  return recentPurchases(state.expenses);
+  return recentPurchases(state.expenses.filter(e=>!e.carryover));
 }
 function prepareCategoryLearning(items){
   return (items||[]).map((item)=>{
@@ -1110,7 +1112,7 @@ function renderCards() {
     const label=card.type==='Crédito'?'Crédito':'Cuenta / Débito';
     const nextDueSummary=card.type==='Crédito'?payments.map((payment,i)=>`<div class="card-total"><small>${i===0?'PRÓXIMO VENCIMIENTO':'SEGUNDO VENCIMIENTO'} · ${payment.date.toLocaleDateString('es-AR')}</small><strong>${totalsHTML(payment.items)}</strong></div>`).join('')+`<div class="card-total"><small>ACUMULADO A PAGAR · PRÓXIMOS 2 VENCIMIENTOS</small><strong>${totalsHTML(payments.flatMap((payment)=>payment.items))}</strong></div>`:'';
     const debitDetail=card.type==='Débito'?`<details class="debit-detail"><summary>Ver movimientos</summary>${all.length?all.slice().sort((a,b)=>new Date(b.purchaseDate||b.date)-new Date(a.purchaseDate||a.date)).map((e)=>`<div class="due-line"><span>${new Date(e.purchaseDate||e.date).toLocaleDateString('es-AR')} · ${escape(e.concept||'Sin detalle')}</span><strong>${money(e.amount,e.currency)}</strong>${expenseActionsHTML(e)}</div>`).join(''):'<small class="muted">Sin movimientos.</small>'}</details>`:'';
-    return `<article class="card-item reorderable" data-card-id="${escape(card.id)}" data-reorder-index="${orderIndex}" style="--card-color:${escape(card.color||'#173f37')}"><div class="top"><div class="card-name-line"><span class="drag-grip light">↕</span><strong>${escape(card.name)}</strong></div><span>${label}</span></div><p>${meta}</p>${nextDueSummary}<div class="card-total"><small>${card.type==='Crédito'?'COMPRAS REALIZADAS ESTE MES':'TOTAL ACUMULADO'}</small><strong>${card.type==='Crédito'?totalsHTML(current):totalsHTML(all)}</strong></div>${debitDetail}<div class="card-actions"><button class="edit-card" data-card-id="${escape(card.id)}">Editar</button><button class="delete-card" data-card-id="${escape(card.id)}">Eliminar</button></div></article>`;
+    return `<article class="card-item reorderable" data-card-id="${escape(card.id)}" data-reorder-index="${orderIndex}" style="--card-color:${escape(card.color||'#173f37')}"><div class="top"><div class="card-name-line"><span class="drag-grip light">↕</span><strong>${escape(card.name)}</strong></div><span>${label}</span></div><p>${meta}</p>${nextDueSummary}<div class="card-total"><small>${card.type==='Crédito'?'COMPRAS REALIZADAS ESTE MES':'TOTAL ACUMULADO'}</small><strong>${card.type==='Crédito'?totalsHTML(current):totalsHTML(all)}</strong></div>${debitDetail}${card.type==='Crédito'?carryoverCardHTML(card):''}<div class="card-actions"><button class="edit-card" data-card-id="${escape(card.id)}">Editar</button><button class="delete-card" data-card-id="${escape(card.id)}">Eliminar</button></div></article>`;
   }).join(''):'<div class="empty">No agregaste medios de pago de este tipo.</div>';
 
   document.querySelectorAll('.edit-card').forEach((b)=>{b.onclick=()=>{const card=state.cards.find((c)=>c.id===b.dataset.cardId);if(!card)return;editingCardId=card.id;$('#cardDialog h2').textContent='Editar tarjeta / cuenta';$('#cardName').value=card.name;$('#cardType').value=card.type;$('#cardColor').value=card.color||'#173f37';$('#closingDate').value='';$('#dueDate').value='';$('#creditCardDates').classList.toggle('hidden',card.type!=='Crédito');if(card.type==='Crédito')setCreditDateDefaults(card);$('#cardDialog').showModal();};});
@@ -4044,5 +4046,61 @@ if(!sharedMode)cloudSyncController=installCloudSync({
   }
 });
 
+
+let carryoverContext=null;
+function carryoverCardHTML(card){
+  const plans=[...new Set(state.expenses.filter(e=>e.carryover&&e.card===card.name).map(e=>e.carryoverPlanId))];
+  return `<button type="button" data-carryover-add="${escape(card.id)}">＋ Agregar cuotas anteriores</button>${plans.length?`<details><summary>Planes de cuotas anteriores (${plans.length})</summary>${plans.map(id=>{const rows=state.expenses.filter(e=>e.carryoverPlanId===id);return `<p>${escape(rows[0].concept)} · ${rows.length} cuotas · ${totalsHTML(rows)} <button type="button" data-carryover-edit="${escape(id)}">Editar / eliminar</button></p>`;}).join('')}</details>`:''}`;
+}
+function openCarryover(cardId,planId=''){
+  const rows=state.expenses.filter(e=>e.carryoverPlanId===planId&&planId),row=rows[0];
+  const card=state.cards.find(c=>c.type==='Crédito'&&(row?c.name===row.card:c.id===cardId));if(!card)return;
+  carryoverContext={cardId:card.id,planId:planId||uid(),original:JSON.stringify(rows)};
+  const f=$('#carryoverForm');f.reset();
+  $('#carryoverTitle').textContent=(row?'Editar cuotas anteriores · ':'Cuotas anteriores · ')+card.name;
+  f.elements.concept.value=row?.concept||'';setLocalizedInput('#carryoverAmount',row?.amount||'',2);
+  f.elements.currency.value=row?.currency||'ARS';f.elements.total.value=row?.installments||12;f.elements.first.value=row?.carryoverFirst||1;
+  f.elements.firstDue.value=row?.carryoverFirstDue||dateInputValue(nextDueDateForCard(card,new Date()));
+  $('#carryoverDelete').classList.toggle('hidden',!row);$('#carryoverPreview').classList.add('hidden');$('#carryoverConfirm').classList.add('hidden');$('#carryoverError').textContent='';
+  $('#carryoverDialog').showModal();
+}
+function reviewCarryover(remove=false){
+ try{
+  const c=carryoverContext;if(!c)return;
+  const card=state.cards.find(x=>x.id===c.cardId),old=state.expenses.filter(e=>e.carryoverPlanId===c.planId);
+  if(JSON.stringify(old)!==c.original)throw Error('Este plan cambió. Cerrá y volvé a abrirlo antes de editar.');
+  const f=$('#carryoverForm');
+  c.rows=remove?[]:buildCarryover({planId:c.planId,concept:f.elements.concept.value,amount:parseLocalizedNumber(f.elements.amount.value),currency:f.elements.currency.value,total:f.elements.total.value,first:f.elements.first.value,firstDue:f.elements.firstDue.value},card,old);
+  if(!remove&&!old.length&&state.expenses.some(e=>e.carryover&&e.card===card.name&&e.concept===c.rows[0].concept&&e.amount===c.rows[0].amount&&e.currency===c.rows[0].currency&&e.carryoverFirstDue===c.rows[0].carryoverFirstDue&&e.installments===c.rows[0].installments&&e.carryoverFirst===c.rows[0].carryoverFirst))throw Error('Ya existe un plan igual en esta tarjeta. Revisá sus cuotas anteriores.');
+  c.remove=remove;
+  $('#carryoverPreview').innerHTML=remove?'<strong>¿Eliminar este plan completo? Sus cuotas pasarán a Papelera.</strong>':`<strong>${c.rows.length} cuotas · Total pendiente: ${totalsHTML(c.rows)}</strong><p>No se registra una compra nueva ni cuotas ya pagadas.</p>${c.rows.map(e=>`<div class="due-line"><span>Cuota ${e.installment}/${e.installments} · ${new Date(e.dueDate).toLocaleDateString('es-AR')}</span><strong>${money(e.amount,e.currency)}</strong></div>`).join('')}`;
+  $('#carryoverPreview').classList.remove('hidden');$('#carryoverConfirm').classList.remove('hidden');$('#carryoverConfirm').textContent=remove?'Confirmar eliminación':'Confirmar y guardar';$('#carryoverError').textContent='';
+ }catch(e){$('#carryoverError').textContent=e.message;}
+}
+function commitCarryover(){
+ const c=carryoverContext;if(!c?.rows)return;
+ const old=state.expenses.filter(e=>e.carryoverPlanId===c.planId);
+ if(JSON.stringify(old)!==c.original){$('#carryoverError').textContent='El plan cambió. Volvé a abrirlo.';return;}
+ const previous=cloneState(),serialized=JSON.stringify(previous),backupKey=STORAGE_KEY+'-before-carryover-'+uid();
+ try{
+  localStorage.setItem(backupKey,serialized);if(localStorage.getItem(backupKey)!==serialized)throw Error('No se pudo verificar el respaldo.');
+  const removed=old.filter(e=>!c.rows.some(n=>n.id===e.id));
+  if(removed.length)state.trash=[...(state.trash||[]),{id:uid(),deletedAt:new Date().toISOString(),items:removed,positions:expenseTrashPositions(state.expenses,removed),reason:'carryover-plan'}];
+  state.expenses=state.expenses.filter(e=>e.carryoverPlanId!==c.planId).concat(c.rows);
+  if(!save())throw Error('No se pudo guardar. Se conserva el estado anterior.');
+  const saved=JSON.parse(localStorage.getItem(STORAGE_KEY));
+  if(JSON.stringify(saved.expenses.filter(e=>e.carryoverPlanId===c.planId))!==JSON.stringify(c.rows))throw Error('No se pudo comprobar el guardado.');
+  carryoverContext=null;$('#carryoverDialog').close();render();feedback(true);showToast(c.remove?'Plan enviado a Papelera':'✓ Cuotas anteriores guardadas');
+ }catch(e){restoreState(previous);try{localStorage.setItem(STORAGE_KEY,serialized);}catch{}void persistIndexedSnapshot(structuredClone(state));$('#carryoverError').textContent=e.message;}
+}
+document.addEventListener('click',event=>{
+ const add=event.target.closest('[data-carryover-add]'),edit=event.target.closest('[data-carryover-edit]');
+ if(add)openCarryover(add.dataset.carryoverAdd);
+ if(edit)openCarryover('',edit.dataset.carryoverEdit);
+});
+$('#carryoverForm').onsubmit=event=>{event.preventDefault();reviewCarryover();};
+$('#carryoverForm').oninput=()=>{if(carryoverContext)delete carryoverContext.rows;$('#carryoverConfirm').classList.add('hidden');$('#carryoverPreview').classList.add('hidden');};
+$('#carryoverConfirm').onclick=commitCarryover;
+$('#carryoverDelete').onclick=()=>reviewCarryover(true);
 
 }

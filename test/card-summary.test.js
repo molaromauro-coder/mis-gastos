@@ -44,7 +44,7 @@ test('credit card tile renders purchases and both payments without changing save
  const state={cards:[{...card,id:'card'}],expenses:installments,recurring:[]};const before=structuredClone(state);
  const context={bindLocalizedNumberInputs(){},state,activeCardType:'Crédito',$:get,document:{querySelectorAll:()=>[]},installPointerReorder(){},nextDue:nextDueDateForCard,nextClosingDateForCard,firstDueDateForCard,upcomingCardPayments,cardPurchasesInMonth,cardMonthSummary,cardStatementProjection,cardHistoryMonths,monthKey:(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,dateInputValue:()=> '2026-10-09',monthlyCardTotal:()=>[],effectiveDate:(e)=>new Date(e.dueDate),escape:(s)=>s,integerText:String,money:String,totalsHTML:(items)=>String(items.reduce((sum,e)=>sum+e.amount,0)),Date:class extends Date {constructor(...args){super(...(args.length?args:[now]));}}};
  const actions=source.slice(source.indexOf('function expenseActionsHTML('),source.indexOf('function expenseHTML('));
- vm.createContext(context);vm.runInContext(actions+source.slice(start,end),context);context.renderCards();
+ vm.createContext(context);vm.runInContext(actions+source.slice(source.indexOf('function carryoverCardHTML('),source.indexOf('function openCarryover('))+source.slice(start,end),context);context.renderCards();
  assert.match(nodes['#cardList'].innerHTML,/COMPRAS REALIZADAS ESTE MES<\/small><strong>30000/);
  assert.match(nodes['#cardList'].innerHTML,/SEGUNDO VENCIMIENTO/);
  assert.match(nodes['#cardList'].innerHTML,/PRÓXIMOS 2 VENCIMIENTOS<\/small><strong>10000/);

@@ -43,7 +43,7 @@ export function groupExpenses(items, keyFn) {
 export function recentPurchases(items = []) {
   const chosen = new Map();
   for (const item of Array.isArray(items) ? items : []) {
-    if (!item) continue;
+    if (!item || item.carryover) continue;
     const installment = Number(item.installment || 1);
     const parentKey = item.parentId || item.id || crypto?.randomUUID?.() || Math.random().toString(36);
     if (item.parentId && installment !== 1 && chosen.has(parentKey)) continue;

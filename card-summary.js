@@ -5,7 +5,7 @@ import { dateWithCardDay, nextDueDateForCard } from './finance.js';
 export function cardPurchasesInMonth(expenses, card, month = new Date()) {
   const seen = new Set();
   return expenses.filter((item) => {
-    if (item.card !== card.name || item.method !== card.type) return false;
+    if (item.carryover || item.card !== card.name || item.method !== card.type) return false;
     const date = localDate(item.purchaseDate || item.date);
     if (date.getFullYear() !== month.getFullYear() || date.getMonth() !== month.getMonth()) return false;
     const key = item.parentId || item.id;
