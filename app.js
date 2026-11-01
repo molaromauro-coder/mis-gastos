@@ -1,13 +1,13 @@
 import {deduplicateFixedExpenses,removeFixedExpenseDefinitions,syncFixedCategories,renameFixedDefinition} from './fixed-dedup.js';
-import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=162';
-import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=162';
-import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=162';
+import {addMissingExcelPurchases,RESALE_EXCEL_OCT11_VERSION} from './resale-excel-oct11.js?v=163';
+import {hiddenFeatureIds,setFeatureHidden,mergeVisibleFeatureOrder,repairLegacyFeatureVisibility} from './feature-visibility.js?v=163';
+import { normalizeTextScale, installTextScaling, installViewZoom, installButtonFeedback, installHomeLayout, isVoiceCancelTarget } from './display-controls.js?v=163';
 import { isValidSnapshot, chooseSnapshot, protectExpenseRecords, snapshotInventory, createSafetyEnvelope, readSafetyEnvelope } from './data-safety.js';
 import { expenseEditModel, expenseDateInput, buildExpenseEdit, expenseTrashPositions, restoreExpenseTrash } from './expense-edit.js';
 import { cardPurchasesInMonth, upcomingCardPayments, cardMonthSummary, cardStatementProjection, cardHistoryMonths, createCardPayment } from './card-summary.js';
 import { categoryDisplayLabel, categoryBaseName } from './category-display.js';
-import { installCloudSync } from './cloud-sync.js?v=162';
-import { createAccessLock } from './access-lock.js?v=162';
+import { installCloudSync } from './cloud-sync.js?v=163';
+import { createAccessLock } from './access-lock.js?v=163';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
 import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
@@ -15,16 +15,16 @@ import { learnCategoryRule, applyLearnedCategory } from './category-learning.js'
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
 import { needsPaymentMethod, needsPaymentCard, needsPaymentInstallments } from './pending-validation.js';
-import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=162';
-import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=162';
-import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=162';
+import { parseResaleTable, compareResaleImport, applyResaleImport, parseResaleUpdate, parseResaleWorkbook, mergeResaleParties, verifyResaleImport, verifyResalePreservation, saveVerifiedResaleBackup } from './resale-import.js?v=163';
+import { isRecoveryLink, startPasswordRecovery } from './password-recovery.js?v=163';
+import { SIGNED_OUT_KEY, showAccountSignIn } from './account-access.js?v=163';
 if(isRecoveryLink(location.hash)){
   await startPasswordRecovery();
 }else if(localStorage.getItem(SIGNED_OUT_KEY)==='1'){
   await showAccountSignIn();
 }else{
 const sharedMode = new URLSearchParams(location.search).get('shared') === '1';
-const resaleApi = sharedMode ? null : await import('./resale.js?v=162');
+const resaleApi = sharedMode ? null : await import('./resale.js?v=163');
 const normalizeSplit = resaleApi?.normalizeSplit;
 const ticketMetrics = resaleApi?.ticketMetrics;
 const partyMetrics = resaleApi?.partyMetrics;
@@ -1344,6 +1344,7 @@ function showToast(message, undo = false) { const toast = $('#toast'); toast.tex
 function feedback(ok) { navigator.vibrate?.(ok ? 50 : [120, 50, 120]); try { const ctx = new AudioContext(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.frequency.value = ok ? 720 : 180; gain.gain.value = .035; osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + (ok ? .08 : .16)); } catch {} }
 function openExpense(data = {}) {
   $('#expenseForm').reset();
+  $('#expenseDate').value = dateInputValue(data.purchaseDate || data.date || new Date());
   setLocalizedInput('#amount',data.amount||'',2);
   $('#concept').value = data.concept === 'Sin concepto' ? '' : data.concept || '';
   const voiceNeedsMethod=data.source==='voice'&&needsPaymentMethod(data);
@@ -1359,7 +1360,7 @@ function openExpense(data = {}) {
   $('#expenseDialog').showModal();
 }
 function updatePaymentFields() { const method = $('#method').value; $('#cardFields').classList.toggle('hidden', !method || method === 'Efectivo'); $('#creditFields').classList.toggle('hidden', method !== 'Crédito'); fillCardSelect(); updateInstallmentPreview(); }
-function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value && c.type === $('#method').value), count = Number($('#installments').value || 1), amount = localizedInputNumber('#amount'); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card); $('#installmentPreview').innerHTML = `<strong>${integerText(count)} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${integerText(card.dueDay)} de cada mes.</span>`; }
+function updateInstallmentPreview() { const card = state.cards.find((c) => c.name === $('#expenseCard').value && c.type === $('#method').value), count = Number($('#installments').value || 1), amount = localizedInputNumber('#amount'); if ($('#method').value !== 'Crédito' || !card || !amount) return $('#installmentPreview').innerHTML = ''; const purchaseDate = new Date($('#expenseDate').value+'T12:00:00'); if(!Number.isFinite(purchaseDate.getTime())) return $('#installmentPreview').innerHTML = ''; const due = firstDueDateForCard(card,purchaseDate); $('#installmentPreview').innerHTML = `<strong>${integerText(count)} × ${money(amount / count, document.querySelector('[name=currency]:checked').value)}</strong><span>Primera cuota ${due.toLocaleDateString('es-AR')}; luego vence el día ${integerText(card.dueDay)} de cada mes.</span>`; }
 function pendingCreditDetail(e){
   if(e.method!=='Crédito'||!e.card||!e.amount||e.installmentsSpecified===false)return '';
   const card=state.cards.find((c)=>c.name===e.card&&c.type==='Crédito'); if(!card)return '';
@@ -3077,7 +3078,7 @@ $('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{rec
 function clearExpenseValidation(){
   const box=$('#expenseValidation');
   if(box){box.textContent='';box.classList.add('hidden');}
-  ['#amount','#method','#expenseCard'].forEach((selector)=>$(selector)?.classList.remove('field-error'));
+  ['#amount','#method','#expenseCard','#expenseDate'].forEach((selector)=>$(selector)?.classList.remove('field-error'));
 }
 function showExpenseValidation(message,selector){
   const box=$('#expenseValidation');
@@ -3090,13 +3091,17 @@ function showExpenseValidation(message,selector){
   }
 }
 $('#method').onchange = ()=>{clearExpenseValidation();updatePaymentFields();}; $('#category').onchange = () => fillSubcategories(); $('#subcategory').onchange=()=>$('#editSelectedSubcategory')?.classList.toggle('hidden',!$('#subcategory').value); $('#expenseCard').onchange = ()=>{clearExpenseValidation();updateInstallmentPreview();}; $('#installments').oninput = updateInstallmentPreview; $('#amount').oninput = ()=>{clearExpenseValidation();formatLocalizedInputElement($('#amount'));updateInstallmentPreview();}; document.querySelectorAll('[name=currency]').forEach((i) => { i.onchange = updateInstallmentPreview; });
+$('#expenseDate').onchange = ()=>{clearExpenseValidation();updateInstallmentPreview();};
 $('#expenseForm').onsubmit = async (event) => {
   event.preventDefault();
   clearExpenseValidation();
   const method=$('#method').value;
   if (!method) return showExpenseValidation('Falta elegir el medio de pago para guardar este gasto.','#method');
   if (method !== 'Efectivo' && !$('#expenseCard').value) return showExpenseValidation('Falta elegir la tarjeta o cuenta usada.','#expenseCard');
-  const now=new Date().toISOString();
+  const selectedDay=$('#expenseDate').value;
+  const purchaseDate=new Date(selectedDay+'T12:00:00');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(selectedDay)||!Number.isFinite(purchaseDate.getTime())||dateInputValue(purchaseDate)!==selectedDay)return showExpenseValidation('Ingresá una fecha válida para el gasto.','#expenseDate');
+  const now=purchaseDate.toISOString();
   let expense={ id:crypto.randomUUID(), amount:localizedInputNumber('#amount'), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#subcategory')?.value || $('#category').value || 'Sin detalle', category:$('#category').value, subcategory:$('#subcategory')?.value || '', categoryStatus:$('#category').value?'manual':'unclassified', method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
   if(!Number.isFinite(expense.amount)||expense.amount<=0)return showExpenseValidation('Ingresá un importe mayor a cero.','#amount');
   expense=await stampUsdExpense(expense);
