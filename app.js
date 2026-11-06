@@ -644,13 +644,26 @@ function renderUnclassifiedReminder(){
   state.settings={...state.settings,lastUnclassifiedReminderAt:Date.now()};
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
 }
+function datedAtEntry(day) {
+  const date = new Date(day+'T12:00:00');
+  const clock = new Date();
+  date.setHours(clock.getHours(),clock.getMinutes(),clock.getSeconds(),clock.getMilliseconds());
+  return date;
+}
+function recentDateLabel(e) {
+  const raw=e.purchaseDate||e.date;
+  const hasTime=/T\d{2}:\d{2}/.test(raw);
+  const date=new Date(hasTime?raw:raw+'T12:00:00');
+  const placeholder=['manual','fixed'].includes(e.source) && date.getHours()===12 && !date.getMinutes() && !date.getSeconds() && !date.getMilliseconds();
+  const hour=hasTime && !placeholder ? date.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}) : 'sin hora';
+  return date.toLocaleDateString('es-AR')+' · '+hour;
+}
 function renderHomeRecent(){
   const target=$('#recentMovements'); if(!target)return;
-  const all=chronologicalPurchases(), visible=all.slice(0,recentHomeLimit);
+  const all=chronologicalPurchases(), visible=recentHomeLimit>3?all:all.slice(0,3);
   target.innerHTML=visible.length?visible.map((e)=>{
-    const when=new Date(e.purchaseDate||e.date);
     const category=displayCategoryPath(e.category,e.subcategory)||'Sin categoría';
-    return `<article class="recent-movement" data-expense-id="${escape(e.id)}"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${when.toLocaleDateString('es-AR')} · ${escape(category)}</small></div><strong class="recent-amount">${money(purchaseAmount(e),e.currency)}</strong>${expenseActionsHTML(e,true)}</article>`;
+    return `<article class="recent-movement" data-expense-id="${escape(e.id)}"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${recentDateLabel(e)} · ${escape(category)}</small></div><strong class="recent-amount">${money(purchaseAmount(e),e.currency)}</strong>${expenseActionsHTML(e,true)}</article>`;
   }).join(''):'<div class="recent-empty">Todavía no registraste movimientos.</div>';
   const more=$('#recentMore');
   if(more){
@@ -3078,7 +3091,7 @@ async function confirmPending(index, card) {
 }
 document.querySelectorAll('nav button').forEach((button) => { button.onclick = () => goView(button.dataset.view); });
 document.querySelectorAll('dialog .close').forEach((b) => { b.onclick = () => b.closest('dialog').close(); });
-$('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit=recentHomeLimit>3?3:Number.MAX_SAFE_INTEGER;renderHomeRecent();}; $('#recentOpenHistory').onclick=()=>goView('history'); $('#homeMenuBtn').onclick = () => { installMainMenuReorder(); $('#menuDialog').showModal(); };
+$('#manualBtn').onclick = () => openExpense(); $('#recentMore').onclick=()=>{recentHomeLimit=recentHomeLimit>3?3:5;renderHomeRecent();$('#recentMovements').scrollTop=0;}; $('#recentOpenHistory').onclick=()=>goView('history'); $('#homeMenuBtn').onclick = () => { installMainMenuReorder(); $('#menuDialog').showModal(); };
 function clearExpenseValidation(){
   const box=$('#expenseValidation');
   if(box){box.textContent='';box.classList.add('hidden');}
@@ -3103,7 +3116,7 @@ $('#expenseForm').onsubmit = async (event) => {
   if (!method) return showExpenseValidation('Falta elegir el medio de pago para guardar este gasto.','#method');
   if (method !== 'Efectivo' && !$('#expenseCard').value) return showExpenseValidation('Falta elegir la tarjeta o cuenta usada.','#expenseCard');
   const selectedDay=$('#expenseDate').value;
-  const purchaseDate=new Date(selectedDay+'T12:00:00');
+  const purchaseDate=datedAtEntry(selectedDay);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(selectedDay)||!Number.isFinite(purchaseDate.getTime())||dateInputValue(purchaseDate)!==selectedDay)return showExpenseValidation('Ingresá una fecha válida para el gasto.','#expenseDate');
   const now=purchaseDate.toISOString();
   let expense={ id:crypto.randomUUID(), amount:localizedInputNumber('#amount'), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#subcategory')?.value || $('#category').value || 'Sin detalle', category:$('#category').value, subcategory:$('#subcategory')?.value || '', categoryStatus:$('#category').value?'manual':'unclassified', method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
@@ -3792,9 +3805,10 @@ $('#fixedExpensePaymentForm').onsubmit=async(event)=>{
   const button=form.querySelector('button.primary');button.disabled=true;
   let previous=null;
   try{
+    const paymentTimestamp=datedAtEntry(paidDate).toISOString();
     let expense={
       id:uid(),amount,currency:item.currency||'ARS',concept:item.concept,category:item.category||'',subcategory:item.subcategory||'',
-      method,card,installments,date:paidDate+'T12:00:00',purchaseDate:paidDate+'T12:00:00',source:'fixed',
+      method,card,installments,date:paymentTimestamp,purchaseDate:paymentTimestamp,source:'fixed',
       fixedExpenseId:item.id,fixedExpenseMonth:key,categoryStatus:'manual'
     };
     expense=await stampUsdExpense(expense);
