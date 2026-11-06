@@ -54,7 +54,7 @@
 
 <section id="fixedExpenses" class="view">
   <div class="section-title"><div><small>FUNCIONES · CONTROL MENSUAL</small><h2>Gastos fijos</h2></div><button id="addFixedExpense" type="button">＋ Agregar</button></div>
-  <p class="muted">El concepto se repite todos los meses, pero el importe puede cambiar. Al registrar el pago podés usar como referencia el importe del mes anterior.</p>
+  <p class="muted">El gasto fijo se repite todos los meses, pero el importe puede cambiar. Al registrar el pago podés usar como referencia el importe del mes anterior.</p>
   <div class="fixed-expense-month"><label>Mes<input id="fixedExpenseMonth" type="month"></label></div>
   <div id="fixedExpenseSummary" class="notice"></div>
   <p class="menu-reorder-hint">Mantené presionada una tarjeta hasta que se resalte y arrastrala hacia arriba o abajo.</p>
@@ -94,7 +94,7 @@
 <label>Fecha del gasto<input id="expenseDate" type="date" required></label>
 <label class="big-amount">Importe<input id="amount" type="text" inputmode="decimal" data-local-number="2" required placeholder="0"></label>
 <div class="segmented"><input type="radio" name="currency" id="currencyArs" value="ARS" checked><label for="currencyArs">Pesos</label><input type="radio" name="currency" id="currencyUsd" value="USD"><label for="currencyUsd">Dólares</label></div>
-<input id="concept" type="hidden" value="">
+
 <label>Categoría<select id="category"><option value="">Sin categoría</option></select></label>
 <div class="category-action-row"><button type="button" id="quickCategory" class="category-create-button">＋ Agregar categoría</button><button type="button" id="editSelectedCategory" class="category-edit-button">✎ Editar</button></div>
 <div id="subcategoryWrap" class="hidden"><label>Subcategoría<select id="subcategory"><option value="">Sin subcategoría</option></select></label><div class="category-action-row"><button type="button" id="quickSubcategory" class="category-create-button hidden">＋ Agregar subcategoría</button><button type="button" id="editSelectedSubcategory" class="category-edit-button hidden">✎ Editar</button></div></div>
@@ -105,7 +105,7 @@
 <button id="saveExpense" class="primary" type="submit">Confirmar gasto</button></form></dialog>
 <dialog id="editExpenseDialog"><form id="editExpenseForm"><div class="dialog-head"><div><small>CORREGIR CARGA</small><h2>Editar gasto</h2></div><button type="button" class="close" aria-label="Cancelar edición">×</button></div>
 <div class="form-row"><label>Importe total de la compra<input id="editExpenseAmount" type="text" inputmode="decimal" data-local-number="2" required></label><label>Moneda<select id="editExpenseCurrency"><option value="ARS">Pesos</option><option value="USD">Dólares</option></select></label></div>
-<label>Concepto / detalle<input id="editExpenseConcept" placeholder="Detalle del gasto"></label>
+
 <label>Fecha y hora de la compra<input id="editExpenseDate" type="datetime-local" step="1" required></label>
 <label>Categoría<select id="editExpenseCategory"><option value="">Sin categoría</option></select></label><button type="button" id="editExpenseAddCategory" class="category-create-button">＋ Agregar categoría</button>
 <div id="editExpenseSubcategoryWrap"><label>Subcategoría<select id="editExpenseSubcategory"><option value="">Sin subcategoría</option></select></label><button type="button" id="editExpenseAddSubcategory" class="category-create-button">＋ Agregar subcategoría</button></div>
@@ -176,7 +176,7 @@
 <div class="form-row"><label>% Mauro<input id="ownerPercent" type="number" min="0" max="100" step="1" required></label><label>% Vendedor<input id="sellerPercent" type="number" min="0" max="100" step="1" required></label></div>
 <button class="primary">Guardar reparto</button></form></dialog>
 <dialog id="fixedExpenseDialog"><form id="fixedExpenseForm"><div class="dialog-head"><div><small>GASTO FIJO</small><h2 id="fixedExpenseDialogTitle">Nuevo gasto fijo</h2></div><button type="button" class="close">×</button></div>
-<label>Concepto<input id="fixedExpenseConcept" required placeholder="Ej. Luz, Internet, Colegio"></label>
+<label>Nombre del gasto fijo<input id="fixedExpenseConcept" required placeholder="Ej. Luz, Internet, Colegio"></label>
 <label>Monto a pagar<input id="fixedExpenseAmount" type="text" inputmode="decimal" data-local-number="2" placeholder="Ingresá el importe"></label><small id="fixedExpenseAmountHint" class="muted"></small>
 <div class="form-row"><label>Moneda<select id="fixedExpenseCurrency"><option>ARS</option><option>USD</option></select></label><label>Día habitual<input id="fixedExpenseDay" type="number" min="1" max="28" value="10" required></label></div>
 <label>Categoría<select id="fixedExpenseCategory"><option value="">Sin categoría</option></select></label>
@@ -196,7 +196,7 @@
 <p class="muted">El medio de pago habitual está preseleccionado. Podés cambiarlo para este pago. Al guardar aparecerá en Movimientos y este mes quedará Pagado.</p>
 <button class="primary">Guardar pago</button></form></dialog>
 <dialog id="recurringDialog"><form id="recurringForm"><div class="dialog-head"><div><small>GASTO RECURRENTE</small><h2 id="recurringTitle">Nuevo recurrente</h2></div><button type="button" class="close">×</button></div>
-<label>Concepto<input id="recurringConcept" required placeholder="Ej. Suscripción"></label>
+<label>Nombre del gasto recurrente<input id="recurringConcept" required placeholder="Ej. Suscripción"></label>
 <div class="form-row"><label>Importe<input id="recurringAmount" type="text" inputmode="decimal" data-local-number="2" required></label><label>Moneda<select id="recurringCurrency"><option>ARS</option><option>USD</option></select></label></div>
 <label>Categoría<select id="recurringCategory"><option value="">Sin categoría</option></select></label>
 <div class="category-action-row"><button type="button" id="recurringQuickCategory" class="category-create-button">＋ Categoría</button><button type="button" id="recurringEditCategory" class="category-edit-button">✎ Editar</button></div>
@@ -212,7 +212,7 @@
 <label>Fecha de pago<input id="stockPaidDate" type="date" required></label><button class="primary">Guardar compra</button></form></dialog>
 <dialog id="recoveryDialog"><form id="recoveryForm"><div class="dialog-head"><div><small>NUEVO RECUPERO</small><h2>Registrar dinero recuperado</h2></div><button type="button" class="close">×</button></div>
 <div class="form-row"><label>Importe<input id="recoveryAmount" type="text" inputmode="decimal" data-local-number="2" required></label><label>Moneda<select id="recoveryCurrency"><option>ARS</option><option>USD</option></select></label></div>
-<label>Concepto / nota<input id="recoveryConcept" placeholder="Ej. Comida con Juan"></label><label>Fecha<input id="recoveryDate" type="date" required></label><button class="primary">Guardar recupero</button></form></dialog>
-<dialog id="notificationsDialog"><div class="dialog-head"><h2>🔔 Notificaciones</h2><button type="button" id="closeNotifications" class="close" aria-label="Cerrar notificaciones">×</button></div><h3>Avisos y advertencias</h3><div id="notificationSafety"></div><div id="unclassifiedReminder" class="unclassified-reminder hidden"></div><div id="paymentReminders"></div><div id="budgetAlert" class="hidden"></div><div id="unusual" class="hidden">⚠ Detectamos un gasto más alto de lo habitual.</div><div id="notificationOther"></div><h3>Próximos vencimientos</h3><div id="notificationDues"></div></dialog><div id="toast" class="toast" role="status"></div><script type="module" src="app.js?v=169"></script></body></html>
+<label>Nota del recupero<input id="recoveryConcept" placeholder="Ej. Comida con Juan"></label><label>Fecha<input id="recoveryDate" type="date" required></label><button class="primary">Guardar recupero</button></form></dialog>
+<dialog id="notificationsDialog"><div class="dialog-head"><h2>🔔 Notificaciones</h2><button type="button" id="closeNotifications" class="close" aria-label="Cerrar notificaciones">×</button></div><h3>Avisos y advertencias</h3><div id="notificationSafety"></div><div id="unclassifiedReminder" class="unclassified-reminder hidden"></div><div id="paymentReminders"></div><div id="budgetAlert" class="hidden"></div><div id="unusual" class="hidden">⚠ Detectamos un gasto más alto de lo habitual.</div><div id="notificationOther"></div><h3>Próximos vencimientos</h3><div id="notificationDues"></div></dialog><div id="toast" class="toast" role="status"></div><script type="module" src="app.js?v=170"></script></body></html>
 
 
