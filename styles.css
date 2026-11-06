@@ -892,3 +892,18 @@ img,svg,canvas,video{
 .cancel-payment-actions button{min-height:48px;border:0;border-radius:12px;padding:12px;font-weight:800;background:#deeee7;color:#183e34}
 #confirmCancelFixedPayment{background:#b71924;color:white}
 #confirmCancelFixedPayment:disabled{opacity:.55}
+
+#home.active,:root[data-large-text] #home.active{overflow-y:auto!important}
+#home.active .recent-card,#home.active.recent-expanded .recent-card{flex:none}
+#home.active .recent-list{--movement-height:max(42px,2.7rem);flex:none;grid-auto-rows:var(--movement-height);max-height:calc(3 * var(--movement-height))}
+#home.active.recent-expanded .recent-list{flex:none;max-height:calc(5 * var(--movement-height))}
+@media(max-width:600px){
+  #expenseDialog{max-height:calc(100dvh - env(safe-area-inset-top) - 8px);padding:12px 16px max(10px,env(safe-area-inset-bottom))}
+  #expenseForm .dialog-head{margin-bottom:8px}
+  #expenseForm label{margin:5px 0}
+  #expenseForm .segmented{margin:6px 0}
+  #expenseForm .segmented label{margin:0}
+  #expenseForm .big-amount input{padding:6px;font-size:30px}
+  #expenseForm .category-action-row{margin:4px 0}
+  #expenseForm #saveExpense{position:sticky;bottom:0;z-index:1;margin-top:8px}
+}
