@@ -366,6 +366,20 @@ async function runFullRecoverySweep(showResult=true){
   }
   return result;
 }
+function writePrimarySnapshot(raw){
+  const write=()=>{localStorage.setItem(STORAGE_KEY,raw);return safeStoredValue(STORAGE_KEY)===raw;};
+  try{return write();}catch(error){
+    if(error?.name!=='QuotaExceededError' && error?.code!==22)return false;
+  }
+  // Reclaim space only from the bounded rotating history, oldest first.
+  const history=localHistorySnapshots();
+  while(history.length){
+    history.shift();
+    try{localStorage.setItem(HISTORY_KEY,JSON.stringify(history));}catch{return false;}
+    try{return write();}catch(error){if(error?.name!=='QuotaExceededError' && error?.code!==22)return false;}
+  }
+  return false;
+}
 const save = () => {
   const previousRaw=safeStoredValue(STORAGE_KEY);
   const previous=parseStoredState(previousRaw);
@@ -373,16 +387,6 @@ const save = () => {
     window.__misGastosPrimaryWriteError=true;
     if(isValidSnapshot(previous))restoreState(previous);
     renderDataSafetyStatus();return false;
-  }
-  if(previousRaw&&previous){
-    try{localStorage.setItem(BACKUP_KEY,previousRaw);}catch{window.__misGastosLocalBackupError=true;}
-    const history=localHistorySnapshots();
-    const last=history.at(-1);
-    if(JSON.stringify(last||null)!==previousRaw){
-      history.push(previous);
-      while(history.length>20)history.shift();
-      try{localStorage.setItem(HISTORY_KEY,JSON.stringify(history));}catch{window.__misGastosLocalBackupError=true;}
-    }
   }
   if(previous&&retainedExpenseCount(previous)>0&&retainedExpenseCount(state)===0&&!destructiveWriteAllowed){
     state.expenses=structuredClone(previous.expenses||[]);
@@ -395,7 +399,18 @@ const save = () => {
   state.settings={...state.settings,lastSafeExpenseCount:retainedExpenseCount(state),lastSafeSaveAt:new Date().toISOString()};
   const nextRaw=JSON.stringify(state);
   let stored=false;
-  try{localStorage.setItem(STORAGE_KEY,nextRaw);stored=safeStoredValue(STORAGE_KEY)===nextRaw;}catch{}
+  stored=writePrimarySnapshot(nextRaw);
+  if(stored&&previousRaw&&previous){
+    try{localStorage.setItem(BACKUP_KEY,previousRaw);}catch{window.__misGastosLocalBackupError=true;}
+    const history=localHistorySnapshots();
+    const last=history.at(-1);
+    if(JSON.stringify(last||null)!==previousRaw){
+      history.push(previous);
+      while(history.length>20)history.shift();
+      try{localStorage.setItem(HISTORY_KEY,JSON.stringify(history));}catch{window.__misGastosLocalBackupError=true;}
+    }
+  }
+
   window.__misGastosPrimaryWriteError=!stored;
   void persistIndexedSnapshot(structuredClone(state)).then(()=>renderDataSafetyStatus());
   renderDataSafetyStatus();
@@ -650,20 +665,20 @@ function datedAtEntry(day) {
   date.setHours(clock.getHours(),clock.getMinutes(),clock.getSeconds(),clock.getMilliseconds());
   return date;
 }
-function recentDateLabel(e) {
+function recentDateInfo(e) {
   const raw=e.purchaseDate||e.date;
   const hasTime=/T\d{2}:\d{2}/.test(raw);
   const date=new Date(hasTime?raw:raw+'T12:00:00');
   const placeholder=['manual','fixed'].includes(e.source) && date.getHours()===12 && !date.getMinutes() && !date.getSeconds() && !date.getMilliseconds();
   const hour=hasTime && !placeholder ? date.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}) : 'sin hora';
-  return date.toLocaleDateString('es-AR')+' · '+hour;
+  return {label:date.toLocaleDateString('es-AR')+' · '+hour, order:hasTime && !placeholder ? date.getTime() : new Date(date).setHours(0,0,0,0)-1};
 }
 function renderHomeRecent(){
   const target=$('#recentMovements'); if(!target)return;
-  const all=chronologicalPurchases(), visible=recentHomeLimit>3?all:all.slice(0,3);
+  const all=chronologicalPurchases().sort((a,b)=>recentDateInfo(b).order-recentDateInfo(a).order), visible=recentHomeLimit>3?all:all.slice(0,3);
   target.innerHTML=visible.length?visible.map((e)=>{
     const category=displayCategoryPath(e.category,e.subcategory)||'Sin categoría';
-    return `<article class="recent-movement" data-expense-id="${escape(e.id)}"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${recentDateLabel(e)} · ${escape(category)}</small></div><strong class="recent-amount">${money(purchaseAmount(e),e.currency)}</strong>${expenseActionsHTML(e,true)}</article>`;
+    return `<article class="recent-movement" data-expense-id="${escape(e.id)}"><div><strong>${escape(e.concept||'Sin detalle')}</strong><small>${recentDateInfo(e).label} · ${escape(category)}</small></div><strong class="recent-amount">${money(purchaseAmount(e),e.currency)}</strong>${expenseActionsHTML(e,true)}</article>`;
   }).join(''):'<div class="recent-empty">Todavía no registraste movimientos.</div>';
   const more=$('#recentMore');
   if(more){
@@ -3122,7 +3137,7 @@ $('#expenseForm').onsubmit = async (event) => {
   let expense={ id:crypto.randomUUID(), amount:localizedInputNumber('#amount'), currency:document.querySelector('[name=currency]:checked').value, concept:$('#concept').value || $('#subcategory')?.value || $('#category').value || 'Sin detalle', category:$('#category').value, subcategory:$('#subcategory')?.value || '', categoryStatus:$('#category').value?'manual':'unclassified', method, card:$('#expenseCard').value, installments:method==='Crédito' ? Number($('#installments').value) : 1, date:now, purchaseDate:now, source:'manual' };
   if(!Number.isFinite(expense.amount)||expense.amount<=0)return showExpenseValidation('Ingresá un importe mayor a cero.','#amount');
   expense=await stampUsdExpense(expense);
-  state.expenses.push(...installmentExpenses(expense)); save(); $('#expenseDialog').close(); feedback(true); showToast('✓ Gasto guardado'); render(); if(pending.length) setTimeout(showPending,180);
+  state.expenses.push(...installmentExpenses(expense)); const verified=save(); $('#expenseDialog').close(); feedback(verified); showToast(verified?'✓ Gasto guardado':'Gasto pendiente de guardado. Mantené la app abierta y exportá una copia.'); render(); if(pending.length) setTimeout(showPending,180);
 };
 $('#addCard').onclick = () => { editingCardId = null; $('#cardDialog h2').textContent = 'Nuevo medio de pago'; $('#cardForm').reset(); $('#cardType').value=activeCardType||'Crédito'; $('#cardColor').value='#173f37'; $('#creditCardDates').classList.toggle('hidden',$('#cardType').value!=='Crédito'); if($('#cardType').value==='Crédito')setCreditDateDefaults(); $('#cardDialog').showModal(); }; $('#cardType').onchange = () => { const isCredit=$('#cardType').value==='Crédito'; $('#creditCardDates').classList.toggle('hidden',!isCredit); if(isCredit)setCreditDateDefaults(); }; $('#cardForm').onsubmit = (event) => {
   event.preventDefault();
