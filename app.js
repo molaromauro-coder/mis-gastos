@@ -12,7 +12,7 @@ import { installCloudSync } from './cloud-sync.js?v=166';
 import { createAccessLock } from './access-lock.js?v=166';
 import { parseExpenses, parseAmount } from './parser.js';
 import { expenseArsEquivalent, boundsForRange, previousBounds, groupExpenses, recentPurchases } from './reporting.js';
-import { monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
+import { monthExpenseBreakdown, monthKey, itemArsEquivalent, budgetOutcome, stockMetrics, recoveryMonthMetrics, recoveryAppliedMonthTotal, dateWithCardDay, firstDueDateForCard, installmentDueDates, nextClosingDateForCard, nextDueDateForCard } from './finance.js';
 import { learnCategoryRule, applyLearnedCategory } from './category-learning.js';
 import { parseLocalizedNumber, formatLocalizedNumber, formatLocalizedInteger, formatNumericInputValue } from './numeric-format.js';
 import { currentMonthExpenseCount, previousMonthExpenseCount, previousMonthTrashItemCount, previousMonthDeletableCount, moveCurrentMonthExpensesToTrash, permanentlyDeletePreviousMonths, permanentlyDeleteTrashRecords, mirrorResetIntoSnapshot, verifyNoCurrentMonthExpenses, verifyNoPreviousMonthExpenses } from './expense-reset.js';
@@ -2658,6 +2658,9 @@ function budgetMetrics(key) {
 function renderMonthlyNetSummary(){
   if(!$('#homeMonthlyNet'))return;
   const m=recoveryMonthMetrics(state.recoveries,state.expenses,currentMonthKey());
+  const breakdown=monthExpenseBreakdown(state.expenses,currentMonthKey());
+  $('#homeMonthlyCurrent').textContent=money(breakdown.current,'ARS');
+  $('#homeMonthlyPreviousCards').textContent=money(breakdown.previousCards,'ARS');
   $('#homeMonthlyGross').textContent=money(m.gross,'ARS');
   const applied=recoveryAppliedMonthTotal(state.recoveries,currentMonthKey(),currentMonthKey());
   $('#homeMonthlyRecovered').textContent=money(applied,'ARS');

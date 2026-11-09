@@ -119,3 +119,19 @@ export function recoveryAppliedMonthTotal(recoveries = [], key, currentKey = mon
     return monthKey(date)===key&&(r.affectsExpenseMonth===true||(r.affectsExpenseMonth==null&&key===currentKey));
   }).reduce((sum,r)=>sum+itemArsEquivalent(r),0);
 }
+
+// Partition the existing accounting-month total without changing stored expenses.
+export function monthExpenseBreakdown(expenses = [], key) {
+  let current = 0, previousCards = 0;
+  for (const expense of expenses) {
+    if (monthKey(accountingDate(expense)) !== key) continue;
+    const purchase = expense.purchaseDate || expense.date;
+    const previous = expense.method === 'Crédito' && (
+      expense.carryover || (purchase && monthKey(purchase) < key) ||
+      (!expense.purchaseDate && Number(expense.installment) > 1)
+    );
+    if (previous) previousCards += expenseArsEquivalent(expense);
+    else current += expenseArsEquivalent(expense);
+  }
+  return {current, previousCards, gross: current + previousCards};
+}

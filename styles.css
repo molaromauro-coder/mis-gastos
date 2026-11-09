@@ -907,3 +907,11 @@ img,svg,canvas,video{
   #expenseForm .category-action-row{margin:4px 0}
   #expenseForm #saveExpense{position:sticky;bottom:0;z-index:1;margin-top:8px}
 }
+
+.hide-amounts #homeMonthlyCurrent,.hide-amounts #homeMonthlyPreviousCards{filter:blur(7px);user-select:none}
+#home .home-month-net .monthly-breakdown{display:flex;grid-column:1/-1;justify-content:space-between;align-items:baseline;gap:8px;padding-top:3px}
+#home .home-month-net .monthly-breakdown small{font-size:11px;letter-spacing:0}
+#home .home-month-net .monthly-breakdown span{font-size:13px;white-space:nowrap}
+#home .home-month-net .monthly-previous{color:#75521c}
+#home .home-month-net .monthly-previous small{color:#75521c}
+#home .monthly-basis{grid-column:1/-1;margin:0;font-size:9px;color:#4b7568}
